@@ -8,7 +8,7 @@ export interface InstanceTransform {
   z: number;
   yaw: number;
   scale: number;
-  yOffset?: number;
+  yOffset?: number | undefined;
   /** Absolute ground height override (skips terrain sampling). */
   y?: number;
 }

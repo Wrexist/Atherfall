@@ -25,7 +25,7 @@ function Joystick() {
   return (
     <div
       ref={base}
-      className="pointer-events-auto absolute bottom-8 left-6 flex h-36 w-36 touch-none items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 backdrop-blur-sm"
+      className="pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.75rem,env(safe-area-inset-left))] flex h-32 w-32 touch-none items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 backdrop-blur-sm"
       onPointerDown={(e) => {
         id.current = e.pointerId;
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -122,7 +122,7 @@ export function TouchControls() {
     <div className="pointer-events-none fixed inset-0 z-20">
       <LookPad />
       <Joystick />
-      <div className="pointer-events-none absolute bottom-8 right-6 flex flex-col items-end gap-3">
+      <div className="pointer-events-none absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.75rem,env(safe-area-inset-right))] flex flex-col items-end gap-3">
         <div className="flex gap-3">
           <TouchButton label="Bag" size="h-12 w-12" onPress={() => toggleInventory()} />
           <TouchButton

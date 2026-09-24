@@ -28,51 +28,62 @@ export function Hud() {
   const weapon = s.equipped.weapon ? ITEMS[s.equipped.weapon] : null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-10 select-none">
+    <div
+      className="pointer-events-none fixed inset-0 z-10 select-none"
+      style={{
+        paddingTop: "max(1.25rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(1.5rem, env(safe-area-inset-left))",
+        paddingRight: "max(1.5rem, env(safe-area-inset-right))",
+      }}
+    >
+    <div className="relative h-full w-full">
       {/* Vitals */}
-      <div className="absolute left-4 top-4 w-60 space-y-1.5 sm:w-72">
+      <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm sm:w-72 sm:p-3">
         <div className="flex items-baseline justify-between font-display text-sm text-[var(--parchment)]">
           <span className="tracking-[0.18em]">WARDEN</span>
           <span className="text-[var(--gilt)]">Lv {s.level}</span>
         </div>
         <Bar value={s.hp} max={stats.maxHp} className="bg-gradient-to-r from-[#c2412f] to-[#e8735a]" height="h-4" />
-        <div className="flex justify-between text-[11px] font-medium text-[var(--parchment)]/80">
+        <div className="flex justify-between gap-2 text-xs font-medium text-[var(--parchment)]">
           <span>
             {Math.ceil(s.hp)} / {stats.maxHp}
           </span>
-          <span>
+          <span data-testid="hud-stats">
             ATK {stats.attack} · DEF {stats.defense}
           </span>
         </div>
         <Bar value={s.xp} max={xpForLevel(s.level)} className="bg-gradient-to-r from-[#7a6ad8] to-[#b2a1ff]" height="h-1.5" />
       </div>
 
-      {/* Region + gold */}
-      <div className="absolute right-4 top-4 text-right">
-        <div className="font-display text-base tracking-[0.2em] text-[var(--parchment)] drop-shadow">
-          {s.region ?? "Dawnreach"}
+      {/* Region, gold and quest tracker stacked in one column so they never overlap */}
+      <div className="absolute right-0 top-0 flex w-52 flex-col items-end gap-2 sm:w-64">
+        <div className="rounded-lg bg-[var(--panel)]/70 px-3 py-1.5 text-right backdrop-blur-sm">
+          <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow sm:text-base">
+            {s.region ?? "Dawnreach"}
+          </div>
+          <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.kills} slain</div>
         </div>
-        <div className="text-xs text-[var(--gilt)]">{s.gold} embers · {s.kills} slain</div>
-      </div>
-
-      {/* Quest tracker */}
-      <div className="absolute right-4 top-20 w-56 rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-3 backdrop-blur-sm sm:w-64">
-        <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
-          {STARTER_QUEST.name}
-        </div>
-        {s.questComplete ? (
-          <p className="mt-1.5 text-xs leading-snug text-[var(--parchment)]/85">
-            Complete. Tidewrack Shore is marked to the south.
-          </p>
-        ) : step ? (
-          <>
-            <p className="mt-1.5 text-sm font-medium leading-snug text-[var(--parchment)]">
-              {step.title}
-              {step.kind === "kill" ? ` (${s.questKills}/${step.count})` : ""}
+        <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm sm:p-3">
+          <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+            {STARTER_QUEST.name}
+          </div>
+          {s.questComplete ? (
+            <p className="mt-1.5 text-xs leading-snug text-[var(--parchment)]/90">
+              Complete. Tidewrack Shore is marked to the south.
             </p>
-            <p className="mt-1 text-[11px] leading-snug text-[var(--parchment)]/60">{step.hint}</p>
-          </>
-        ) : null}
+          ) : step ? (
+            <>
+              <p data-testid="quest-step" className="mt-1.5 text-sm font-medium leading-snug text-[var(--parchment)]">
+                {step.title}
+                {step.kind === "kill" ? ` (${s.questKills}/${step.count})` : ""}
+              </p>
+              <p className="mt-1 hidden text-xs leading-snug text-[var(--parchment)]/70 min-[480px]:[@media(min-height:420px)]:block">
+                {step.hint}
+              </p>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {/* Boss bar */}
@@ -117,13 +128,13 @@ export function Hud() {
         ))}
       </div>
 
-      {/* Loadout + key hints (desktop) */}
-      <div className="absolute bottom-4 left-4 hidden items-end gap-4 sm:flex">
+      {/* Loadout + key hints (mouse/keyboard devices only; touch uses on-screen buttons) */}
+      <div className={`absolute bottom-0 left-0 hidden items-stretch gap-3 ${s.dialogue ? "" : "[@media(pointer:fine)]:flex"}`}>
         <div className="rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/80 px-3 py-2 backdrop-blur-sm">
           <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--gilt)]">Weapon</div>
           <div className="text-sm text-[var(--parchment)]">{weapon?.name ?? "Bare hands"}</div>
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-[var(--parchment)]/70">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 rounded-lg bg-[var(--panel)]/70 px-3 py-2 text-xs text-[var(--parchment)]/90 backdrop-blur-sm">
           <span><b className="text-[var(--gilt)]">WASD</b> move</span>
           <span><b className="text-[var(--gilt)]">Shift</b> sprint</span>
           <span><b className="text-[var(--gilt)]">Click</b> attack</span>
@@ -134,6 +145,7 @@ export function Hud() {
           <span><b className="text-[var(--gilt)]">Esc</b> pause</span>
         </div>
       </div>
+    </div>
     </div>
   );
 }

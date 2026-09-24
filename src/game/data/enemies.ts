@@ -30,11 +30,11 @@ export const ENEMIES: Record<string, EnemyDef> = {
     name: "Bramblekin",
     model: "/models/gy/character-zombie.glb",
     scale: 2.0,
-    maxHp: 46,
-    damage: 9,
+    maxHp: 40,
+    damage: 7,
     attackRange: 2.2,
-    aggroRange: 13,
-    leashRange: 26,
+    aggroRange: 9,
+    leashRange: 24,
     speed: 3.6,
     windup: 0.55,
     recover: 0.7,
@@ -51,7 +51,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     maxHp: 90,
     damage: 17,
     attackRange: 2.9,
-    aggroRange: 15,
+    aggroRange: 11,
     leashRange: 30,
     speed: 2.6,
     windup: 1.0,
@@ -66,14 +66,14 @@ export const ENEMIES: Record<string, EnemyDef> = {
     name: "Thornmaw, the Root-Crowned",
     model: "/models/gy/character-vampire.glb",
     scale: 3.4,
-    maxHp: 320,
-    damage: 24,
+    maxHp: 240,
+    damage: 18,
     attackRange: 4.0,
     aggroRange: 20,
     leashRange: 40,
     speed: 4.2,
     windup: 0.85,
-    recover: 0.9,
+    recover: 1.2,
     xp: 260,
     lootTable: "thornmaw",
     tint: "#8b5e3c",
@@ -81,3 +81,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     respawnDelay: 9999,
   },
 };
+
+/** Checked lookup: throws on unknown ids so data typos surface immediately. */
+export function enemyDef(id: string): EnemyDef {
+  const d = ENEMIES[id];
+  if (!d) throw new Error(`Unknown enemy type: ${id}`);
+  return d;
+}

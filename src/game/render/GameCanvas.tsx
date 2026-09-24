@@ -15,7 +15,7 @@ export function GameCanvas() {
   return (
     <Canvas
       shadows={quality !== "low"}
-      dpr={DPR[quality]}
+      dpr={DPR[quality] ?? [1, 1.5]}
       camera={{ fov: 58, near: 0.5, far: 400, position: [0, 10, 20] }}
       gl={{ antialias: quality !== "low", powerPreference: "high-performance" }}
       onCreated={({ gl, scene }) => {

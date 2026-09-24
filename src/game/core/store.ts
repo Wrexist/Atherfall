@@ -233,11 +233,14 @@ export const useGame = create<GameState & GameActions>((set, get) => ({
     const next = s.questStep + 1;
     sfx.quest();
     if (next >= STARTER_QUEST.steps.length) {
-      set({ questStep: next, questComplete: true, shoreUnlocked: true });
+      // One-time reward, guarded by questComplete above.
+      set({ questStep: next, questComplete: true, shoreUnlocked: true, gold: s.gold + 50, potions: s.potions + 2 });
       get().toast(STARTER_QUEST.completionTitle, "quest");
+      get().toast("Reward: 50 embers, 2 Sunbloom Draughts, Tidewrack Shore unlocked", "good");
+      get().addXp(120);
     } else {
       set({ questStep: next, questKills: 0 });
-      get().toast(STARTER_QUEST.steps[next].title, "quest");
+      get().toast(STARTER_QUEST.steps[next]!.title, "quest");
     }
   },
 

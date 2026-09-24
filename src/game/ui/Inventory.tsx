@@ -107,6 +107,7 @@ export function InventoryPanel() {
                       <div className="mt-2 flex gap-2">
                         <button
                           className="rounded border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-2.5 py-1 text-[11px] text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
+                          data-testid={`equip-${def.id}`}
                           onClick={() => s.equip(entry.uid)}
                         >
                           Equip
