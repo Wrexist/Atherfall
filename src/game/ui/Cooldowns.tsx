@@ -5,7 +5,7 @@ import { useGame } from "../core/store";
 
 export type SlotId = "dodge" | AbilityDef["id"];
 
-export function cooldownOf(id: SlotId): { left: number; max: number } {
+function cooldownOf(id: SlotId): { left: number; max: number } {
   const p = world.player;
   if (id === "dodge") return { left: p.dodgeCd, max: DODGE.cooldown };
   const def = ABILITIES.find((a) => a.id === id)!;
