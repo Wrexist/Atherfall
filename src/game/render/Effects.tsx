@@ -195,8 +195,8 @@ export function ZoneViews() {
       slot.g.position.set(z.x, heightAt(z.x, z.z) + 0.12, z.z);
       const om = slot.outline.material as THREE.MeshBasicMaterial;
       const fm = slot.fill.material as THREE.MeshBasicMaterial;
-      om.opacity = a.striking ? 0.5 : 0.16 + t * 0.1;
-      fm.opacity = a.striking ? 0.6 : 0.22 + t * 0.35;
+      om.opacity = a.striking ? 0.3 : 0.12 + t * 0.08;
+      fm.opacity = a.striking ? 0.38 : 0.14 + t * 0.24;
       if (z.kind === "circle") {
         slot.g.rotation.y = 0;
         slot.outline.geometry = circle;
