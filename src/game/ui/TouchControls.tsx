@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { applyLook, input, setSprintTouch, touch } from "../core/input";
 import { useGame } from "../core/store";
+import { ABILITIES } from "../data/combat";
+import { CombatStates, CooldownSweep, SlotIcon, useUnlocked, type SlotId } from "./Cooldowns";
 
 const KNOB = 52;
 
@@ -107,10 +109,53 @@ function LookPad() {
   );
 }
 
+function ArcButton({
+  id,
+  label,
+  angle,
+  radius,
+  onPress,
+}: {
+  id: SlotId | "jump";
+  label: string;
+  angle: number;
+  radius: number;
+  onPress: () => void;
+}) {
+  // Positioned on an arc around the attack button's centre.
+  const rad = (angle * Math.PI) / 180;
+  const x = Math.cos(rad) * radius;
+  const y = Math.sin(rad) * radius;
+  return (
+    <button
+      aria-label={label}
+      data-testid={`touch-${id}`}
+      style={{ transform: `translate(calc(${x}px - 50%), calc(${-y}px - 50%))` }}
+      className="pointer-events-auto absolute left-1/2 top-1/2 flex h-[3.6rem] w-[3.6rem] touch-none flex-col items-center justify-center overflow-hidden rounded-full border border-[var(--gilt)]/45 bg-[var(--panel)]/75 text-[var(--parchment)] active:bg-[var(--gilt)]/35"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onPress();
+      }}
+    >
+      {id === "jump" ? (
+        <span className="text-[11px] font-semibold uppercase tracking-wider">Jump</span>
+      ) : (
+        <>
+          <SlotIcon id={id} className="h-5 w-5" />
+          <span className="text-[8px] font-semibold uppercase tracking-wide">{label}</span>
+          <CooldownSweep id={id} />
+        </>
+      )}
+    </button>
+  );
+}
+
 export function TouchControls() {
   const [isTouch, setIsTouch] = useState(false);
   const potions = useGame((s) => s.potions);
+  const prompt = useGame((s) => s.interactPrompt);
   const toggleInventory = useGame((s) => s.toggleInventory);
+  const unlocked = useUnlocked();
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(pointer: coarse)").matches);
@@ -118,45 +163,42 @@ export function TouchControls() {
 
   if (!isTouch) return null;
 
+  // Arc from straight left (180°) sweeping up to near-vertical (100°).
+  const arc: Array<{ id: SlotId | "jump"; label: string; press: () => void }> = [
+    { id: "jump", label: "Jump", press: () => (input.jumpQueued = true) },
+    { id: "dodge", label: "Dodge", press: () => (input.dodgeQueued = true) },
+    ...ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: a.name.split(" ")[0]!, press: () => (input.abilityQueued = i), on: unlocked[i] }))
+      .filter((a) => a.on),
+  ];
+  const step = arc.length > 1 ? 80 / (arc.length - 1) : 0;
+
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
       <LookPad />
       <Joystick />
-      <div className="pointer-events-none absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.75rem,env(safe-area-inset-right))] flex flex-col items-end gap-3">
-        <div className="flex gap-3">
-          <TouchButton label="Bag" size="h-12 w-12" onPress={() => toggleInventory()} />
-          <TouchButton
-            label={`Heal ${potions}`}
-            size="h-12 w-12"
-            onPress={() => {
-              input.healQueued = true;
-            }}
-          />
+      {/* Utility row, bottom centre, clear of both thumbs */}
+      <div className="pointer-events-none absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        <CombatStates />
+        <div className="flex gap-2">
+          <TouchButton label="Bag" size="h-11 w-14 !rounded-xl" onPress={() => toggleInventory()} />
+          <TouchButton label={`Heal ${potions}`} size="h-11 w-14 !rounded-xl" onPress={() => (input.healQueued = true)} />
+          {prompt?.startsWith("Speak") && (
+            <TouchButton label="Talk" size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
+          )}
         </div>
-        <div className="flex items-end gap-3">
-          <TouchButton
-            label="Talk"
-            size="h-14 w-14"
-            onPress={() => {
-              input.interactQueued = true;
-            }}
-          />
-          <TouchButton
-            label="Jump"
-            size="h-16 w-16"
-            onPress={() => {
-              input.jumpQueued = true;
-            }}
-          />
-          <TouchButton
-            label="Attack"
-            size="h-24 w-24"
-            className="!text-sm"
-            onPress={() => {
-              input.attackQueued = true;
-            }}
-          />
-        </div>
+      </div>
+      <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-24 w-24">
+        <TouchButton
+          label="Attack"
+          size="h-24 w-24"
+          className="!text-sm"
+          onPress={() => {
+            input.attackQueued = true;
+          }}
+        />
+        {arc.map((b, i) => (
+          <ArcButton key={b.id} id={b.id} label={b.label} angle={180 - step * i} radius={98} onPress={b.press} />
+        ))}
       </div>
     </div>
   );
