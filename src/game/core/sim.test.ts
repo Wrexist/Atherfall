@@ -4,6 +4,16 @@ import { SWINGS, DODGE } from "../data/combat";
 import { input } from "./input";
 import { initWorld, pointInZone, stepWorld, world } from "./sim";
 import { useGame } from "./store";
+import { COLLIDERS } from "../world/layout";
+import { regionAt } from "../world/terrain";
+
+// Find an open patch of ground (no obstacles within 9m) for combat checks.
+const OPEN = (() => {
+  for (let x = -60; x <= 60; x += 3)
+    for (let z = -60; z <= 60; z += 3)
+      if (!regionAt(x, z) && COLLIDERS.every((c) => Math.hypot(c.x - x, c.z - z) > c.r + 9)) return { x, z };
+  throw new Error("no open ground");
+})();
 
 const DT = 1 / 60;
 function run(seconds: number) {
@@ -34,8 +44,8 @@ beforeEach(() => {
   initWorld(null);
   park();
   const p = world.player;
-  p.x = 0;
-  p.z = 30;
+  p.x = OPEN.x;
+  p.z = OPEN.z;
   p.yaw = 0; // facing +z
   input.yaw = 0;
   input.moveX = input.moveZ = 0;
@@ -67,7 +77,7 @@ describe("movement", () => {
 
 describe("attack chain", () => {
   test("three-hit chain, one registration per swing", () => {
-    const e = place("b1", 0, 32.2);
+    const e = place("b1", OPEN.x, OPEN.z + 2.2);
     e.maxHp = e.hp = 9999;
     const hpLog: number[] = [];
     for (let i = 0; i < 3; i++) {
@@ -78,8 +88,8 @@ describe("attack chain", () => {
       run(SWINGS[i]!.duration + 0.15); // hitstop frames included
       expect(world.stats.hits - before).toBe(1);
       hpLog.push(e.hp);
-      e.x = 0;
-      e.z = 32.2; // undo knockback so each swing is comparable
+      e.x = OPEN.x;
+      e.z = OPEN.z + 2.2; // undo knockback so each swing is comparable
       e.phase = "idle";
     }
     expect(world.stats.swings).toBe(3);
@@ -90,7 +100,7 @@ describe("attack chain", () => {
   });
 
   test("hit-pause freezes the simulation briefly on contact", () => {
-    const e = place("b1", 0, 32.2);
+    const e = place("b1", OPEN.x, OPEN.z + 2.2);
     e.maxHp = e.hp = 9999;
     input.attackQueued = true;
     let frozeFor = 0;
@@ -118,7 +128,7 @@ describe("attack chain", () => {
 
 describe("dodge", () => {
   test("i-frames evade a strike, then cooldown blocks re-use", () => {
-    const e = place("b1", 0, 32);
+    const e = place("b1", OPEN.x, OPEN.z + 2);
     e.yaw = Math.PI;
     useGame.setState({ hp: 100 });
     // Let it wind up, dodge just before the hit lands.
@@ -138,7 +148,7 @@ describe("dodge", () => {
   });
 
   test("standing in the zone takes the hit; leaving it avoids it", () => {
-    const e = place("b1", 0, 32);
+    const e = place("b1", OPEN.x, OPEN.z + 2);
     useGame.setState({ hp: 100 });
     while (e.phase !== "windup") stepWorld(DT);
     const zone = e.zones[0]!;
@@ -165,8 +175,8 @@ describe("abilities", () => {
 
   test("Emberburst hits every enemy around once", () => {
     useGame.setState({ questStep: 4 });
-    const a = place("b1", 2, 30);
-    const b = place("b2", -2, 30);
+    const a = place("b1", OPEN.x + 2, OPEN.z);
+    const b = place("b2", OPEN.x - 2, OPEN.z);
     a.maxHp = a.hp = b.maxHp = b.hp = 999;
     input.abilityQueued = 1;
     run(0.6);

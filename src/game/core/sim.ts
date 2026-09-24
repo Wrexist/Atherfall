@@ -884,8 +884,12 @@ function stepPlayer(dt: number, camYaw: number) {
   resolveCollisions(p, 0.55);
   // Kill velocity into walls so we don't keep grinding against them.
   if (dt > 0) {
-    p.vx = p.vx * 0.3 + ((p.x - beforeX) / dt) * 0.7;
-    p.vz = p.vz * 0.3 + ((p.z - beforeZ) / dt) * 0.7;
+    const ax = (p.x - beforeX) / dt;
+    const az = (p.z - beforeZ) / dt;
+    if (Math.hypot(ax, az) < Math.hypot(p.vx, p.vz) - 0.01) {
+      p.vx = ax;
+      p.vz = az;
+    }
   }
   const planar = Math.hypot(p.vx, p.vz);
   p.speedMag = planar;
