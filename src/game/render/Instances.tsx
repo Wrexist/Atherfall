@@ -9,6 +9,8 @@ export interface InstanceTransform {
   yaw: number;
   scale: number;
   yOffset?: number;
+  /** Absolute ground height override (skips terrain sampling). */
+  y?: number;
 }
 
 interface Part {
@@ -58,7 +60,7 @@ function InstancedPart({
     items.forEach((it, i) => {
       _e.set(0, it.yaw, 0);
       _q.setFromEuler(_e);
-      _v.set(it.x, heightAt(it.x, it.z) + (it.yOffset ?? 0), it.z);
+      _v.set(it.x, (it.y ?? heightAt(it.x, it.z)) + (it.yOffset ?? 0), it.z);
       _s.setScalar(it.scale);
       _m.compose(_v, _q, _s);
       _m.multiply(part.local);
