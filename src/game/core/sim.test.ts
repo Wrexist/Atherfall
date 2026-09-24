@@ -138,8 +138,9 @@ describe("dodge", () => {
     input.dodgeQueued = true;
     stepWorld(DT);
     expect(world.player.dodgeIframe).toBeGreaterThan(0);
-    run(0.3);
+    run(0.45);
     expect(useGame.getState().hp).toBe(100);
+    expect(world.stats.evades).toBeGreaterThanOrEqual(1);
     input.dodgeQueued = true;
     stepWorld(DT);
     expect(world.player.action).not.toBe("dodge");
@@ -197,7 +198,7 @@ describe("abilities", () => {
 
 describe("Thornmaw", () => {
   test("uses cleave and charge, then enrages at half health", () => {
-    const boss = enemy("boss");
+    const boss = place("boss", OPEN.x, OPEN.z);
     const moves = new Set<string>();
     useGame.setState({ hp: 100000 });
     world.player.x = boss.x;
