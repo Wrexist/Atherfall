@@ -17,12 +17,19 @@ const CLIP: Record<string, string> = {
   jump: "jump",
   fall: "fall",
   attack: "attack-melee-right",
+  attack1: "attack-melee-right",
+  attack2: "attack-melee-left",
+  attack3: "attack-melee-right",
+  dodge: "crouch",
+  burst: "attack-kick-right",
+  ward: "interact-left",
+  hit: "fall",
   windup: "interact-right",
   die: "die",
   talk: "emote-yes",
 };
 
-const ONCE = new Set(["attack", "die", "windup"]);
+const ONCE = new Set(["attack", "attack1", "attack2", "attack3", "dodge", "burst", "ward", "die", "windup", "hit"]);
 
 function useCharacter(url: string, tint?: string) {
   const gltf = useGLTF(url);
@@ -50,8 +57,11 @@ function useAnimator(
 ) {
   const { actions } = useAnimations(animations, root);
   const current = useRef<string>("");
-  return (state: string, speed = 1) => {
-    if (current.current === state) {
+  const lastKey = useRef(-1);
+  return (state: string, speed = 1, key = 0) => {
+    const restart = key !== lastKey.current && ONCE.has(state);
+    lastKey.current = key;
+    if (current.current === state && !restart) {
       const a = actions[CLIP[state] ?? ""];
       if (a) a.timeScale = speed;
       return;
@@ -68,8 +78,9 @@ function useAnimator(
       next.setLoop(THREE.LoopRepeat, Infinity);
       next.clampWhenFinished = false;
     }
-    next.fadeIn(0.14).play();
-    if (prev && prev !== next) prev.fadeOut(0.14);
+    const fade = state.startsWith("attack") || state === "dodge" ? 0.06 : 0.14;
+    next.fadeIn(fade).play();
+    if (prev && prev !== next) prev.fadeOut(fade);
     current.current = state;
   };
 }
@@ -81,8 +92,12 @@ function flashMaterials(materials: THREE.MeshStandardMaterial[], amount: number,
   }
 }
 
+const CLIP_SPEED: Record<string, number> = { attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
+
 export function PlayerView() {
   const group = useRef<THREE.Group>(null);
+  const body = useRef<THREE.Group>(null);
+  const ward = useRef<THREE.Mesh>(null);
   const { scene, materials, animations } = useCharacter("/models/mini/hero.glb");
   const play = useAnimator(group, animations);
 
@@ -92,14 +107,36 @@ export function PlayerView() {
     const p = world.player;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.yaw;
-    play(p.anim, p.anim === "attack" ? 1.7 : p.anim === "sprint" ? 1.15 : 1);
-    flashMaterials(materials, p.hitFlash * 2.2, "#ff5a4a");
+    play(p.anim, CLIP_SPEED[p.anim] ?? 1, p.animKey);
+    const b = body.current;
+    if (b) {
+      // Procedural layers: finisher spin, dodge roll, hurt recoil, dash lean.
+      b.rotation.set(0, 0, 0);
+      if (p.action === "attack" && p.comboIdx === 3) b.rotation.y = -Math.min(1, p.actionT / 0.34) * Math.PI * 2;
+      if (p.action === "dodge") b.rotation.x = Math.min(1, p.actionT / 0.34) * Math.PI * 2;
+      if (p.action === "gale") b.rotation.x = 0.45;
+      if (p.hurtT > 0) b.rotation.x = -p.hurtT * 1.3;
+    }
+    if (ward.current) {
+      ward.current.visible = p.wardT > 0;
+      const m = ward.current.material as THREE.MeshBasicMaterial;
+      m.opacity = 0.1 + Math.min(1, p.wardT) * 0.12;
+    }
+    flashMaterials(materials, p.dodgeIframe > 0 ? 0.35 : p.hitFlash * 2.2, p.dodgeIframe > 0 ? "#9fd4ff" : "#ff5a4a");
     g.visible = !(p.dead && p.deathTimer > 4);
   });
 
   return (
-    <group ref={group} scale={2.15}>
-      <primitive object={scene} />
+    <group ref={group}>
+      <group ref={body} position-y={0.85}>
+        <group position-y={-0.85} scale={2.15}>
+          <primitive object={scene} />
+        </group>
+      </group>
+      <mesh ref={ward} position-y={1} visible={false}>
+        <sphereGeometry args={[1.35, 20, 14]} />
+        <meshBasicMaterial color="#b9d98a" transparent opacity={0.18} depthWrite={false} />
+      </mesh>
     </group>
   );
 }
@@ -111,7 +148,6 @@ function EnemyView({ index }: { index: number }) {
   const inner = useRef<THREE.Group>(null);
   const bar = useRef<THREE.Group>(null);
   const barFill = useRef<THREE.Mesh>(null);
-  const ring = useRef<THREE.Mesh>(null);
   const { scene, materials, animations } = useCharacter(def.model, def.tint);
   const play = useAnimator(inner, animations);
   const camera = useThree((s) => s.camera);
@@ -124,8 +160,12 @@ function EnemyView({ index }: { index: number }) {
     g.visible = alive || e.respawnIn > def.respawnDelay - 2.5;
     g.position.set(e.x, e.y, e.z);
     g.rotation.y = e.yaw;
-    play(e.anim === "walk" && e.phase === "chase" ? "sprint" : e.anim, e.anim === "attack" ? 1.6 : 1);
-    flashMaterials(materials, e.hitFlash * 2.5, "#ffb3a0");
+    play(e.anim === "walk" && e.phase === "chase" ? "sprint" : e.anim, e.anim === "attack" ? 1.6 : e.anim === "windup" ? 1 / Math.max(0.4, e.windupTotal) : 1);
+    flashMaterials(
+      materials,
+      e.hitFlash > 0 ? e.hitFlash * 2.5 : e.phase === "windup" ? 0.25 + e.telegraph * 0.6 : e.slowT > 0 ? 0.3 : 0,
+      e.hitFlash > 0 ? "#ffb3a0" : e.phase === "windup" ? "#ff4a2a" : "#8fc8ff",
+    );
 
     if (bar.current) {
       const show = alive && (e.aggro || e.hp < e.maxHp);
@@ -139,15 +179,7 @@ function EnemyView({ index }: { index: number }) {
         }
       }
     }
-    if (ring.current) {
-      const active = e.phase === "windup";
-      ring.current.visible = active;
-      if (active) {
-        const s = def.attackRange * (0.45 + e.telegraph * 0.75);
-        ring.current.scale.setScalar(s);
-        (ring.current.material as THREE.MeshBasicMaterial).opacity = 0.25 + e.telegraph * 0.5;
-      }
-    }
+    inner.current!.rotation.x = e.phase === "stagger" ? -0.35 : 0;
   });
 
   const barY = def.boss ? 3.9 : def.scale * 1.2;
@@ -157,10 +189,6 @@ function EnemyView({ index }: { index: number }) {
       <group ref={inner} scale={def.scale}>
         <primitive object={scene} />
       </group>
-      <mesh ref={ring} rotation-x={-Math.PI / 2} position-y={0.08} visible={false}>
-        <ringGeometry args={[0.72, 1, 28]} />
-        <meshBasicMaterial color="#ff5d3d" transparent opacity={0.4} depthWrite={false} />
-      </mesh>
       <group ref={bar} position={[0, barY, 0]} visible={false}>
         <mesh>
           <planeGeometry args={[1.05, 0.15]} />

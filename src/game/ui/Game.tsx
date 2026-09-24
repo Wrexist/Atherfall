@@ -76,6 +76,10 @@ export function Game() {
         if (e.code === "KeyE") input.interactQueued = true;
         if (e.code === "KeyQ") input.healQueued = true;
         if (e.code === "KeyI") state.toggleInventory();
+        if (e.code === "KeyF" || e.code === "ControlLeft") input.dodgeQueued = true;
+        if (e.code === "Digit1") input.abilityQueued = 0;
+        if (e.code === "Digit2") input.abilityQueued = 1;
+        if (e.code === "Digit3") input.abilityQueued = 2;
       }
       if (e.code === "Escape") {
         if (state.inventoryOpen) state.toggleInventory(false);
@@ -115,6 +119,7 @@ export function Game() {
         return;
       }
       if (e.button === 0) input.attackQueued = true;
+      if (e.button === 2) input.dodgeQueued = true;
     };
     const onPointerUp = () => {
       dragging.current = false;
@@ -125,11 +130,14 @@ export function Game() {
       if (locked) applyLook(e.movementX, e.movementY);
       else if (dragging.current) applyLook(e.movementX, e.movementY);
     };
+    const onContext = (e: Event) => e.preventDefault();
+    el.addEventListener("contextmenu", onContext);
     el.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointermove", onMove);
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("contextmenu", onContext);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointermove", onMove);
     };
