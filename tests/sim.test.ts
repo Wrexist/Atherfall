@@ -1,11 +1,11 @@
-// Deterministic combat checks. Run with: bun test src/game/core/sim.test.ts
+// Deterministic combat checks. Run with: bun test ./tests/sim.test.ts
 import { beforeEach, describe, expect, test } from "bun:test";
-import { SWINGS, DODGE } from "../data/combat";
-import { input } from "./input";
-import { initWorld, pointInZone, stepWorld, world } from "./sim";
-import { useGame } from "./store";
-import { COLLIDERS } from "../world/layout";
-import { regionAt } from "../world/terrain";
+import { SWINGS, DODGE } from "../src/game/data/combat";
+import { input } from "../src/game/core/input";
+import { initWorld, pointInZone, stepWorld, world } from "../src/game/core/sim";
+import { useGame } from "../src/game/core/store";
+import { COLLIDERS } from "../src/game/world/layout";
+import { regionAt } from "../src/game/world/terrain";
 
 // Find an open patch of ground (no obstacles within 9m) for combat checks.
 const OPEN = (() => {
