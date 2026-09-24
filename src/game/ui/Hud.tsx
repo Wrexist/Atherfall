@@ -129,7 +129,7 @@ export function Hud() {
       </div>
 
       {/* Loadout + key hints (mouse/keyboard devices only; touch uses on-screen buttons) */}
-      <div className="absolute bottom-0 left-0 hidden items-stretch gap-3 [@media(pointer:fine)]:flex">
+      <div className={`absolute bottom-0 left-0 hidden items-stretch gap-3 ${s.dialogue ? "" : "[@media(pointer:fine)]:flex"}`}>
         <div className="rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/80 px-3 py-2 backdrop-blur-sm">
           <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--gilt)]">Weapon</div>
           <div className="text-sm text-[var(--parchment)]">{weapon?.name ?? "Bare hands"}</div>
