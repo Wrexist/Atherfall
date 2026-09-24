@@ -138,7 +138,13 @@ describe("dodge", () => {
     input.dodgeQueued = true;
     stepWorld(DT);
     expect(world.player.dodgeIframe).toBeGreaterThan(0);
-    run(0.45);
+    // Pin the player inside the zone: only the i-frames can save them now.
+    const px = world.player.x, pz = world.player.z;
+    for (let t = 0; t < 0.45; t += DT) {
+      world.player.x = px;
+      world.player.z = pz;
+      stepWorld(DT);
+    }
     expect(useGame.getState().hp).toBe(100);
     expect(world.stats.evades).toBeGreaterThanOrEqual(1);
     input.dodgeQueued = true;
