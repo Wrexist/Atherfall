@@ -7,7 +7,7 @@ export function Terrain({ segments, shadows }: { segments: number; shadows: bool
     const size = WORLD_RADIUS * 2.2;
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
     geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const pos = geo.attributes["position"] as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {

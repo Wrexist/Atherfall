@@ -63,7 +63,7 @@ export const LOOT_TABLES: Record<string, LootTable> = {
 export function rollLoot(
   tableId: string,
   rand: () => number,
-): { itemId?: string; potion: boolean; gold: number } {
+): { itemId?: string | undefined; potion: boolean; gold: number } {
   const table = LOOT_TABLES[tableId];
   if (!table) return { potion: false, gold: 0 };
   const gold = Math.round(table.gold[0] + rand() * (table.gold[1] - table.gold[0]));

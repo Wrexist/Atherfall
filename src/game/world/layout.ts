@@ -79,16 +79,16 @@ export const SPAWNS: SpawnDef[] = [
   // Whisperpine Woods — Bramblekin
   { id: "b1", type: "bramblekin", x: -4, z: -36, yaw: 0 },
   { id: "b2", type: "bramblekin", x: -14, z: -44, yaw: 1.2 },
-  { id: "b3", type: "bramblekin", x: 4, z: -48, yaw: 2.4 },
+  { id: "b3", type: "bramblekin", x: 2, z: -50, yaw: 2.4 },
   { id: "b4", type: "bramblekin", x: -12, z: -58, yaw: 3.1 },
   { id: "b5", type: "bramblekin", x: 2, z: -64, yaw: 0.6 },
-  { id: "b6", type: "bramblekin", x: -20, z: -68, yaw: 1.9 },
+  { id: "b6", type: "bramblekin", x: -23, z: -69, yaw: 1.9 },
   { id: "b7", type: "bramblekin", x: 10, z: -58, yaw: 4.2 },
   // Road to the ruins — Hollow Sentinels
   { id: "s1", type: "sentinel", x: 34, z: -18, yaw: 3.0 },
   { id: "s2", type: "sentinel", x: 47, z: -24, yaw: 2.4 },
   { id: "s3", type: "sentinel", x: 60, z: -18, yaw: 1.4 },
-  { id: "s4", type: "sentinel", x: 66, z: -38, yaw: 0.4 },
+  { id: "s4", type: "sentinel", x: 72, z: -48, yaw: 0.4 },
   // Miniboss
   { id: "boss", type: "thornmaw", x: 58, z: -34, yaw: 1.6 },
 ];
@@ -116,7 +116,7 @@ const ROCKS = [
 ];
 
 function pick<T>(arr: T[], r: number): T {
-  return arr[Math.min(arr.length - 1, Math.floor(r * arr.length))];
+  return arr[Math.min(arr.length - 1, Math.floor(r * arr.length))] as T;
 }
 
 /** Landmarks placed by hand so the region reads as designed, not scattered. */

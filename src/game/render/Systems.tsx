@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { input, pollInput } from "../core/input";
 import { stepWorld, world } from "../core/sim";
 import { heightAt } from "../world/terrain";
+import { COLLIDERS } from "../world/layout";
 
 const BASE_DISTANCE = 9.2;
 const HEAD = 1.55;
@@ -35,13 +36,29 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     const dirX = -Math.sin(input.yaw) * cosP;
     const dirZ = -Math.cos(input.yaw) * cosP;
     const dirY = Math.sin(input.pitch);
-    for (let i = 4; i <= 12; i++) {
+    // Also pull in for solid props (trees, rocks, cottages) so the view never
+    // ends up inside foliage or walls.
+    for (let i = 3; i <= 12; i++) {
       const t = (i / 12) * BASE_DISTANCE;
       const sx = targetX + dirX * t;
       const sz = targetZ + dirZ * t;
       const sy = targetY + dirY * t;
-      if (sy < heightAt(sx, sz) + 0.9) {
-        dist = Math.max(3.0, t - 0.6);
+      const gh = heightAt(sx, sz);
+      let blocked = sy < gh + 0.9;
+      if (!blocked && sy < gh + 5.5) {
+        for (const c of COLLIDERS) {
+          if (c.r < 1.5) continue; // cottages and boulders only; tree canopies are allowed to overlap
+          const dx = sx - c.x;
+          const dz = sz - c.z;
+          const rr = c.r + 0.7;
+          if (dx * dx + dz * dz < rr * rr) {
+            blocked = true;
+            break;
+          }
+        }
+      }
+      if (blocked) {
+        dist = Math.max(3.2, t - 0.6);
         break;
       }
     }

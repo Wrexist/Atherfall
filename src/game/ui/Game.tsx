@@ -42,16 +42,25 @@ export function Game() {
   }, []);
 
   // Leave the loading screen once the scene assets have streamed in.
+  // (A cancelled timer used to leave the game stuck on "loading" forever when
+  // progress bounced back to 100; now it is simply re-armed.)
   useEffect(() => {
     useGame.setState({ loadProgress: progress / 100 });
-    if (progress >= 100 && !ready.current) {
+    if (progress < 100 || ready.current) return undefined;
+    const t = setTimeout(() => {
       ready.current = true;
-      const t = setTimeout(() => {
-        if (useGame.getState().screen === "loading") useGame.setState({ screen: "title" });
-      }, 350);
-      return () => clearTimeout(t);
-    }
+      if (useGame.getState().screen === "loading") useGame.setState({ screen: "title" });
+    }, 350);
+    return () => clearTimeout(t);
   }, [progress]);
+  // Safety net: if loading reports complete but nothing re-renders, still advance.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const g = useGame.getState();
+      if (g.screen === "loading" && g.loadProgress >= 1) useGame.setState({ screen: "title" });
+    }, 1500);
+    return () => clearInterval(iv);
+  }, []);
 
   // Keyboard
   useEffect(() => {
@@ -126,11 +135,14 @@ export function Game() {
     };
   }, []);
 
-  // Release the cursor whenever gameplay is interrupted.
+  // Release the cursor whenever gameplay is interrupted — including the satchel,
+  // so its buttons are clickable with a visible mouse cursor.
+  const inventoryOpen = useGame((s) => s.inventoryOpen);
   useEffect(() => {
-    if (screen !== "playing" && document.pointerLockElement) document.exitPointerLock();
-    if (screen !== "playing") resetInput();
-  }, [screen]);
+    const interrupted = screen !== "playing" || inventoryOpen;
+    if (interrupted && document.pointerLockElement) document.exitPointerLock();
+    if (interrupted) resetInput();
+  }, [screen, inventoryOpen]);
 
   const showLoading = screen === "loading";
   const overlay = useMemo(() => screen === "playing" || screen === "paused" || screen === "dead", [screen]);

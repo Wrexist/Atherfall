@@ -101,8 +101,8 @@ export function pathDistance(x: number, z: number): number {
   let best = Infinity;
   for (const path of PATHS) {
     for (let i = 0; i < path.length - 1; i++) {
-      const [ax, az] = path[i];
-      const [bx, bz] = path[i + 1];
+      const [ax, az] = path[i]!;
+      const [bx, bz] = path[i + 1]!;
       const vx = bx - ax;
       const vz = bz - az;
       const len2 = vx * vx + vz * vz || 1;

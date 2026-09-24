@@ -3,7 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { ENEMIES } from "../data/enemies";
+import { enemyDef } from "../data/enemies";
 import { NPCS } from "../world/layout";
 import { heightAt } from "../world/terrain";
 import { world } from "../core/sim";
@@ -52,7 +52,7 @@ function useAnimator(
   const current = useRef<string>("");
   return (state: string, speed = 1) => {
     if (current.current === state) {
-      const a = actions[CLIP[state]];
+      const a = actions[CLIP[state] ?? ""];
       if (a) a.timeScale = speed;
       return;
     }
@@ -105,8 +105,8 @@ export function PlayerView() {
 }
 
 function EnemyView({ index }: { index: number }) {
-  const runtime = world.enemies[index];
-  const def = ENEMIES[runtime.type];
+  const runtime = world.enemies[index]!;
+  const def = enemyDef(runtime.type);
   const group = useRef<THREE.Group>(null);
   const inner = useRef<THREE.Group>(null);
   const bar = useRef<THREE.Group>(null);

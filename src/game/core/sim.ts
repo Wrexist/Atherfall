@@ -1,7 +1,7 @@
 // Game simulation. Plain mutable state stepped from a single useFrame call.
 // Nothing here imports React: rendering reads these objects each frame.
 
-import { ENEMIES } from "../data/enemies";
+import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
 import { STARTER_QUEST } from "../data/quests";
 import { ITEMS } from "../data/items";
@@ -42,7 +42,7 @@ export interface DropRuntime {
   x: number;
   y: number;
   z: number;
-  itemId?: string;
+  itemId?: string | undefined;
   potion: boolean;
   gold: number;
   born: number;
@@ -119,7 +119,7 @@ const ATTACK_HIT_AT = 0.2;
 const ATTACK_RANGE = 3.1;
 
 function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
-  const def = ENEMIES[spawn.type];
+  const def = enemyDef(spawn.type);
   return {
     id: spawn.id,
     type: spawn.type,
@@ -152,7 +152,7 @@ export function initWorld(save: SaveFile | null) {
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
   for (const e of world.enemies) {
-    if (ENEMIES[e.type].boss && world.defeated.has(e.id)) {
+    if (enemyDef(e.type).boss && world.defeated.has(e.id)) {
       e.phase = "dead";
       e.hp = 0;
       e.respawnIn = 99999;
@@ -237,18 +237,39 @@ function spark(x: number, y: number, z: number, color: string, size = 0.5) {
 }
 
 function resolveCollisions(pos: { x: number; z: number }, radius: number) {
-  for (const c of COLLIDERS) {
-    const dx = pos.x - c.x;
-    const dz = pos.z - c.z;
-    const min = c.r + radius;
-    const d2 = dx * dx + dz * dz;
-    if (d2 < min * min) {
-      const d = Math.sqrt(d2) || 0.0001;
-      pos.x = c.x + (dx / d) * min;
-      pos.z = c.z + (dz / d) * min;
+  // Two passes so being wedged between neighbouring colliders (fence posts,
+  // cottage corners) resolves instead of jittering in place.
+  for (let pass = 0; pass < 2; pass++) {
+    for (const c of COLLIDERS) {
+      const dx = pos.x - c.x;
+      const dz = pos.z - c.z;
+      const min = c.r + radius;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < min * min) {
+        const d = Math.sqrt(d2) || 0.0001;
+        pos.x = c.x + (dx / d) * min;
+        pos.z = c.z + (dz / d) * min;
+      }
     }
   }
   clampToWorld(pos);
+}
+
+/** True when a solid collider (cottage, wall, rock, tree) sits between two points. */
+export function lineBlocked(ax: number, az: number, bx: number, bz: number) {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const len2 = vx * vx + vz * vz || 1e-6;
+  for (const c of COLLIDERS) {
+    if (c.r < 0.9) continue; // thin posts / NPCs don't block swings
+    // Ignore colliders that contain either endpoint (already overlapping)
+    if (Math.hypot(ax - c.x, az - c.z) < c.r || Math.hypot(bx - c.x, bz - c.z) < c.r) continue;
+    const t = Math.max(0, Math.min(1, ((c.x - ax) * vx + (c.z - az) * vz) / len2));
+    const px = ax + vx * t - c.x;
+    const pz = az + vz * t - c.z;
+    if (px * px + pz * pz < c.r * c.r * 0.8) return true;
+  }
+  return false;
 }
 
 function damagePlayer(amount: number) {
@@ -299,9 +320,19 @@ export function respawnPlayer() {
   saveNow();
 }
 
+function playerHasWeapon() {
+  const s = useGame.getState();
+  if (s.equipped.weapon) return true;
+  if (s.inventory.some((i) => ITEMS[i.itemId]?.slot === "weapon")) return true;
+  return world.drops.some((d) => !d.taken && d.itemId && ITEMS[d.itemId]?.slot === "weapon");
+}
+
 function dropLoot(enemy: EnemyRuntime) {
-  const def = ENEMIES[enemy.type];
+  const def = enemyDef(enemy.type);
   const loot = rollLoot(def.lootTable, rand);
+  // The starter quest requires equipping a weapon: guarantee the first one
+  // so the tutorial can never stall on bad luck.
+  if (!def.boss && !playerHasWeapon()) loot.itemId = "wayfarer-blade";
   if (!loot.itemId && !loot.potion && loot.gold <= 0) return;
   dropId += 1;
   world.drops.push({
@@ -318,7 +349,7 @@ function dropLoot(enemy: EnemyRuntime) {
 }
 
 function killEnemy(enemy: EnemyRuntime) {
-  const def = ENEMIES[enemy.type];
+  const def = enemyDef(enemy.type);
   enemy.phase = "dead";
   enemy.hp = 0;
   enemy.anim = "die";
@@ -359,10 +390,11 @@ function applyAttackHit() {
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const dist = Math.hypot(dx, dz);
-    const reach = ATTACK_RANGE + (ENEMIES[e.type].boss ? 1.2 : 0.4);
+    const reach = ATTACK_RANGE + (enemyDef(e.type).boss ? 1.2 : 0.4);
     if (dist > reach) continue;
     const dot = (dx / (dist || 1)) * fx + (dz / (dist || 1)) * fz;
     if (dot < 0.3) continue;
+    if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
     const dmg = Math.round(stats.attack * (0.9 + rand() * 0.25));
     e.hp -= dmg;
     e.hitFlash = 0.28;
@@ -474,7 +506,7 @@ function stepPlayer(dt: number, camYaw: number) {
 }
 
 function stepEnemy(e: EnemyRuntime, dt: number) {
-  const def = ENEMIES[e.type];
+  const def = enemyDef(e.type);
   const p = world.player;
   e.hitFlash = Math.max(0, e.hitFlash - dt);
 
@@ -564,7 +596,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
         const fz = Math.cos(e.yaw);
         const d = Math.hypot(dx, dz) || 1;
         const dot = (dx / d) * fx + (dz / d) * fz;
-        if (d <= def.attackRange * 1.3 && dot > 0.2) {
+        if (d <= def.attackRange * 1.3 && dot > 0.2 && !lineBlocked(e.x, e.z, p.x, p.z)) {
           damagePlayer(def.damage);
           spark(p.x, p.y + 1.2, p.z, "#ff6b5a", 0.6);
         }
@@ -609,7 +641,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
 
   e.y += (heightAt(e.x, e.z) - e.y) * Math.min(1, dt * 10);
 
-  if (def.boss && e.aggro && e.phase !== "dead") {
+  if (def.boss && e.aggro && (e.phase as EnemyPhase) !== "dead") {
     const bar = useGame.getState().bossBar;
     if (!bar || Math.abs(bar.hp - e.hp) > 0.5) {
       useGame.setState({ bossBar: { name: def.name, hp: Math.max(0, e.hp), max: e.maxHp } });
@@ -637,8 +669,8 @@ function stepDrops(dt: number) {
   }
   if (world.drops.length > 60) world.drops.splice(0, world.drops.length - 60);
   for (let i = world.drops.length - 1; i >= 0; i--) {
-    if (world.drops[i].taken && world.time - world.drops[i].born > 0.1) {
-      if (world.time - world.drops[i].born > 0.6) world.drops.splice(i, 1);
+    if (world.drops[i]!.taken && world.time - world.drops[i]!.born > 0.1) {
+      if (world.time - world.drops[i]!.born > 0.6) world.drops.splice(i, 1);
     }
   }
 }
@@ -662,6 +694,12 @@ function selaLines(step: number, complete: boolean): string[] {
     return [
       "Tidewrack is yours to walk now, Warden-in-training.",
       "Whatever fell out of that sky is still burning on the sand. Go carefully.",
+    ];
+  }
+  if (step === STARTER_QUEST.steps.length - 1) {
+    return [
+      "Thornmaw's fang, still warm. You did not run. Good.",
+      STARTER_QUEST.completionText,
     ];
   }
   switch (step) {
@@ -723,7 +761,16 @@ function stepQuest() {
     if (region === step.area) store.advanceQuest();
   } else if (step.kind === "equip") {
     if (store.equipped.weapon) store.advanceQuest();
+  } else if (step.kind === "boss") {
+    // Boss killed before reaching this step (it never respawns) — don't stall.
+    const boss = world.enemies.find((e) => e.type === step.enemy);
+    if (boss && boss.phase === "dead") store.advanceQuest();
   }
+}
+
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked };
+  (window as unknown as Record<string, unknown>)["__aetherInput"] = input;
 }
 
 let lastRegion: string | null = null;
@@ -750,7 +797,7 @@ export function stepWorld(dtRaw: number) {
 
   world.cameraShake = Math.max(0, world.cameraShake - dt * 2.2);
   for (let i = world.sparks.length - 1; i >= 0; i--) {
-    if (world.time - world.sparks[i].born > 0.45) world.sparks.splice(i, 1);
+    if (world.time - world.sparks[i]!.born > 0.45) world.sparks.splice(i, 1);
   }
 
   // HUD-facing values that change rarely
