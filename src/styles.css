@@ -59,10 +59,21 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-parchment: var(--parchment);
+  --color-ink: var(--ink);
+  --color-gilt: var(--gilt);
+  --color-panel: var(--panel);
+  --font-display: var(--font-display);
 }
 
 :root {
   --radius: 0.625rem;
+  /* Aetherfall game palette (storybook dusk) */
+  --parchment: #f3e4c8;
+  --ink: #17110d;
+  --gilt: #e5b45c;
+  --panel: #2a1f18;
+  --font-display: "Cinzel", Georgia, serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -140,5 +151,12 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+}
+
+@layer base {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
   }
 }
