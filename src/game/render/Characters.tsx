@@ -2,9 +2,10 @@ import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { SkeletonUtils } from "three-stdlib";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ENEMIES } from "../data/enemies";
 import { NPCS } from "../world/layout";
+import { heightAt } from "../world/terrain";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
 
@@ -26,7 +27,7 @@ const ONCE = new Set(["attack", "die", "windup"]);
 function useCharacter(url: string, tint?: string) {
   const gltf = useGLTF(url);
   return useMemo(() => {
-    const scene = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+    const scene = cloneSkeleton(gltf.scene) as THREE.Group;
     const materials: THREE.MeshStandardMaterial[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -231,31 +232,10 @@ export function NpcViews() {
   return (
     <>
       {NPCS.map((npc) => (
-        <group key={npc.id} position={[0, 0, 0]}>
-          <NpcOnGround npc={npc} />
+        <group key={npc.id} position={[0, heightAt(npc.x, npc.z), 0]}>
+          <NpcView npc={npc} />
         </group>
       ))}
     </>
   );
 }
-
-function NpcOnGround({ npc }: { npc: (typeof NPCS)[number] }) {
-  const ref = useRef<THREE.Group>(null);
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.position.y = 0;
-    }
-  }, []);
-  return (
-    <group ref={ref} position={[0, npcGroundY(npc), 0]}>
-      <NpcView npc={npc} />
-    </group>
-  );
-}
-
-function npcGroundY(npc: (typeof NPCS)[number]) {
-  // NPCs are static; sample terrain once at module use.
-  return heightOf(npc.x, npc.z);
-}
-
-import { heightAt as heightOf } from "../world/terrain";
