@@ -7,7 +7,7 @@ import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
 import { Terrain } from "./Terrain";
 import { EnemyViews, NpcViews, PlayerView } from "./Characters";
-import { DropViews, SparkViews } from "./Effects";
+import { DropViews, FloaterViews, RingViews, SparkViews, ZoneViews } from "./Effects";
 import { Systems } from "./Systems";
 
 const QUALITY: Record<Quality, { segments: number; shadows: boolean; shadowMap: number; far: number; detail: boolean }> = {
@@ -141,6 +141,9 @@ export function Scene() {
       <NpcViews />
       <DropViews />
       <SparkViews />
+      <RingViews />
+      <ZoneViews />
+      <FloaterViews />
       <ShoreGate />
     </>
   );
