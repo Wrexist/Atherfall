@@ -114,14 +114,17 @@ function ArcButton({
   label,
   angle,
   radius,
+  small = false,
   onPress,
 }: {
+  small?: boolean;
   id: SlotId | "jump";
   label: string;
   angle: number;
   radius: number;
   onPress: () => void;
 }) {
+  const size = small ? "h-[3.2rem] w-[3.2rem]" : "h-[3.6rem] w-[3.6rem]";
   // Positioned on an arc around the attack button's centre.
   const rad = (angle * Math.PI) / 180;
   const x = Math.cos(rad) * radius;
@@ -131,7 +134,7 @@ function ArcButton({
       aria-label={label}
       data-testid={`touch-${id}`}
       style={{ transform: `translate(calc(${x}px - 50%), calc(${-y}px - 50%))` }}
-      className="pointer-events-auto absolute left-1/2 top-1/2 flex h-[3.6rem] w-[3.6rem] touch-none flex-col items-center justify-center overflow-hidden rounded-full border border-[var(--gilt)]/45 bg-[var(--panel)]/75 text-[var(--parchment)] active:bg-[var(--gilt)]/35"
+      className={`pointer-events-auto absolute left-1/2 top-1/2 flex ${size} touch-none flex-col items-center justify-center overflow-hidden rounded-full border border-[var(--gilt)]/45 bg-[var(--panel)]/75 text-[var(--parchment)] active:bg-[var(--gilt)]/35`}
       onPointerDown={(e) => {
         e.preventDefault();
         onPress();
@@ -163,15 +166,12 @@ export function TouchControls() {
 
   if (!isTouch) return null;
 
-  // Arc from straight left (180°) sweeping up to near-vertical (100°).
-  const arc: Array<{ id: SlotId | "jump"; label: string; press: () => void }> = [
-    { id: "jump", label: "Jump", press: () => (input.jumpQueued = true) },
-    { id: "dodge", label: "Dodge", press: () => (input.dodgeQueued = true) },
-    ...ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: a.name.split(" ")[0]!, press: () => (input.abilityQueued = i), on: unlocked[i] }))
-      .filter((a) => a.on),
-  ];
-  const step = arc.length > 1 ? 80 / (arc.length - 1) : 0;
-
+  // Two rings around Attack: Jump + Dodge close in, abilities on an outer arc
+  // that only fills as they unlock — so thumbs never hunt for small targets.
+  const abilities = ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: a.name.split(" ")[0]!, idx: i })).filter(
+    (a) => unlocked[a.idx],
+  );
+  const OUTER = [178, 146, 114];
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
       <LookPad />
@@ -187,17 +187,19 @@ export function TouchControls() {
           )}
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-24 w-24">
+      <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-20 w-20">
         <TouchButton
           label="Attack"
-          size="h-24 w-24"
+          size="h-20 w-20"
           className="!text-sm"
           onPress={() => {
             input.attackQueued = true;
           }}
         />
-        {arc.map((b, i) => (
-          <ArcButton key={b.id} id={b.id} label={b.label} angle={180 - step * i} radius={98} onPress={b.press} />
+        <ArcButton id="jump" label="Jump" angle={192} radius={90} onPress={() => (input.jumpQueued = true)} />
+        <ArcButton id="dodge" label="Dodge" angle={138} radius={90} onPress={() => (input.dodgeQueued = true)} />
+        {abilities.map((a, i) => (
+          <ArcButton key={a.id} id={a.id} label={a.label} small angle={OUTER[i]!} radius={150} onPress={() => (input.abilityQueued = a.idx)} />
         ))}
       </div>
     </div>

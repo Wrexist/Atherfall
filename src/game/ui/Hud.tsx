@@ -89,7 +89,7 @@ export function Hud() {
 
       {/* Boss bar */}
       {s.bossBar && (
-        <div className="absolute left-1/2 top-4 w-[min(30rem,70vw)] -translate-x-1/2">
+        <div className="absolute left-1/2 top-4 w-[max(12rem,min(30rem,calc(100%-37rem)))] -translate-x-1/2">
           <div className="text-center font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow">
             {s.bossBar.name.toUpperCase()}
             {s.bossBar.phase === 2 && <span className="ml-2 text-[#f0a595]">· ENRAGED</span>}
