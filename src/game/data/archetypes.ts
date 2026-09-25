@@ -30,11 +30,11 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypeDef> = {
     description: "Three-hit sword chain with a spinning finisher. Toughest and most forgiving.",
     model: "/models/mini/hero.glb",
     basic: "melee",
-    base: { attack: 7, defense: 3, maxHp: 110 },
+    base: { attack: 7, defense: 3, maxHp: 110, crit: 5 },
     perLevel: { attack: 2, defense: 1.2, maxHp: 20 },
     moveMult: 1,
     abilities: ["galestep", "emberburst", "barkward"],
-  } as ArchetypeDef,
+  },
   ranger: {
     id: "ranger",
     name: "Ranger",
@@ -42,11 +42,11 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypeDef> = {
     description: "Fires arrows from range; the third shot pierces. Fastest and hits critically most often.",
     model: "/models/mini/ranger.glb",
     basic: "arrow",
-    base: { attack: 6, defense: 2, maxHp: 92 },
+    base: { attack: 6, defense: 2, maxHp: 92, crit: 14 },
     perLevel: { attack: 2.1, defense: 0.8, maxHp: 15 },
     moveMult: 1.1,
     abilities: ["vault", "arrowrain", "secondwind"],
-  } as ArchetypeDef,
+  },
   arcanist: {
     id: "arcanist",
     name: "Arcanist",
@@ -54,16 +54,11 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypeDef> = {
     description: "Hurls exploding bolts that hit groups. Fragile, but abilities hit hardest.",
     model: "/models/mini/arcanist.glb",
     basic: "bolt",
-    base: { attack: 8, defense: 2, maxHp: 86 },
+    base: { attack: 8, defense: 2, maxHp: 86, crit: 7 },
     perLevel: { attack: 2.4, defense: 0.7, maxHp: 14 },
     moveMult: 1,
     abilities: ["blink", "frostnova", "aegis"],
-  } as ArchetypeDef,
+  },
 };
-
-// crit base values (percentage points) kept separate so the table above stays readable
-ARCHETYPES.vanguard.base.crit = 5;
-ARCHETYPES.ranger.base.crit = 14;
-ARCHETYPES.arcanist.base.crit = 7;
 
 export const ARCHETYPE_LIST: ArchetypeDef[] = [ARCHETYPES.vanguard, ARCHETYPES.ranger, ARCHETYPES.arcanist];
