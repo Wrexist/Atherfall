@@ -616,6 +616,7 @@ export function lineBlocked(ax: number, az: number, bx: number, bz: number) {
 function killPlayer() {
   const p = world.player;
   p.dead = true;
+  p.legs = null; // the death clip plays whole, never split
   p.deathTimer = 0;
   p.anim = "die";
   sfx.death();
@@ -1313,6 +1314,9 @@ function stepRains() {
 function stepPlayer(dt: number, camYaw: number) {
   const p = world.player;
   const store = useGame.getState();
+  // Split legs only ever last one frame of a moving swing (set again below);
+  // early exits (death, swimming, climbing) must never keep a stale value.
+  p.legs = null;
 
   if (p.dead) {
     p.deathTimer += dt;
