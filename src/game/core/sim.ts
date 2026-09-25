@@ -1230,7 +1230,7 @@ function stepPlayer(dt: number, camYaw: number) {
     const az = run > 1e-5 ? beforeZ + ((p.z - beforeZ) / run) * probe : beforeZ;
     const gOld = heightAt(beforeX, beforeZ);
     const gAhead = heightAt(ax, az);
-    if (run > 1e-5 && gAhead - gOld > probe * MAX_GRADE && gAhead > p.y + 0.2) {
+    if (run > 1e-5 && gAhead - gOld > probe * MAX_GRADE && gAhead > p.y + (p.swimming ? 1.2 : 0.2)) {
       p.x = beforeX;
       p.z = beforeZ;
       p.vx *= -0.1;
