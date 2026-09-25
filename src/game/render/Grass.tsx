@@ -5,6 +5,7 @@ import type { Quality } from "../core/store";
 import { COLLIDERS } from "../world/layout";
 import {
   REGIONS,
+  SEA_LEVEL,
   groundColor,
   heightAt,
   mulberry32,
