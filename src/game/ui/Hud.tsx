@@ -1,5 +1,6 @@
 import { ITEMS } from "../data/items";
 import { STARTER_QUEST } from "../data/quests";
+import { AbilityBar } from "./Cooldowns";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
 function Bar({
@@ -88,9 +89,10 @@ export function Hud() {
 
       {/* Boss bar */}
       {s.bossBar && (
-        <div className="absolute left-1/2 top-4 w-[min(30rem,70vw)] -translate-x-1/2">
+        <div className="absolute left-1/2 top-4 w-[max(12rem,min(30rem,calc(100%-37rem)))] -translate-x-1/2">
           <div className="text-center font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow">
             {s.bossBar.name.toUpperCase()}
+            {s.bossBar.phase === 2 && <span className="ml-2 text-[#f0a595]">· ENRAGED</span>}
           </div>
           <div className="mt-1">
             <Bar value={s.bossBar.hp} max={s.bossBar.max} className="bg-gradient-to-r from-[#8c2f22] to-[#e2894b]" height="h-3" />
@@ -109,7 +111,7 @@ export function Hud() {
       )}
 
       {/* Toasts */}
-      <div className="absolute bottom-28 left-1/2 flex w-[min(24rem,80vw)] -translate-x-1/2 flex-col items-center gap-1.5">
+      <div className="absolute bottom-32 left-1/2 flex w-[min(24rem,80vw)] -translate-x-1/2 flex-col items-center gap-1.5">
         {s.toasts.map((t) => (
           <div
             key={t.id}
@@ -128,6 +130,11 @@ export function Hud() {
         ))}
       </div>
 
+      {/* Ability bar (desktop) */}
+      <div className={`absolute bottom-0 left-1/2 hidden -translate-x-1/2 ${s.dialogue ? "" : "[@media(pointer:fine)]:block"}`}>
+        <AbilityBar />
+      </div>
+
       {/* Loadout + key hints (mouse/keyboard devices only; touch uses on-screen buttons) */}
       <div className={`absolute bottom-0 left-0 hidden items-stretch gap-3 ${s.dialogue ? "" : "[@media(pointer:fine)]:flex"}`}>
         <div className="rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/80 px-3 py-2 backdrop-blur-sm">
@@ -142,6 +149,8 @@ export function Hud() {
           <span><b className="text-[var(--gilt)]">E</b> talk</span>
           <span><b className="text-[var(--gilt)]">Q</b> draught ({s.potions})</span>
           <span><b className="text-[var(--gilt)]">I</b> satchel</span>
+          <span><b className="text-[var(--gilt)]">F / RMB</b> dodge</span>
+          <span><b className="text-[var(--gilt)]">1 2 3</b> abilities</span>
           <span><b className="text-[var(--gilt)]">Esc</b> pause</span>
         </div>
       </div>

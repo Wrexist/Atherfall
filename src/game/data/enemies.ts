@@ -22,6 +22,8 @@ export interface EnemyDef {
   tint?: string;
   boss?: boolean;
   respawnDelay: number;
+  /** Shape of the telegraphed attack zone drawn on the ground. */
+  zone: { kind: "cone"; radius: number; arc: number } | { kind: "circle"; radius: number; offset: number };
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -36,12 +38,13 @@ export const ENEMIES: Record<string, EnemyDef> = {
     aggroRange: 9,
     leashRange: 24,
     speed: 3.6,
-    windup: 0.55,
+    windup: 0.6,
     recover: 0.7,
     xp: 22,
     lootTable: "bramblekin",
     tint: "#7fa55a",
     respawnDelay: 28,
+    zone: { kind: "cone", radius: 2.9, arc: 1.9 },
   },
   sentinel: {
     id: "sentinel",
@@ -60,6 +63,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     lootTable: "sentinel",
     tint: "#cfd6de",
     respawnDelay: 40,
+    zone: { kind: "circle", radius: 2.4, offset: 2.0 },
   },
   thornmaw: {
     id: "thornmaw",
@@ -79,6 +83,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     tint: "#8b5e3c",
     boss: true,
     respawnDelay: 9999,
+    zone: { kind: "cone", radius: 5.2, arc: 2.6 },
   },
 };
 

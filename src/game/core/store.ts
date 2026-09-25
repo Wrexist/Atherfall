@@ -52,7 +52,7 @@ export interface GameState {
   region: string | null;
   interactPrompt: string | null;
   dialogue: Dialogue | null;
-  bossBar: { name: string; hp: number; max: number } | null;
+  bossBar: { name: string; hp: number; max: number; phase: number } | null;
   inventoryOpen: boolean;
   toasts: Toast[];
   deaths: number;
