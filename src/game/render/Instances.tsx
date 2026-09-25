@@ -1,4 +1,5 @@
 import { useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -27,7 +28,7 @@ interface Part {
  */
 function useParts(url: string): Part[] {
   const [file, piece] = url.split("#") as [string, string | undefined];
-  const { scene } = useGLTF(file);
+  const { scene } = useGLTF(assetUrl(file));
   const lite = useLiteMaterials();
   return useMemo(() => {
     scene.updateMatrixWorld(true);

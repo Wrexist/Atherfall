@@ -178,3 +178,4 @@ Verified for #84–85 in Chromium as an iPhone 13 upright (390×844) and a 1280�
 | 77 | 389 Prettier formatting errors: run `npm run format` once in its own commit. |
 | 78 | ✅ `README.md` describes the game, how to run and check it, where the code lives, and the art credits. |
 | 79 | ✅ CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, tests and build on every pull request and push to `main`. |
+| 89 | ✅ Playable build at https://wrexist.github.io/aetherfall-play/ (single-player, offline). Every push to `main` republishes it through a public build-only repo, because this repo is private (see `docs/DEPLOY.md`). |

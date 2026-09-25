@@ -4,6 +4,8 @@ A 3D action RPG for phones, played upright in the browser. Explore Dawnreach, fi
 
 Built with React 19, TypeScript, three.js (via @react-three/fiber and drei), zustand and TanStack Start. It's connected to [Lovable](https://lovable.dev/projects/319af114-79bc-4e94-9339-b18de4d2b21e): commits to `main` sync to the Lovable editor and back.
 
+**Play it now:** https://wrexist.github.io/aetherfall-play/ (single-player build, updated on every merge to `main`; see `docs/DEPLOY.md`).
+
 ## Play it locally
 
 You need [Bun](https://bun.sh) and Node.js 22.

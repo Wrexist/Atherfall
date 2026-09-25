@@ -14,6 +14,7 @@ import {
 import { ARCHETYPES } from "../data/archetypes";
 import { enemyDef } from "../data/enemies";
 import { useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import { heightAt } from "../world/terrain";
 import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
@@ -108,7 +109,7 @@ function Cottages({ shadows }: { shadows: boolean }) {
 function BarrowGate() {
   const unlocked = useGame((s) => s.barrowUnlocked);
   const done = useGame((s) => s.questComplete);
-  const gate = useGLTF("/models/dng/gate.glb");
+  const gate = useGLTF(assetUrl("/models/dng/gate.glb"));
   const leaves = useMemo(() => [gate.scene.clone(), gate.scene.clone()], [gate.scene]);
   const ref = useRef<THREE.Mesh>(null);
   useFrame((state) => {

@@ -1,4 +1,5 @@
 import { useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -38,7 +39,7 @@ function Waypoints() {
 /** Secret caches: chests that glow when ready and dim once opened. */
 function Secrets() {
   const opened = useGame((s) => s.secrets);
-  const gltf = useGLTF("/models/dng/chest.glb");
+  const gltf = useGLTF(assetUrl("/models/dng/chest.glb"));
   const chests = useMemo(() => SECRETS.map(() => gltf.scene.clone()), [gltf.scene]);
   const glows = useRef<Array<THREE.Mesh | null>>([]);
   useFrame((state) => {
