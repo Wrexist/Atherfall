@@ -11,6 +11,8 @@ export interface Settings {
   floatingStick: boolean;
   /** Holding Attack keeps chaining swings. */
   holdToAttack: boolean;
+  /** First-run tips already learned or dismissed. */
+  tipsDone: string[];
 }
 
 export const SETTINGS_KEY = "aetherfall.settings";
@@ -21,6 +23,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   floatingStick: true,
   holdToAttack: true,
+  tipsDone: [],
 };
 
 function load(): Settings {
@@ -29,27 +32,33 @@ function load(): Settings {
     const raw = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<Settings>;
     const out = { ...DEFAULT_SETTINGS };
     for (const k of Object.keys(DEFAULT_SETTINGS) as Array<keyof Settings>) {
-      if (typeof raw[k] === typeof DEFAULT_SETTINGS[k]) (out as Record<string, unknown>)[k] = raw[k];
+      if (typeof raw[k] === typeof DEFAULT_SETTINGS[k])
+        (out as Record<string, unknown>)[k] = raw[k];
     }
     out.lookSensitivity = Math.max(0.4, Math.min(2.2, out.lookSensitivity));
+    out.tipsDone = Array.isArray(raw.tipsDone)
+      ? raw.tipsDone.filter((t) => typeof t === "string")
+      : [];
     return out;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
 }
 
-export const useSettings = create<Settings & { update: (patch: Partial<Settings>) => void }>((set, get) => ({
-  ...load(),
-  update: (patch) => {
-    set(patch);
-    try {
-      const { update: _u, ...data } = get();
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
-    } catch {
-      /* storage blocked — settings still apply for this session */
-    }
-  },
-}));
+export const useSettings = create<Settings & { update: (patch: Partial<Settings>) => void }>(
+  (set, get) => ({
+    ...load(),
+    update: (patch) => {
+      set(patch);
+      try {
+        const { update: _u, ...data } = get();
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+      } catch {
+        /* storage blocked — settings still apply for this session */
+      }
+    },
+  }),
+);
 
 /** Short vibration if the device supports it and the player hasn't turned it off. */
 export function haptic(pattern: number | number[]) {

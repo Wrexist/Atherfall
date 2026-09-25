@@ -98,11 +98,11 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 42 | P1 | Vibration on hit, damage, perfect evade, kill, burst, boss roar, level-up and death (Android; iPhone browsers have no vibration API). | ✅ |
 | 43 | P1 | 180ms input buffer for attack, dodge and abilities: early presses fire as soon as they're allowed instead of being dropped. | ✅ |
 | 44 | P1 | Hold Attack to keep swinging (touch and mouse). **Still to do:** lock-on / target-cycle button and camera recentre. | ◐ |
-| 45 | P1 | First-run tutorial with contextual tips: move, look (drag right side), attack, dodge, heal. | 🔜 |
+| 45 | P1 | First-run tips, one at a time, each cleared by doing it: move, look, talk to Sela, attack (when an enemy engages), dodge (when a red zone appears), heal (below 50% HP). Touch and keyboard wording differ. Shown once per device. | ✅ |
 | 46 | P1 | Journal buttons are at least 44px on touch, and 8–10px text is now 11px+. Faint text raised to 70% opacity where touched. | ✅ |
 | 47 | P1 | Journal respects safe areas. The map fits the screen with the fast-travel list beside it, and the satchel shows gear and bag side by side on landscape phones. The old `md` breakpoint was 768px, but a landscape iPhone is ~750px. | ✅ |
 | 48 | P1 | Touch-specific controls list. The climb prompt no longer names keys. | ✅ |
-| 49 | P2 | HUD at 750×342: collapse the quest hint to one line and move toasts to the top so they don't collide with the ability arc. Add a minimap or quest arrow. | 🔜 |
+| 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. **Still to do:** a minimap or quest arrow. | ◐ |
 | 50 | P2 | Knockback with velocity and decay instead of a teleport. Add enemy separation so groups don't stack on one point. Use noise-based camera shake. | ⬜ |
 | 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
 | 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |

@@ -3,6 +3,7 @@ import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar } from "./Cooldowns";
+import { Tips } from "./Tips";
 import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
@@ -79,7 +80,7 @@ export function Hud() {
     >
     <div className="relative h-full w-full">
       {/* Vitals */}
-      <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm sm:w-72 sm:p-3">
+      <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm [@media(min-height:560px)]:w-72 [@media(min-height:560px)]:p-3">
         <div className="flex items-baseline justify-between font-display text-sm text-[var(--parchment)]">
           <span className="tracking-[0.18em]">{ARCHETYPES[s.archetype].name.toUpperCase()}</span>
           <span className="text-[var(--gilt)]">Lv {s.level}</span>
@@ -97,14 +98,14 @@ export function Hud() {
       </div>
 
       {/* Region, gold and quest tracker stacked in one column so they never overlap */}
-      <div className="absolute right-0 top-0 flex w-52 flex-col items-end gap-2 sm:w-64">
+      <div className="absolute right-0 top-0 flex w-52 flex-col items-end gap-2 [@media(min-height:560px)]:w-64">
         <div className="rounded-lg bg-[var(--panel)]/70 px-3 py-1.5 text-right backdrop-blur-sm">
-          <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow sm:text-base">
+          <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow [@media(min-height:560px)]:text-base">
             {s.region ?? "Dawnreach"}
           </div>
           <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.shards} shards</div>
         </div>
-        <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm sm:p-3">
+        <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm [@media(min-height:560px)]:p-3">
           <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
             {quest.name}
           </div>
@@ -143,14 +144,20 @@ export function Hud() {
       {s.interactPrompt && !s.dialogue && (
         <div className="absolute bottom-40 left-1/2 -translate-x-1/2 rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/85 px-4 py-1.5 text-xs text-[var(--parchment)] backdrop-blur-sm">
           {s.interactPrompt}
-          <span className="ml-2 hidden rounded bg-[var(--gilt)]/20 px-1.5 py-0.5 font-mono text-[10px] text-[var(--gilt)] sm:inline">
+          <span className="ml-2 hidden rounded bg-[var(--gilt)]/20 px-1.5 py-0.5 font-mono text-[10px] text-[var(--gilt)] [@media(pointer:fine)]:inline">
             E
           </span>
         </div>
       )}
 
-      {/* Toasts */}
-      <div className="absolute bottom-32 left-1/2 flex w-[min(24rem,80vw)] -translate-x-1/2 flex-col items-center gap-1.5">
+      {/* Tips + toasts. Desktop: above the ability bar. Touch: top centre, between the
+          vitals and quest panels, so they never sit under a thumb or the attack arc. */}
+      <div
+        className={`absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+          fine ? "bottom-32 w-[min(24rem,80vw)]" : `w-[min(22rem,calc(100%-29rem))] ${s.bossBar ? "top-12" : "top-0"}`
+        }`}
+      >
+        {!s.dialogue && <Tips />}
         {s.toasts.map((t) => (
           <div
             key={t.id}
