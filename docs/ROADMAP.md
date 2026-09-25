@@ -85,7 +85,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 34 | P2 | Low quality uses Lambert shading for terrain, water, props and characters. | ✅ |
 | 35 | P2 | All GLBs start downloading together (preload). A service worker (`public/sw.js`, production only) caches models, icons and fonts (served instantly, refreshed in the background) and hashed app bundles. The page itself is network-first, so releases are never held back. Verified: the game relaunches and plays with the network off. | ✅ |
 | 36 | P2 | Instanced props are static (`matrixAutoUpdate=false`). Camera occlusion checks only the 42 large colliders instead of 459. Crystal heights are precomputed. | ✅ |
-| 37 | P2 | Dispose cloned materials and terrain geometry. Mostly moot now: a quality change remounts the canvas, which frees the GPU context. | ⬜ |
+| 37 | P2 | Dispose cloned materials and terrain geometry. A quality change remounts the canvas anyway. Each character's own material clones are now freed when it goes (class change, another player leaving), and a new terrain resolution frees the old mesh. | ✅ |
 | 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
 | 39 | P2 | Add a battery-saver option (30fps cap). | ⬜ |
 

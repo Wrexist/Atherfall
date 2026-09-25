@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { WORLD_RADIUS, groundColor, heightAt } from "../world/terrain";
 import { groundDetailTexture } from "./groundTexture";
@@ -37,6 +37,8 @@ export function Terrain({
     geo.computeVertexNormals();
     return geo;
   }, [segments]);
+  // A new resolution builds a new mesh; free the old one.
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const detail = useMemo(() => {
     const tex = groundDetailTexture();
     const repeat = (WORLD_RADIUS * 2.2) / DETAIL_TILE;

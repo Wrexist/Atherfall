@@ -47,9 +47,10 @@ export function useCharacter(url: string, tint?: string) {
   const shared = useGLTF(KAYKIT_ANIMATIONS);
   const rig = rigFor(url);
   const lite = useLiteMaterials();
-  return useMemo(() => {
+  const character = useMemo(() => {
     const scene = cloneSkeleton(gltf.scene) as THREE.Group;
     const materials: CharMaterial[] = [];
+    const owned: THREE.Material[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -68,11 +69,17 @@ export function useCharacter(url: string, tint?: string) {
       const glows = src.name === "Glow" || (src.emissive && src.emissive.getHex() !== 0);
       if (tint && !glows) mat.color.lerp(new THREE.Color(tint), 0.45);
       mesh.material = mat;
+      owned.push(mat);
       if (!glows) materials.push(mat);
     });
     const animations = rig.kind === "kaykit" ? shared.animations : gltf.animations;
-    return { scene, materials, animations, rig };
+    return { scene, materials, animations, rig, owned };
   }, [gltf.scene, gltf.animations, shared.animations, rig, tint, lite]);
+  // The per-character material clones are this character's alone: free them
+  // when it goes (a class change, another player leaving). Textures and
+  // geometry are shared with the loaded model and stay.
+  useEffect(() => () => character.owned.forEach((m) => m.dispose()), [character]);
+  return character;
 }
 
 /**
