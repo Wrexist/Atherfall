@@ -168,7 +168,7 @@ export function TouchControls() {
 
   // Two rings around Attack: Jump + Dodge close in, abilities on an outer arc
   // that only fills as they unlock — so thumbs never hunt for small targets.
-  const abilities = ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: a.name.split(" ")[0]!, idx: i })).filter(
+  const abilities = ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: ({ galestep: "Gale", emberburst: "Burst", barkward: "Ward" } as const)[a.id], idx: i })).filter(
     (a) => unlocked[a.idx],
   );
   const OUTER = [178, 146, 114];
