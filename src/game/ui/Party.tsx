@@ -17,17 +17,55 @@ import {
   useParty,
 } from "../online/party";
 import { remotes } from "../online/presence";
+import { BTN, CLASS_TONE, Glyph, classIconUrl } from "./kit";
 
 /** Whether the party panel is open. */
 export const usePartyPanel = create<{ open: boolean }>(() => ({ open: false }));
 export const togglePartyPanel = () => usePartyPanel.setState((s) => ({ open: !s.open }));
 
-const btn =
-  "min-h-11 rounded-lg border border-[var(--gilt)]/40 px-3 text-sm text-[var(--parchment)] active:bg-[var(--gilt)]/30 disabled:opacity-50";
-const primary =
-  "min-h-11 rounded-lg border border-[var(--gilt)]/60 bg-[var(--gilt)]/25 px-4 text-sm font-semibold text-[var(--parchment)] active:bg-[var(--gilt)]/40 disabled:opacity-50";
+const btn = BTN.secondary;
+const primary = BTN.primary;
 
-const classLabel = (archetype: string) => ARCHETYPES[archetype as ArchetypeId]?.name ?? "Hero";
+const archetypeOf = (a: string): ArchetypeId => (a in ARCHETYPES ? (a as ArchetypeId) : "vanguard");
+const classLabel = (archetype: string) => ARCHETYPES[archetypeOf(archetype)].name;
+
+/** A player's row: class emblem, name, class and level. */
+function Who({
+  name,
+  archetype,
+  level,
+  leader,
+}: {
+  name: string;
+  archetype: string;
+  level: number;
+  leader?: boolean;
+}) {
+  const a = archetypeOf(archetype);
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 bg-[var(--ink)]"
+        style={{ borderColor: CLASS_TONE[a] }}
+      >
+        <img src={classIconUrl(a)} alt="" className="h-7 w-7" />
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-1 truncate text-sm font-extrabold text-[var(--parchment)]">
+          {leader && (
+            <span className="text-[var(--gilt)]" aria-label="Leader" title="Leader">
+              &#9819;
+            </span>
+          )}
+          {name}
+        </span>
+        <span className="block text-xs font-bold text-[var(--parchment)]/60">
+          {classLabel(archetype)} &middot; level {level}
+        </span>
+      </span>
+    </span>
+  );
+}
 
 /** Party: your members, nearby players to invite, and whether you take invites. */
 export function PartyPanel() {
@@ -55,43 +93,42 @@ export function PartyPanel() {
         paddingTop: "max(0.75rem, env(safe-area-inset-top))",
         paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
       }}
-      onClick={() => usePartyPanel.setState({ open: false })}
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) usePartyPanel.setState({ open: false });
+      }}
     >
       <div
         role="dialog"
         aria-label="Party"
-        className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-4 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] p-4 text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-sm tracking-[0.2em] text-[var(--gilt)]">
-            PARTY {partyId ? `(${members.length}/${PARTY_SIZE})` : ""}
+          <h2 className="flex items-center gap-2 font-display text-xl text-[var(--gilt)] text-outline">
+            <Glyph id="party" className="h-6 w-6" />
+            Party {partyId ? `${members.length}/${PARTY_SIZE}` : ""}
           </h2>
           <button
-            className="min-h-11 min-w-11 rounded-md text-[var(--parchment)]/80"
+            className="grid h-11 w-11 place-items-center rounded-full border-b-4 border-[#7a2417] bg-gradient-to-b from-[#f0735a] to-[#cf4630]"
             aria-label="Close"
             onClick={() => usePartyPanel.setState({ open: false })}
           >
-            ✕
+            <Glyph id="close" className="h-5 w-5" />
           </button>
         </div>
 
         {partyId ? (
-          <ul className="mt-2 divide-y divide-[var(--gilt)]/10">
+          <ul className="mt-3 space-y-1.5">
             {members.map((m) => (
-              <li key={m.id} className="flex min-h-11 items-center justify-between gap-2 py-1">
-                <span className="text-sm text-[var(--parchment)]">
-                  {m.id === leader && (
-                    <span className="mr-1 text-[var(--gilt)]" aria-label="Leader">
-                      ♛
-                    </span>
-                  )}
-                  {m.name}
-                  <span className="text-xs text-[var(--parchment)]/60">
-                    {" "}
-                    · {classLabel(m.archetype)} {m.level}
-                  </span>
-                </span>
+              <li
+                key={m.id}
+                className="flex min-h-12 items-center justify-between gap-2 rounded-2xl bg-[var(--panel-2)] px-2.5 py-1.5"
+              >
+                <Who
+                  name={m.name}
+                  archetype={m.archetype}
+                  level={m.level}
+                  leader={m.id === leader}
+                />
                 {leading && m.id !== selfId && (
                   <button className={btn} disabled={busy} onClick={() => void removeMember(m.id)}>
                     Remove
@@ -101,30 +138,27 @@ export function PartyPanel() {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-[var(--parchment)]/75">
+          <p className="mt-2 text-sm font-semibold text-[var(--parchment)]/80">
             Invite a player near you to start a party. Quest kills count for everyone close by, and
             so does the XP. Loot stays yours.
           </p>
         )}
 
-        <h3 className="mt-4 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+        <h3 className="mt-4 font-display text-[15px] tracking-wide text-[var(--gilt)] text-outline">
           Players nearby
         </h3>
         {nearby.length === 0 ? (
-          <p className="mt-1 text-xs text-[var(--parchment)]/60">
+          <p className="mt-1 text-xs font-semibold text-[var(--parchment)]/65">
             No one within {INVITE_RANGE} m. Walk over to someone and open this again.
           </p>
         ) : (
-          <ul className="mt-1">
+          <ul className="mt-1.5 space-y-1.5">
             {nearby.slice(0, 6).map((r) => (
-              <li key={r.id} className="flex min-h-11 items-center justify-between gap-2">
-                <span className="text-sm text-[var(--parchment)]">
-                  {r.name}
-                  <span className="text-xs text-[var(--parchment)]/60">
-                    {" "}
-                    · {classLabel(r.archetype)} {r.level}
-                  </span>
-                </span>
+              <li
+                key={r.id}
+                className="flex min-h-12 items-center justify-between gap-2 rounded-2xl bg-[var(--panel-2)] px-2.5 py-1.5"
+              >
+                <Who name={r.name} archetype={r.archetype} level={r.level} />
                 <button
                   className={primary}
                   disabled={busy || full}
@@ -141,23 +175,50 @@ export function PartyPanel() {
         )}
 
         {error && (
-          <p role="alert" className="mt-3 text-sm text-[#f0a595]">
+          <p
+            role="alert"
+            className="mt-3 rounded-xl bg-[#e5533d]/20 px-2.5 py-1.5 text-sm font-bold text-[#ffb3a6]"
+          >
             {error}
           </p>
         )}
 
-        <label className="mt-4 flex min-h-11 items-center justify-between gap-3">
-          <span className="text-sm text-[var(--parchment)]">Take party invites</span>
-          <input
-            type="checkbox"
-            className="h-6 w-6 accent-[var(--gilt)]"
-            checked={taking}
-            onChange={(e) => void setInvitesOpen(e.target.checked)}
-          />
-        </label>
+        <button
+          role="switch"
+          aria-checked={taking}
+          className="mt-4 flex min-h-11 w-full items-center justify-between gap-3 text-left"
+          onClick={() => void setInvitesOpen(!taking)}
+        >
+          <span>
+            <span className="block text-sm font-bold text-[var(--parchment)]">
+              Take party invites
+            </span>
+            <span className="block text-xs font-semibold text-[var(--parchment)]/60">
+              From anyone nearby
+            </span>
+          </span>
+          <span
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
+              taking
+                ? "border-[#b8741a] bg-[var(--gilt)]"
+                : "border-[var(--edge)] bg-[var(--ink)]/70"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-white shadow transition-[left] ${
+                taking ? "left-[1.4rem]" : "left-0.5"
+              }`}
+              style={{ width: "1.35rem", height: "1.35rem" }}
+            />
+          </span>
+        </button>
 
         {partyId && (
-          <button className={`${btn} mt-3`} disabled={busy} onClick={() => void leaveParty()}>
+          <button
+            className={`${BTN.danger} mt-3 w-full`}
+            disabled={busy}
+            onClick={() => void leaveParty()}
+          >
             Leave party
           </button>
         )}
@@ -189,10 +250,14 @@ export function InvitePopup() {
     <div
       role="alertdialog"
       aria-label="Party invite"
-      className="pointer-events-auto fixed inset-x-3 top-[36%] z-40 mx-auto max-w-sm rounded-2xl border border-[var(--gilt)]/50 bg-[var(--panel)]/95 p-4 text-center shadow-2xl"
+      className="pointer-events-auto fixed inset-x-3 top-[36%] z-40 mx-auto max-w-sm rounded-3xl border-2 border-[var(--gilt)] bg-[var(--panel)] p-4 text-center text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
     >
-      <p className="text-sm text-[var(--parchment)]">
-        <b className="text-[var(--gilt)]">{invite.fromName}</b> invites you to a party.
+      <Glyph id="party" className="mx-auto h-8 w-8" />
+      <p className="mt-1 text-sm font-bold text-[var(--parchment)]">
+        <b className="font-display text-lg font-normal text-[var(--gilt)] text-outline">
+          {invite.fromName}
+        </b>{" "}
+        invites you to a party.
       </p>
       <div className="mt-3 flex justify-center gap-2">
         <button
