@@ -2,6 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { questTarget } from "../core/questTarget";
+import { useSettings } from "../core/settings";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
 import { heightAt } from "../world/terrain";
@@ -11,6 +12,9 @@ const _v = new THREE.Vector3();
 const ARRIVED = 7;
 /** Keep the edge arrow clear of the screen border and the HUD corners. */
 const EDGE = 56;
+/** Top view: the arrow circles the hero at this many pixels. */
+const RING = 74;
+const _hero = new THREE.Vector3();
 
 /**
  * Quest guidance without opening the map: a gold marker with the distance over
@@ -72,11 +76,24 @@ export function QuestMarker() {
     const behind = _v.z > 1;
     let sx = (_v.x * 0.5 + 0.5) * size.width;
     let sy = (-_v.y * 0.5 + 0.5) * size.height;
-    const onScreen =
-      !behind && sx > EDGE && sx < size.width - EDGE && sy > EDGE && sy < size.height - EDGE;
+    // Top view: the HUD fills the top of the screen and thumbs the bottom, so
+    // only the middle band counts as "on screen".
+    const top = useSettings.getState().camera === "top";
+    const minY = top ? size.height * 0.3 : EDGE;
+    const maxY = top ? size.height * 0.7 : size.height - EDGE;
+    const onScreen = !behind && sx > EDGE && sx < size.width - EDGE && sy > minY && sy < maxY;
 
     let angle = 180; // pointing down at the goal
-    if (!onScreen) {
+    if (!onScreen && top) {
+      // North is always up, so the world direction is the screen direction.
+      _hero.set(p.x, p.y + 0.9, p.z).project(camera);
+      const dx = t.x - p.x;
+      const dy = t.z - p.z;
+      const len = Math.hypot(dx, dy) || 1;
+      sx = (_hero.x * 0.5 + 0.5) * size.width + (dx / len) * RING;
+      sy = (-_hero.y * 0.5 + 0.5) * size.height + (dy / len) * RING;
+      angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    } else if (!onScreen) {
       // Direction from screen centre; flipped when the goal is behind the camera.
       const cx = size.width / 2;
       const cy = size.height / 2;

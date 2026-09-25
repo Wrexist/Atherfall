@@ -3,6 +3,7 @@ import { applyLook, input, setSprintTouch, touch } from "../core/input";
 import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
+import { usePortrait } from "./layout";
 
 const KNOB = 52;
 const BASE = 128;
@@ -14,7 +15,7 @@ const TRAVEL = 56;
  * thumb lands in the left half of the screen, so there's no small target to hunt
  * for. Fixed: only the resting stick in the corner responds.
  */
-function Joystick({ floating }: { floating: boolean }) {
+function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: string }) {
   const zone = useRef<HTMLDivElement>(null);
   const base = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
@@ -61,13 +62,15 @@ function Joystick({ floating }: { floating: boolean }) {
   return (
     <div
       ref={zone}
-      // Floating: the whole left half is the stick's touch area.
-      className={`absolute touch-none ${floating ? "pointer-events-auto inset-y-0 left-0 w-1/2" : "pointer-events-none inset-0"}`}
+      // Floating: a whole zone (left half, or lower left when upright) is the stick's touch area.
+      className={`absolute touch-none ${floating ? `pointer-events-auto ${zoneClass}` : "pointer-events-none inset-0"}`}
       onPointerDown={(e) => {
         if (id.current !== null) return; // a second thumb must not steal the stick
         if (!floating && !base.current!.contains(e.target as Node)) return;
         id.current = e.pointerId;
-        (floating ? (e.currentTarget as HTMLElement) : base.current!).setPointerCapture(e.pointerId);
+        (floating ? (e.currentTarget as HTMLElement) : base.current!).setPointerCapture(
+          e.pointerId,
+        );
         if (floating) {
           const z = zone.current!.getBoundingClientRect();
           // Keep the whole stick on screen even when the thumb lands at an edge.
@@ -172,7 +175,7 @@ function ArcButton({
   onPress,
 }: {
   small?: boolean;
-  id: SlotId | "jump" | "target";
+  id: SlotId | "jump" | "target" | "heal";
   label: string;
   angle: number;
   radius: number;
@@ -196,9 +199,33 @@ function ArcButton({
     >
       {id === "jump" ? (
         <span className="text-[11px] font-semibold uppercase tracking-wider">Jump</span>
+      ) : id === "heal" ? (
+        <>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M9 3h6M10 3v4.5L6.5 13a5.5 5.5 0 1 0 11 0L14 7.5V3" />
+            <path d="M8 14h8" />
+          </svg>
+          <span className="text-[9px] font-semibold uppercase tracking-wide">{label}</span>
+        </>
       ) : id === "target" ? (
         <>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            aria-hidden
+          >
             <circle cx="12" cy="12" r="7" />
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
           </svg>
@@ -215,6 +242,12 @@ function ArcButton({
   );
 }
 
+/** The interact button's label for a prompt, or null when there's nothing to press. */
+export function interactLabel(prompt: string | null) {
+  if (!prompt || !/^(Speak|Climb the|Open)/.test(prompt)) return null;
+  return prompt.startsWith("Climb") ? "Climb" : prompt.startsWith("Open") ? "Open" : "Talk";
+}
+
 export function TouchControls() {
   const [isTouch, setIsTouch] = useState(false);
   const potions = useGame((s) => s.potions);
@@ -222,6 +255,8 @@ export function TouchControls() {
   const toggleInventory = useGame((s) => s.toggleInventory);
   const slots = useAbilitySlots();
   const floatingStick = useSettings((s) => s.floatingStick);
+  const orbit = useSettings((s) => s.camera === "behind");
+  const portrait = usePortrait();
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(pointer: coarse)").matches);
@@ -231,19 +266,114 @@ export function TouchControls() {
 
   // Two rings around Attack: Jump + Dodge close in, abilities on an outer arc
   // that only fills as they unlock — so thumbs never hunt for small targets.
-  const abilities = slots.filter((a) => a.unlocked).map((a) => ({ id: a.id as SlotId, label: a.def.name.split(" ").pop()!, idx: a.index }));
+  const abilities = slots
+    .filter((a) => a.unlocked)
+    .map((a) => ({ id: a.id as SlotId, label: a.def.name.split(" ").pop()!, idx: a.index }));
+  const interact = interactLabel(prompt);
+  const attack = (
+    <TouchButton
+      label="Attack"
+      size={portrait ? "h-[5.25rem] w-[5.25rem]" : "h-20 w-20"}
+      className="!text-sm"
+      onPress={() => {
+        input.attackQueued = true;
+        input.attackHeld = true;
+      }}
+      onRelease={() => {
+        input.attackHeld = false;
+      }}
+    />
+  );
+
+  if (portrait) {
+    // Upright phone, one thumb each: the stick anywhere in the lower left, and
+    // every combat action on rings around Attack in the lower right. Bag, Map
+    // and Menu live in the HUD's top-right corner.
+    const OUTER = [174, 148, 122];
+    return (
+      <div className="pointer-events-none fixed inset-0 z-20">
+        {orbit && <LookPad />}
+        <Joystick floating={floatingStick} zone="bottom-0 left-0 h-[58%] w-[56%]" />
+        <div className="pointer-events-none absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-[5.25rem] w-[5.25rem]">
+          {attack}
+          <ArcButton
+            id="jump"
+            label="Jump"
+            angle={188}
+            radius={94}
+            onPress={() => (input.jumpQueued = true)}
+          />
+          <ArcButton
+            id="dodge"
+            label="Dodge"
+            angle={140}
+            radius={94}
+            onPress={() => (input.dodgeQueued = true)}
+          />
+          <ArcButton
+            id="heal"
+            label={`Heal ${potions}`}
+            angle={94}
+            radius={94}
+            onPress={() => (input.healQueued = true)}
+          />
+          {abilities.map((a, i) => (
+            <ArcButton
+              key={a.id}
+              id={a.id}
+              label={a.label}
+              small
+              angle={OUTER[i]!}
+              radius={160}
+              onPress={() => (input.abilityQueued = a.idx)}
+            />
+          ))}
+          <ArcButton
+            id="target"
+            label="Target"
+            small
+            angle={98}
+            radius={160}
+            onPress={() => (input.lockQueued = true)}
+          />
+          {interact && (
+            <div
+              className="absolute left-1/2 top-1/2"
+              style={{ transform: "translate(calc(-50% - 60px), calc(-50% - 222px))" }}
+            >
+              <TouchButton
+                label={interact}
+                size="h-12 min-w-[5.5rem] px-4 !rounded-xl"
+                className="border-[var(--gilt)] !bg-[var(--gilt)]/30"
+                onPress={() => (input.interactQueued = true)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const OUTER = [178, 146, 114];
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
-      <LookPad />
-      <Joystick floating={floatingStick} />
+      {orbit && <LookPad />}
+      <Joystick floating={floatingStick} zone="inset-y-0 left-0 w-1/2" />
       {/* Utility row, bottom centre, clear of both thumbs */}
       <div className="pointer-events-none absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
         <CombatStates />
         <div className="flex gap-2">
           <TouchButton label="Bag" size="h-11 w-14 !rounded-xl" onPress={() => toggleInventory()} />
-          <TouchButton label={`Heal ${potions}`} size="h-11 w-14 !rounded-xl" onPress={() => (input.healQueued = true)} />
-          <TouchButton label="Map" size="h-11 w-14 !rounded-xl" onPress={() => useGame.getState().toggleInventory(true, "map")} />
+          <TouchButton
+            label={`Heal ${potions}`}
+            size="h-11 w-14 !rounded-xl"
+            onPress={() => (input.healQueued = true)}
+          />
+          <TouchButton
+            label="Map"
+            size="h-11 w-14 !rounded-xl"
+            onPress={() => useGame.getState().toggleInventory(true, "map")}
+          />
           <TouchButton
             label="Menu"
             size="h-11 w-14 !rounded-xl"
@@ -252,29 +382,50 @@ export function TouchControls() {
               useGame.setState({ screen: "paused" });
             }}
           />
-          {prompt && /^(Speak|Climb the|Open)/.test(prompt) && (
-            <TouchButton label={prompt.startsWith("Climb") ? "Climb" : prompt.startsWith("Open") ? "Open" : "Talk"} size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
+          {interact && (
+            <TouchButton
+              label={interact}
+              size="h-11 w-14 !rounded-xl"
+              className="border-[var(--gilt)]"
+              onPress={() => (input.interactQueued = true)}
+            />
           )}
         </div>
       </div>
       <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-20 w-20">
-        <TouchButton
-          label="Attack"
-          size="h-20 w-20"
-          className="!text-sm"
-          onPress={() => {
-            input.attackQueued = true;
-            input.attackHeld = true;
-          }}
-          onRelease={() => {
-            input.attackHeld = false;
-          }}
+        {attack}
+        <ArcButton
+          id="jump"
+          label="Jump"
+          angle={192}
+          radius={90}
+          onPress={() => (input.jumpQueued = true)}
         />
-        <ArcButton id="jump" label="Jump" angle={192} radius={90} onPress={() => (input.jumpQueued = true)} />
-        <ArcButton id="dodge" label="Dodge" angle={138} radius={90} onPress={() => (input.dodgeQueued = true)} />
-        <ArcButton id="target" label="Target" small angle={84} radius={92} onPress={() => (input.lockQueued = true)} />
+        <ArcButton
+          id="dodge"
+          label="Dodge"
+          angle={138}
+          radius={90}
+          onPress={() => (input.dodgeQueued = true)}
+        />
+        <ArcButton
+          id="target"
+          label="Target"
+          small
+          angle={84}
+          radius={92}
+          onPress={() => (input.lockQueued = true)}
+        />
         {abilities.map((a, i) => (
-          <ArcButton key={a.id} id={a.id} label={a.label} small angle={OUTER[i]!} radius={150} onPress={() => (input.abilityQueued = a.idx)} />
+          <ArcButton
+            key={a.id}
+            id={a.id}
+            label={a.label}
+            small
+            angle={OUTER[i]!}
+            radius={150}
+            onPress={() => (input.abilityQueued = a.idx)}
+          />
         ))}
       </div>
     </div>

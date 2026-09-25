@@ -524,7 +524,8 @@ export function InventoryPanel() {
                 key={t.id}
                 data-testid={`tab-${t.id}`}
                 onClick={() => toggle(true, t.id)}
-                className={`min-h-11 whitespace-nowrap rounded-md px-3 font-display text-xs tracking-[0.15em] ${
+                // Tighter on an upright phone so all five tabs fit beside Close.
+                className={`min-h-11 whitespace-nowrap rounded-md px-1.5 font-display text-xs tracking-[0.05em] sm:px-3 sm:tracking-[0.15em] ${
                   tab === t.id ? "bg-[var(--gilt)]/25 text-[var(--parchment)]" : "text-[var(--parchment)]/75 hover:text-[var(--parchment)]"
                 }`}
               >
@@ -535,9 +536,14 @@ export function InventoryPanel() {
           </div>
           <button
             onClick={() => toggle(false)}
-            className="min-h-11 shrink-0 rounded-md border border-[var(--parchment)]/25 px-4 text-sm text-[var(--parchment)]"
+            aria-label="Close"
+            className="min-h-11 min-w-11 shrink-0 rounded-md border border-[var(--parchment)]/25 px-2 text-sm text-[var(--parchment)] sm:px-4"
           >
-            Close
+            {/* Just a cross on an upright phone, so all five tabs fit. */}
+            <span className="sm:hidden" aria-hidden>
+              ✕
+            </span>
+            <span className="hidden sm:inline">Close</span>
           </button>
         </div>
         <div className="overflow-y-auto overscroll-contain p-3 sm:p-4">

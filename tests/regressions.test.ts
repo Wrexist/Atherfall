@@ -11,6 +11,7 @@ import {
 } from "../src/game/core/sim";
 import { WATCHSTONE } from "../src/game/data/world";
 import { migrateSave, SAVE_KEY } from "../src/game/core/persistence";
+import { useSettings } from "../src/game/core/settings";
 import { statsFor, useGame } from "../src/game/core/store";
 import { COLLIDERS } from "../src/game/world/layout";
 import { SEA_LEVEL, heightAt, regionAt } from "../src/game/world/terrain";
@@ -375,6 +376,23 @@ describe("lock-on", () => {
     input.lockQueued = true;
     stepWorld(DT);
     expect(world.lockId).toBeNull();
+  });
+
+  test("top view: prefers the enemy ahead of the hero; behind view: ahead of the camera", () => {
+    const east = place("b1", 6, 0); // where the hero faces
+    const north = place("b2", 0, -5.5); // up the screen (where the top camera looks)
+    world.player.yaw = Math.PI / 2;
+    input.yaw = Math.PI; // camera facing north, as the top view holds it
+    useSettings.setState({ camera: "top" });
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(east.id);
+    world.lockId = null;
+    useSettings.setState({ camera: "behind" });
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(north.id);
+    useSettings.setState({ camera: "top" });
   });
 
   test("attacks turn to face the locked target", () => {

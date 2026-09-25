@@ -157,6 +157,20 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 
 Verified in Chromium as an iPhone 13 in landscape, against a mocked slow backend: start buttons wait, uploads resume, the save made on hide goes up within 1s, both choice buttons are on screen, and offline mode makes no network calls.
 
+## Phase 7 — Look and feel overhaul (2026-09-25; references: Eternal Hero, Skull Hero)
+
+Decided with the owner: free CC0 art packs first (KayKit, Quaternius), a high 3/4 camera, and **portrait** play.
+
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 84 | P0 | **Portrait play.** Upright phones get their own HUD (vitals, quest and region in the top fifth; Bag/Map/Menu top right) and thumb controls (stick anywhere lower left; Attack with Jump, Dodge, Heal and abilities on rings lower right). Phones held sideways are asked to rotate; tablets and desktops play either way. The manifest and fullscreen lock now ask for portrait. | ✅ |
+| 85 | P0 | **Top-down camera** (default): fixed north-up 3/4 view, the stick moves you in screen directions, lens fitted to the screen shape, hero just below centre on phones. The old orbiting camera is a setting ("Top-down camera" off). Lock-on prefers enemies ahead of the hero; the quest arrow circles the hero instead of hugging the screen edge; the mouse attacks directly without pointer lock. | ✅ |
+| 86 | P0 | New heroes and enemies: KayKit Adventurers + Skeletons (rigged, animated, CC0). | 🔜 |
+| 87 | P1 | World art: KayKit village, forest and dungeon pieces; painted ground; water. | 🔜 |
+| 88 | P1 | Lighting and effects: warm grading, rim light, slash trails, hit sparks, glowing loot. | 🔜 |
+
+Verified for #84–85 in Chromium as an iPhone 13 upright (390×844) and a 1280×720 desktop: no sideways scroll, all five journal tabs fit beside Close, the map fits, the Talk button and prompt no longer overlap, stick-up walks north, W walks north, a click attacks.
+
 ## Housekeeping
 
 | # | Item |

@@ -1,5 +1,6 @@
 // Per-device preferences (not part of the save): controls feel and comfort.
 import { create } from "zustand";
+import type { CameraMode } from "./camera";
 
 export interface Settings {
   /** Camera look speed multiplier, 0.4–2.2. */
@@ -11,6 +12,8 @@ export interface Settings {
   floatingStick: boolean;
   /** Holding Attack keeps chaining swings. */
   holdToAttack: boolean;
+  /** High 3/4 view (default) or the orbiting behind-the-back camera. */
+  camera: CameraMode;
   /** First-run tips already learned or dismissed. */
   tipsDone: string[];
 }
@@ -23,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   floatingStick: true,
   holdToAttack: true,
+  camera: "top",
   tipsDone: [],
 };
 
@@ -36,6 +40,7 @@ function load(): Settings {
         (out as Record<string, unknown>)[k] = raw[k];
     }
     out.lookSensitivity = Math.max(0.4, Math.min(2.2, out.lookSensitivity));
+    if (out.camera !== "top" && out.camera !== "behind") out.camera = DEFAULT_SETTINGS.camera;
     out.tipsDone = Array.isArray(raw.tipsDone)
       ? raw.tipsDone.filter((t) => typeof t === "string")
       : [];

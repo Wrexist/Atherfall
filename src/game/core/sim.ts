@@ -297,8 +297,11 @@ export function lockedEnemy(): EnemyRuntime | null {
  */
 export function cycleLock() {
   const p = world.player;
-  const fx = Math.sin(input.yaw);
-  const fz = Math.cos(input.yaw);
+  // Prefer targets ahead: of the camera when it orbits behind you, of the hero
+  // in the fixed top view (where the camera always faces north).
+  const ahead = useSettings.getState().camera === "top" ? p.yaw : input.yaw;
+  const fx = Math.sin(ahead);
+  const fz = Math.cos(ahead);
   const candidates = world.enemies
     .filter((e) => e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE)
     .map((e) => {
