@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import type { SaveFile } from "../src/game/core/persistence";
 import { nameProblem, useAccount } from "../src/game/online/account";
 import {
+  INVITE_RANGE,
+  type PartySnapshot,
+  invitableNearby,
+  partyIo,
+  refreshParty,
+  stopParties,
+  useParty,
+} from "../src/game/online/party";
+import {
   CHECK_TIMEOUT,
   cloud,
   compareSaves,
@@ -312,5 +321,79 @@ describe("presence", () => {
     expect(ids.length).toBe(MAX_SHOWN);
     expect(ids[0]).toBe("p0");
     expect(ids).not.toContain(`p${MAX_SHOWN + 4}`);
+  });
+});
+
+describe("parties", () => {
+  const player = (id: string, x: number, placed = true) =>
+    ({
+      id,
+      name: id,
+      archetype: "ranger",
+      level: 3,
+      x,
+      y: 0,
+      z: 0,
+      yaw: 0,
+      anim: "idle",
+      rx: x,
+      ry: 0,
+      rz: 0,
+      ryaw: 0,
+      seen: 0,
+      placed,
+    }) as RemotePlayer;
+
+  test("only nearby, placed players who aren't you or already in your party, nearest first", () => {
+    const players = [
+      player("far", INVITE_RANGE + 5),
+      player("near", 3),
+      player("self", 1),
+      player("member", 2),
+      player("ghost", 1, false), // no position yet
+      player("closest", 1.5),
+    ];
+    const members = [{ id: "member", name: "M", archetype: "vanguard", level: 1 }];
+    const ids = invitableNearby(players, "self", members, 0, 0).map((r) => r.id);
+    expect(ids).toEqual(["closest", "near"]);
+  });
+});
+
+describe("party refresh", () => {
+  const snap = (partyId: string | null): PartySnapshot => ({
+    partyId,
+    leader: partyId ? "me" : null,
+    members: [],
+    invites: [],
+    open: true,
+  });
+  let answers: Array<(s: PartySnapshot) => void> = [];
+  const realRead = partyIo.read;
+  beforeEach(() => {
+    answers = [];
+    partyIo.read = () => new Promise((resolve) => answers.push(resolve));
+    useAccount.setState({ userId: "me" });
+    stopParties();
+  });
+  afterEach(() => {
+    partyIo.read = realRead;
+    useAccount.setState({ userId: null });
+  });
+
+  test("a slower, older refresh can't undo a newer one", async () => {
+    const older = refreshParty();
+    const newer = refreshParty();
+    answers[1]!(snap("after-join"));
+    answers[0]!(snap(null)); // read before the join, arriving last
+    await Promise.all([older, newer]);
+    expect(useParty.getState().partyId).toBe("after-join");
+  });
+
+  test("nothing lands after stopping (sign-out)", async () => {
+    const pending = refreshParty();
+    stopParties();
+    answers[0]!(snap("stale"));
+    await pending;
+    expect(useParty.getState().partyId).toBeNull();
   });
 });

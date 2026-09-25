@@ -4,6 +4,8 @@ import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar, CombatStates } from "./Cooldowns";
 import { Tips } from "./Tips";
 import { usePresence } from "../online/presence";
+import { useAccount } from "../online/account";
+import { togglePartyPanel } from "./Party";
 import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 import { THREAT_DOT, useFinePointer, usePortrait, useThreatened } from "./layout";
@@ -240,6 +242,7 @@ function InteractPrompt({ s, className }: { s: HudState; className: string }) {
 
 /** Bag / Map / Menu on touch screens held upright: top right, away from both thumbs. */
 function PortraitMenuButtons() {
+  const signedIn = useAccount((a) => a.status === "signed-in");
   const threat = useThreatened();
   const btn =
     "pointer-events-auto relative flex h-11 w-11 touch-none items-center justify-center rounded-xl border border-[var(--gilt)]/40 bg-[var(--panel)]/75 text-[10px] font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35";
@@ -261,6 +264,11 @@ function PortraitMenuButtons() {
       >
         Map
       </button>
+      {signedIn && (
+        <button className={btn} onPointerDown={() => togglePartyPanel()}>
+          Party
+        </button>
+      )}
       <button
         className={btn}
         onPointerDown={() => {
@@ -415,6 +423,9 @@ export function Hud() {
             </span>
             <span>
               <b className="text-[var(--gilt)]">Esc</b> pause
+            </span>
+            <span>
+              <b className="text-[var(--gilt)]">P</b> party (signed in)
             </span>
           </div>
         </div>
