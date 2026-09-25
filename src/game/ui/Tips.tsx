@@ -90,9 +90,11 @@ const TIPS: Tip[] = [
 /** Where each tip sits on an upright touch screen: next to its control. */
 const TOUCH_ANCHOR: Record<string, string> = {
   move: "left-3 bottom-[12.75rem] !max-w-[10rem]",
-  attack: "right-4 bottom-[8.25rem]",
-  dodge: "right-4 bottom-[12.5rem]",
-  heal: "right-4 bottom-[12.5rem]",
+  // Fight tips sit under the quest card, clear of the hero and the buttons;
+  // the control they teach glows.
+  attack: "left-3 top-[10.5rem]",
+  dodge: "left-3 top-[10.5rem]",
+  heal: "left-3 top-[10.5rem]",
   talk: "left-1/2 top-[28%] -translate-x-1/2",
 };
 
