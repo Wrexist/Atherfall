@@ -111,6 +111,7 @@ const CLIPS = [
   "Cheer",
   "Taunt",
   "Spawn_Ground_Skeletons",
+  "Sit_Floor_Idle",
 ];
 const ANIMATION_SOURCE = { pack: "skeletons", src: "Characters/gltf/Skeleton_Minion.glb" };
 

@@ -355,6 +355,39 @@ describe("combat feel", () => {
   });
 });
 
+describe("emotes", () => {
+  test("an emote plays while standing still, then ends on its own", () => {
+    input.emoteQueued = "cheer";
+    run(0.2);
+    expect(world.player.anim).toBe("emote-cheer");
+    run(4);
+    expect(world.player.anim).toBe("idle");
+  });
+
+  test("moving, attacking or getting hit stops an emote", () => {
+    input.emoteQueued = "wave";
+    run(0.2);
+    input.moveZ = 1;
+    stepWorld(DT);
+    input.moveZ = 0;
+    expect(world.player.emote).toBeNull();
+    input.emoteQueued = "cheer";
+    run(0.1);
+    input.attackQueued = true;
+    run(0.1);
+    expect(world.player.emote).toBeNull();
+  });
+
+  test("sitting lasts until you get up; the same emote again stands up", () => {
+    input.emoteQueued = "sit";
+    run(8);
+    expect(world.player.anim).toBe("emote-sit");
+    input.emoteQueued = "sit";
+    run(0.1);
+    expect(world.player.anim).toBe("idle");
+  });
+});
+
 describe("shard crystals", () => {
   const standOn = (x: number, z: number) => {
     const p = world.player;

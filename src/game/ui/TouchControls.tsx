@@ -3,6 +3,7 @@ import { applyLook, input, setSprintTouch, touch } from "../core/input";
 import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
+import { EmotePicker } from "./Emotes";
 import { THREAT_DOT, usePortrait, useThreatened } from "./layout";
 
 const KNOB = 52;
@@ -440,6 +441,10 @@ export function TouchControls() {
               useGame.getState().toggleInventory(false);
               useGame.setState({ screen: "paused" });
             }}
+          />
+          <EmotePicker
+            buttonClass="pointer-events-auto h-11 w-14 touch-none rounded-xl border border-[var(--gilt)]/40 bg-[var(--panel)]/70 text-xs font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35"
+            openTo="up"
           />
           {interact && (
             <TouchButton

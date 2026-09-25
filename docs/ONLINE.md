@@ -65,6 +65,7 @@ Everything below was run against a real local Supabase stack, the same software 
 - Other players are drawn smoothly between updates. Teleports snap instead of sliding across the map.
 - At most the 16 nearest players are drawn.
 - A player whose game is paused shows as "(away)".
+- Emotes travel as the player's animation ("emote-wave", "emote-cheer", "emote-sit") in the same position messages. They add no new message type. Unknown animation names from other clients just play idle.
 
 **Database rules**
 
