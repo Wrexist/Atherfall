@@ -1,6 +1,6 @@
-import { useAnimations, useGLTF } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { enemyDef } from "../data/enemies";
@@ -10,6 +10,10 @@ import { heightAt } from "../world/terrain";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
 import { QUESTS } from "../data/quests";
+import { col } from "./colors";
+import { liteMaterial, useLiteMaterials } from "./materials";
+
+type CharMaterial = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
 
 /** Clip name per logical animation state. */
 const CLIP: Record<string, string> = {
@@ -39,32 +43,68 @@ const ONCE = new Set(["attack", "attack1", "attack2", "attack3", "dodge", "burst
 
 function useCharacter(url: string, tint?: string) {
   const gltf = useGLTF(url);
+  const lite = useLiteMaterials();
   return useMemo(() => {
     const scene = cloneSkeleton(gltf.scene) as THREE.Group;
-    const materials: THREE.MeshStandardMaterial[] = [];
+    const materials: CharMaterial[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       const src = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
-      const mat = src.clone();
+      // Each character gets its own material (hit flashes are per character).
+      const mat = (lite ? liteMaterial(src) : src).clone() as CharMaterial;
       if (tint) mat.color.lerp(new THREE.Color(tint), 0.45);
       mesh.material = mat;
       materials.push(mat);
     });
     return { scene, materials, animations: gltf.animations };
-  }, [gltf.scene, gltf.animations, tint]);
+  }, [gltf.scene, gltf.animations, tint, lite]);
 }
 
+/**
+ * Own AnimationMixer per character (instead of drei's useAnimations, which
+ * advances every mixer every frame). Callers decide when to `update`, so far
+ * or hidden characters can tick slowly or not at all.
+ */
 function useAnimator(
   root: React.RefObject<THREE.Group | null>,
   animations: THREE.AnimationClip[],
 ) {
-  const { actions } = useAnimations(animations, root);
+  const rig = useRef<{ mixer: THREE.AnimationMixer | null; actions: Record<string, THREE.AnimationAction> }>({
+    mixer: null,
+    actions: {},
+  });
   const current = useRef<string>("");
   const lastKey = useRef(-1);
-  return (state: string, speed = 1, key = 0) => {
+
+  const bind = useCallback(() => {
+    const r = rig.current;
+    if (!r.mixer && root.current) {
+      r.mixer = new THREE.AnimationMixer(root.current);
+      for (const clip of animations) r.actions[clip.name] = r.mixer.clipAction(clip);
+    }
+    return r;
+  }, [root, animations]);
+
+  useEffect(
+    () => () => {
+      const r = rig.current;
+      if (r.mixer) {
+        r.mixer.stopAllAction();
+        r.mixer.uncacheRoot(r.mixer.getRoot());
+      }
+      rig.current = { mixer: null, actions: {} };
+      current.current = "";
+    },
+    [animations],
+  );
+
+  const update = useCallback((dt: number) => bind().mixer?.update(dt), [bind]);
+
+  const play = useCallback((state: string, speed = 1, key = 0) => {
+    const { actions } = bind();
     const restart = key !== lastKey.current && ONCE.has(state);
     lastKey.current = key;
     if (current.current === state && !restart) {
@@ -88,15 +128,31 @@ function useAnimator(
     next.fadeIn(fade).play();
     if (prev && prev !== next) prev.fadeOut(fade);
     current.current = state;
-  };
+  }, [bind]);
+
+  return { play, update };
 }
 
-function flashMaterials(materials: THREE.MeshStandardMaterial[], amount: number, color: string) {
+/** Skips the material writes entirely while nothing changes (the common case). */
+function flashMaterials(
+  materials: CharMaterial[],
+  amount: number,
+  color: string,
+  last: { amount: number; color: string },
+) {
+  if (last.amount === amount && (amount === 0 || last.color === color)) return;
+  last.amount = amount;
+  last.color = color;
+  const c = col(color);
   for (const m of materials) {
-    m.emissive.set(color);
+    m.emissive.copy(c);
     m.emissiveIntensity = amount;
   }
 }
+
+/** Animation level of detail: full rate up close, throttled mid-range, frozen far away. */
+const ANIM_NEAR = 30;
+const ANIM_FAR = 70;
 
 const CLIP_SPEED: Record<string, number> = { swim: 0.7, climb: 0.8, attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
 
@@ -111,15 +167,17 @@ function PlayerModel({ url }: { url: string }) {
   const body = useRef<THREE.Group>(null);
   const ward = useRef<THREE.Mesh>(null);
   const { scene, materials, animations } = useCharacter(url);
-  const play = useAnimator(group, animations);
+  const { play, update } = useAnimator(group, animations);
+  const flash = useRef({ amount: -1, color: "" });
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     const g = group.current;
     if (!g) return;
     const p = world.player;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.yaw;
     play(p.anim, CLIP_SPEED[p.anim] ?? 1, p.animKey);
+    update(dt);
     const b = body.current;
     if (b) {
       // Procedural layers: finisher spin, dodge roll, hurt recoil, dash lean.
@@ -133,10 +191,15 @@ function PlayerModel({ url }: { url: string }) {
     if (ward.current) {
       ward.current.visible = p.wardT > 0 || p.shieldHp > 0;
       const m = ward.current.material as THREE.MeshBasicMaterial;
-      m.color.set(p.shieldHp > 0 ? "#b9a4ff" : "#b9d98a");
+      m.color.copy(col(p.shieldHp > 0 ? "#b9a4ff" : "#b9d98a"));
       m.opacity = 0.1 + Math.min(1, Math.max(p.wardT, p.shieldT)) * 0.12;
     }
-    flashMaterials(materials, p.dodgeIframe > 0 ? 0.35 : p.hitFlash * 2.2, p.dodgeIframe > 0 ? "#9fd4ff" : "#ff5a4a");
+    flashMaterials(
+      materials,
+      p.dodgeIframe > 0 ? 0.35 : p.hitFlash * 2.2,
+      p.dodgeIframe > 0 ? "#9fd4ff" : "#ff5a4a",
+      flash.current,
+    );
     g.visible = !(p.dead && p.deathTimer > 4);
   });
 
@@ -163,22 +226,42 @@ function EnemyView({ index }: { index: number }) {
   const bar = useRef<THREE.Group>(null);
   const barFill = useRef<THREE.Mesh>(null);
   const { scene, materials, animations } = useCharacter(def.model, def.tint);
-  const play = useAnimator(inner, animations);
+  const { play, update } = useAnimator(inner, animations);
   const camera = useThree((s) => s.camera);
+  const fog = useThree((s) => s.scene.fog as THREE.Fog | null);
+  const flash = useRef({ amount: -1, color: "" });
+  const pending = useRef(0);
+  const frame = useRef(index % 3);
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     const g = group.current;
     const e = world.enemies[index];
     if (!g || !e) return;
     const alive = e.phase !== "dead";
-    g.visible = alive || e.respawnIn > def.respawnDelay - 2.5;
+    const dist = Math.hypot(e.x - camera.position.x, e.z - camera.position.z);
+    // Past the fog it's invisible anyway: skip drawing, skinning and animation.
+    const inRange = dist < (fog ? fog.far : 200) + 4;
+    g.visible = inRange && (alive || e.respawnIn > def.respawnDelay - 2.5);
+    if (!g.visible) {
+      pending.current = 0;
+      if (bar.current) bar.current.visible = false;
+      return;
+    }
     g.position.set(e.x, e.y, e.z);
     g.rotation.y = e.yaw;
     play(e.anim === "walk" && e.phase === "chase" ? "sprint" : e.anim, e.anim === "attack" ? 1.6 : e.anim === "windup" ? 1 / Math.max(0.4, e.windupTotal) : 1);
+    // Staggered across enemies so throttled ones don't all tick on the same frame.
+    pending.current += dt;
+    frame.current = (frame.current + 1) % 3;
+    if (dist < ANIM_NEAR || (dist < ANIM_FAR && frame.current === 0)) {
+      update(pending.current);
+      pending.current = 0;
+    }
     flashMaterials(
       materials,
       e.hitFlash > 0 ? e.hitFlash * 2.5 : e.phase === "windup" ? 0.25 + e.telegraph * 0.6 : e.slowT > 0 ? 0.3 : 0,
       e.hitFlash > 0 ? "#ffb3a0" : e.phase === "windup" ? "#ff4a2a" : "#8fc8ff",
+      flash.current,
     );
 
     if (bar.current) {
@@ -230,7 +313,8 @@ export function EnemyViews() {
 function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useCharacter(npc.model);
-  const play = useAnimator(group, animations);
+  const { play, update } = useAnimator(group, animations);
+  const camera = useThree((s) => s.camera);
   const questStep = useGame((s) => s.questStep);
   const complete = useGame((s) => s.questComplete);
   const marker = useRef<THREE.Mesh>(null);
@@ -243,7 +327,8 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const step = QUESTS[questIdx]?.steps[questStep];
   const wants = npc.id === "sela" && !complete && step?.kind === "talk";
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
+    if (Math.hypot(npc.x - camera.position.x, npc.z - camera.position.z) < ANIM_FAR) update(dt);
     if (marker.current) {
       marker.current.visible = wants;
       marker.current.position.y = 3 + Math.sin(state.clock.elapsedTime * 2.4) * 0.16;

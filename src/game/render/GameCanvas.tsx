@@ -1,9 +1,9 @@
 import { Canvas } from "@react-three/fiber";
-import { PerformanceMonitor } from "@react-three/drei";
+import { PerformanceMonitor, useGLTF } from "@react-three/drei";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useGame } from "../core/store";
-import { Scene } from "./Scene";
+import { MODEL_URLS, Scene } from "./Scene";
 
 /** Upper device-pixel-ratio per quality; the adaptive scale below only ever lowers it. */
 const MAX_DPR: Record<string, number> = {
@@ -31,6 +31,13 @@ export function GameCanvas() {
   currentKey.current = canvasKey;
 
   useEffect(() => setScale(1), [quality]);
+
+  // Start every model download at once instead of in waves as components mount
+  // and suspend (a slow chain on mobile data). After mount, so loader progress
+  // events never land in the middle of React's first render.
+  useEffect(() => {
+    for (const url of MODEL_URLS) useGLTF.preload(url);
+  }, []);
 
   const deviceDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
   const dpr = Math.max(0.5, Math.min(deviceDpr, MAX_DPR[quality] ?? 1.5) * scale);

@@ -6,6 +6,7 @@ import { CLIMBS, LANDMARKS, RESOURCES, SECRETS, WAYPOINTS } from "../data/world"
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
 import { heightAt } from "../world/terrain";
+import { col } from "./colors";
 
 /** Waypoint beacons: a soft blue ring + light shaft once discovered. */
 function Waypoints() {
@@ -46,7 +47,7 @@ function Secrets() {
       if (!g) return;
       const sealed = sec.guardian ? world.enemies.some((e) => e.type === sec.guardian && e.phase !== "dead") : false;
       const m = g.material as THREE.MeshBasicMaterial;
-      m.color.set(sealed ? "#e8735a" : "#ffd27a");
+      m.color.copy(col(sealed ? "#e8735a" : "#ffd27a"));
       m.opacity = 0.35 + Math.sin(state.clock.elapsedTime * 2.4) * 0.12;
     });
   });
@@ -80,6 +81,7 @@ function Secrets() {
 function Crystals() {
   const refs = useRef<Array<THREE.Mesh | null>>([]);
   const geo = useMemo(() => new THREE.OctahedronGeometry(0.55, 0), []);
+  const baseY = useMemo(() => RESOURCES.map((r) => heightAt(r.x, r.z) + 0.9), []);
   useFrame((state) => {
     RESOURCES.forEach((r, i) => {
       const m = refs.current[i];
@@ -87,7 +89,7 @@ function Crystals() {
       const regrow = world.resourceRegrow[r.id];
       m.visible = regrow === undefined || world.time >= regrow;
       m.rotation.y = state.clock.elapsedTime * 0.8 + i;
-      m.position.y = heightAt(r.x, r.z) + 0.9 + Math.sin(state.clock.elapsedTime * 1.8 + i) * 0.1;
+      m.position.y = baseY[i]! + Math.sin(state.clock.elapsedTime * 1.8 + i) * 0.1;
     });
   });
   return (

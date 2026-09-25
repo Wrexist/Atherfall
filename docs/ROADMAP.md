@@ -63,22 +63,31 @@ feel or polish, **P2** = improvement.
 
 ---
 
-## Phase 2 — Smooth 60fps on mid-range phones 🔜 (recommended next)
+## Phase 2 — Smooth 60fps on mid-range phones ✅ (mostly done)
 
-| # | Pri | Item |
-|---|-----|------|
-| 28 | P1 | Remove `frustumCulled={false}` on instanced props (`Instances.tsx`), and split the scatter into spatial chunks so off-screen props aren't drawn. |
-| 29 | P1 | Shadows: stop ~420 undergrowth props from casting. Shrink the sun frustum from ±55 to ~±25 and snap it to texels to stop shimmer. Consider character-only shadows on mobile. |
-| 30 | P1 | Enemy animation: skip mixer updates for dead or far enemies, and hide enemies beyond fog distance (~130 draw calls today). |
-| 31 | P1 | Floating damage numbers: replace the 12 drei `<Html>` roots with one overlay or instanced sprites. They also change `fontSize` every frame. |
-| 32 | P1 | Per-frame allocations: `filter()` inside loops and `Color.set("#hex")` string parsing in `Effects.tsx`, `Characters.tsx` and `WorldObjects.tsx`. |
-| 33 | P1 | The desktop ability bar is only hidden with CSS on phones and keeps running two rAF loops. Mount it per device instead. |
-| 34 | P2 | Low quality: use `MeshLambertMaterial` for terrain, water and props. |
-| 35 | P2 | Preload GLBs with `useGLTF.preload` to avoid a loading waterfall, and add a service worker so models are cached for the next launch and offline. |
-| 36 | P2 | Mark static objects `matrixAutoUpdate=false`. Merge the crystals into one InstancedMesh. Pre-filter the large colliders used by the camera occlusion scan. |
-| 37 | P2 | Dispose cloned materials on archetype change and old terrain geometry on quality change. |
-| 38 | P2 | The world map canvas redraws every frame and ignores devicePixelRatio, so it is blurry on retina screens. |
-| 39 | P2 | Add a battery-saver option (30fps cap). |
+Measured on an emulated iPhone 13 (software renderer, same resolution before and after):
+
+| Quality | Triangles per frame | Frame time |
+|---------|---------------------|------------|
+| **Low** (phone default) | 91k → 34k (−63%) | 54ms → 30ms (~1.8× faster) |
+| **Medium** | 268k → 119k (−55%) | 181ms → 156ms (~14% faster) |
+
+A real phone GPU is far faster in absolute terms, but it is limited by the same things: fill rate and vertex work.
+
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 28 | P1 | Props split into 48m spatial chunks with tight bounds, so off-screen cells are culled in both the camera and shadow passes. Cells past the fog are hidden. | ✅ |
+| 29 | P1 | ~280 undergrowth props no longer cast shadows. The sun's shadow box shrank from ±55 to ±32 (Medium) / ±48 (High) and is snapped to shadow-map texels, so there's no shimmer. | ✅ |
+| 30 | P1 | Own animation mixers: full rate within 30m, every 3rd frame (staggered) up to 70m, frozen beyond. Enemies past the fog are hidden. | ✅ |
+| 31 | P1 | Floating damage numbers: one DOM overlay projected in a single pass, instead of 12 `<Html>` React roots. | ✅ |
+| 32 | P1 | Per-frame `filter()` allocations removed. Colours use a shared parsed cache. Material flashes are skipped when unchanged. | ✅ |
+| 33 | P1 | The desktop ability bar is no longer mounted on phones. All HUD readouts share one animation-frame loop and skip unchanged DOM writes. | ✅ |
+| 34 | P2 | Low quality uses Lambert shading for terrain, water, props and characters. | ✅ |
+| 35 | P2 | All GLBs start downloading together (preload). **Still to do:** a service worker to cache models for the next launch and offline. | ◐ |
+| 36 | P2 | Instanced props are static (`matrixAutoUpdate=false`). Camera occlusion checks only the 42 large colliders instead of 459. Crystal heights are precomputed. | ✅ |
+| 37 | P2 | Dispose cloned materials and terrain geometry. Mostly moot now: a quality change remounts the canvas, which frees the GPU context. | ⬜ |
+| 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
+| 39 | P2 | Add a battery-saver option (30fps cap). | ⬜ |
 
 ## Phase 3 — Mobile controls & feel
 
@@ -91,7 +100,7 @@ feel or polish, **P2** = improvement.
 | 44 | P1 | Lock-on / target-cycle button and camera recentre. Hold Attack to auto-combo. |
 | 45 | P1 | First-run tutorial with contextual tips: move, look (drag right side), attack, dodge, heal. |
 | 46 | P1 | Touch targets of at least 44px and text of at least 11px everywhere. Journal tabs, "Remove" and filter chips are 15–28px today. Faint text (parchment at 45–55%) fails contrast. |
-| 47 | P1 | Inventory and journal: pad for safe areas, since the notch overlaps the tabs in landscape. |
+| 47 | P1 | Inventory and journal: pad for safe areas, since the notch overlaps the tabs in landscape. The round world map is taller than the panel on a landscape phone, so its bottom half is cut off. |
 | 48 | P1 | Touch-specific text: the climb prompt says "W climb · S descend · Space let go" and the controls list is keyboard-first. |
 | 49 | P2 | HUD at 844×390: collapse the quest hint to one line and move toasts to the top so they don't collide with the ability arc. Add a minimap or quest arrow. |
 | 50 | P2 | Knockback with velocity and decay instead of a teleport. Add enemy separation so groups don't stack on one point. Use noise-based camera shake. |

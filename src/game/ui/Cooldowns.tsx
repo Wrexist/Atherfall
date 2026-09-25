@@ -13,26 +13,43 @@ function cooldownOf(id: SlotId): { left: number; max: number } {
   return { left: p.cooldowns[id], max: ABILITIES[id].cooldown };
 }
 
+// One shared animation-frame loop for every live HUD readout, instead of one
+// requestAnimationFrame chain per button.
+const tickers = new Set<() => void>();
+let tickerRaf = 0;
+function runTickers() {
+  for (const fn of tickers) fn();
+  tickerRaf = tickers.size ? requestAnimationFrame(runTickers) : 0;
+}
+function useTicker(fn: () => void, deps: React.DependencyList) {
+  useEffect(() => {
+    tickers.add(fn);
+    if (!tickerRaf) tickerRaf = requestAnimationFrame(runTickers);
+    return () => {
+      tickers.delete(fn);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
 /** Reads cooldowns straight from the simulation every animation frame. */
 export function CooldownSweep({ id }: { id: SlotId }) {
   const sweep = useRef<HTMLDivElement>(null);
   const label = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const { left, max } = cooldownOf(id);
-      const frac = max > 0 ? Math.min(1, left / max) : 0;
-      if (sweep.current) {
-        sweep.current.style.background = frac > 0 ? `conic-gradient(rgba(12,8,6,0.72) ${frac * 360}deg, transparent 0deg)` : "transparent";
-      }
-      if (label.current) {
-        const txt = left > 0.05 ? (left >= 1 ? Math.ceil(left).toString() : left.toFixed(1)) : "";
-        if (label.current.textContent !== txt) label.current.textContent = txt;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+  const lastDeg = useRef(-1);
+  useTicker(() => {
+    const { left, max } = cooldownOf(id);
+    const frac = max > 0 ? Math.min(1, left / max) : 0;
+    // Whole degrees only: an unchanged gradient string is not rewritten (no repaint).
+    const deg = Math.ceil(frac * 360);
+    if (sweep.current && deg !== lastDeg.current) {
+      lastDeg.current = deg;
+      sweep.current.style.background = deg > 0 ? `conic-gradient(rgba(12,8,6,0.72) ${deg}deg, transparent 0deg)` : "transparent";
+    }
+    if (label.current) {
+      const txt = left > 0.05 ? (left >= 1 ? Math.ceil(left).toString() : left.toFixed(1)) : "";
+      if (label.current.textContent !== txt) label.current.textContent = txt;
+    }
   }, [id]);
   return (
     <>
@@ -84,25 +101,24 @@ export function SlotIcon({ id, className = "h-6 w-6" }: { id: SlotId; className?
 /** Live combat state chips (ward, shield, haste, evade window, combo step). */
 export function CombatStates() {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const p = world.player;
-      const parts: string[] = [];
-      if (p.dodgeIframe > 0 || p.action === "gale") parts.push(`<span class="text-[#bfe6ff]">EVADE</span>`);
-      if (p.wardT > 0) parts.push(`<span class="text-[#c9e39a]">WARD ${p.wardT.toFixed(1)}s</span>`);
-      if (p.shieldHp > 0) parts.push(`<span class="text-[#b9a4ff]">AEGIS ${Math.ceil(p.shieldHp)}</span>`);
-      if (p.hasteT > 0) parts.push(`<span class="text-[#9fe39a]">HASTE ${p.hasteT.toFixed(1)}s</span>`);
-      if (p.action === "attack") {
-        const pips = [1, 2, 3].map((n) => (n <= p.comboIdx ? "◆" : "◇")).join(" ");
-        parts.push(`<span class="text-[var(--gilt)]">${pips}</span>`);
-      }
-      const html = parts.join(`<span class="opacity-40"> · </span>`);
-      if (ref.current && ref.current.innerHTML !== html) ref.current.innerHTML = html;
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+  const last = useRef("");
+  useTicker(() => {
+    const p = world.player;
+    const parts: string[] = [];
+    if (p.dodgeIframe > 0 || p.action === "gale") parts.push(`<span class="text-[#bfe6ff]">EVADE</span>`);
+    if (p.wardT > 0) parts.push(`<span class="text-[#c9e39a]">WARD ${p.wardT.toFixed(1)}s</span>`);
+    if (p.shieldHp > 0) parts.push(`<span class="text-[#b9a4ff]">AEGIS ${Math.ceil(p.shieldHp)}</span>`);
+    if (p.hasteT > 0) parts.push(`<span class="text-[#9fe39a]">HASTE ${p.hasteT.toFixed(1)}s</span>`);
+    if (p.action === "attack") {
+      const pips = [1, 2, 3].map((n) => (n <= p.comboIdx ? "◆" : "◇")).join(" ");
+      parts.push(`<span class="text-[var(--gilt)]">${pips}</span>`);
+    }
+    const html = parts.join(`<span class="opacity-40"> · </span>`);
+    // Compare with the last string written — reading innerHTML serialises the DOM.
+    if (ref.current && last.current !== html) {
+      last.current = html;
+      ref.current.innerHTML = html;
+    }
   }, []);
   return <div ref={ref} data-testid="combat-states" className="h-5 text-center font-display text-sm tracking-[0.15em] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]" />;
 }

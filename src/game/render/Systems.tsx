@@ -9,6 +9,16 @@ import { COLLIDERS } from "../world/layout";
 const BASE_DISTANCE = 9.2;
 const HEAD = 1.55;
 
+/** Only boulders and cottages block the camera; trees are allowed to overlap. */
+const CAMERA_BLOCKERS = COLLIDERS.filter((c) => c.r >= 1.5);
+
+// Fixed sun direction and the shadow camera's axes (it looks at its target with +Y up).
+const SUN_OFFSET = new THREE.Vector3(-42, 58, 34);
+const SUN_DIR = SUN_OFFSET.clone().normalize();
+const SUN_RIGHT = new THREE.Vector3(0, 1, 0).cross(SUN_DIR).normalize();
+const SUN_UP = SUN_DIR.clone().cross(SUN_RIGHT).normalize();
+const _focus = new THREE.Vector3();
+
 /**
  * Single per-frame driver: input -> simulation -> camera.
  * Mounted first so every view component reads already-updated state.
@@ -46,8 +56,7 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
       const gh = heightAt(sx, sz);
       let blocked = sy < gh + 0.9;
       if (!blocked && sy < gh + 5.5) {
-        for (const c of COLLIDERS) {
-          if (c.r < 1.5) continue; // cottages and boulders only; tree canopies are allowed to overlap
+        for (const c of CAMERA_BLOCKERS) {
           const dx = sx - c.x;
           const dz = sz - c.z;
           const rr = c.r + 0.7;
@@ -81,8 +90,17 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
 
     const sun = sunRef.current;
     if (sun) {
-      sun.position.set(p.x - 42, p.y + 58, p.z + 34);
-      sun.target.position.set(p.x, p.y, p.z);
+      // Follow the player, but move the shadow box in whole shadow-map texels
+      // (in the light's own plane) so shadow edges don't crawl as you walk.
+      const cam = sun.shadow.camera;
+      const texel = (cam.right - cam.left) / sun.shadow.mapSize.width;
+      _focus.set(p.x, p.y, p.z);
+      const u = Math.round(_focus.dot(SUN_RIGHT) / texel) * texel;
+      const v = Math.round(_focus.dot(SUN_UP) / texel) * texel;
+      const w = _focus.dot(SUN_DIR);
+      _focus.copy(SUN_RIGHT).multiplyScalar(u).addScaledVector(SUN_UP, v).addScaledVector(SUN_DIR, w);
+      sun.target.position.copy(_focus);
+      sun.position.copy(_focus).add(SUN_OFFSET);
       sun.target.updateMatrixWorld();
     }
   });

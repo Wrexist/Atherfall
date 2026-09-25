@@ -70,12 +70,22 @@ export function WorldMap() {
     const c = canvas.current;
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
+    // Sharp on retina phones: back the canvas with device pixels, draw in CSS pixels.
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    c.width = size * dpr;
+    c.height = size * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const off = document.createElement("canvas");
     off.width = RES;
     off.height = RES;
     off.getContext("2d")!.putImageData(terrainImage(off.getContext("2d")!), 0, 0);
     let raf = 0;
-    const draw = () => {
+    let lastDraw = 0;
+    const draw = (now: number) => {
+      raf = requestAnimationFrame(draw);
+      // ~20fps is plenty for a map marker and saves redrawing the whole map 60×/s.
+      if (now - lastDraw < 50) return;
+      lastDraw = now;
       ctx.clearRect(0, 0, size, size);
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(off, 0, 0, size, size);
@@ -142,7 +152,6 @@ export function WorldMap() {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);

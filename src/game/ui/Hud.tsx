@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
@@ -24,7 +25,21 @@ function Bar({
   );
 }
 
+/** True on mouse/trackpad devices; phones never mount the desktop-only HUD pieces. */
+function useFinePointer() {
+  const [fine, setFine] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: fine)");
+    setFine(mq.matches);
+    const on = () => setFine(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return fine;
+}
+
 export function Hud() {
+  const fine = useFinePointer();
   // Select only what the HUD shows, so unrelated store writes don't re-render it.
   const s = useGame(
     useShallow((g) => ({
@@ -155,9 +170,11 @@ export function Hud() {
       </div>
 
       {/* Ability bar (desktop) */}
-      <div className={`absolute bottom-0 left-1/2 hidden -translate-x-1/2 ${s.dialogue ? "" : "[@media(pointer:fine)]:block"}`}>
-        <AbilityBar />
-      </div>
+      {fine && !s.dialogue && (
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+          <AbilityBar />
+        </div>
+      )}
 
       {/* Loadout + key hints (mouse/keyboard devices only; touch uses on-screen buttons) */}
       <div className={`absolute bottom-0 left-0 hidden items-stretch gap-3 ${s.dialogue ? "" : "[@media(pointer:fine)]:flex"}`}>

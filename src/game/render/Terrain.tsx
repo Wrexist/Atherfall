@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { SEA_LEVEL, WORLD_RADIUS, groundColor, heightAt } from "../world/terrain";
 
-export function Terrain({ segments, shadows }: { segments: number; shadows: boolean }) {
+export function Terrain({ segments, shadows, lite }: { segments: number; shadows: boolean; lite: boolean }) {
   const geometry = useMemo(() => {
     const size = WORLD_RADIUS * 2.2;
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -27,18 +27,21 @@ export function Terrain({ segments, shadows }: { segments: number; shadows: bool
 
   return (
     <>
+      {/* The ground covers most of the screen: on Low it uses cheap diffuse shading. */}
       <mesh geometry={geometry} receiveShadow={shadows}>
-        <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
+        {lite ? (
+          <meshLambertMaterial vertexColors />
+        ) : (
+          <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
+        )}
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[6, SEA_LEVEL, 96]}>
         <planeGeometry args={[340, 220]} />
-        <meshStandardMaterial
-          color="#2f7f88"
-          transparent
-          opacity={0.82}
-          roughness={0.25}
-          metalness={0.15}
-        />
+        {lite ? (
+          <meshLambertMaterial color="#2f7f88" transparent opacity={0.82} />
+        ) : (
+          <meshStandardMaterial color="#2f7f88" transparent opacity={0.82} roughness={0.25} metalness={0.15} />
+        )}
       </mesh>
     </>
   );
