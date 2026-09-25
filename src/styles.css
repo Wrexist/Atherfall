@@ -177,6 +177,12 @@
   }
 }
 
+/* The page is the game: dark from the first paint, never a white flash. */
+html,
+body {
+  background-color: #0e1624;
+}
+
 /* Game shell on phones: no rubber-band scrolling, long-press callout, text
    magnifier or grey tap flash while thumbs are on the controls. */
 html,

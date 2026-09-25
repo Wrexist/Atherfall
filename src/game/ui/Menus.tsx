@@ -82,29 +82,30 @@ export function LoadingScreen({ progress }: { progress: number }) {
     return () => clearInterval(iv);
   }, [progress]);
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
-      <h1 className="font-display text-3xl tracking-wide text-[var(--gilt)] text-outline sm:text-4xl">
-        AETHERFALL
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_40%,#23365a_0%,#0e1624_70%)] px-6 text-center">
+      <h1 className="font-display text-5xl leading-none text-[var(--gilt)] text-outline sm:text-6xl">
+        Aetherfall
       </h1>
-      <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
+      <p className="mt-2 text-xs font-extrabold uppercase tracking-[0.3em] text-[var(--parchment)]/60">
         Dawnreach
       </p>
-      <div className="mt-8 h-1.5 w-64 max-w-full overflow-hidden rounded-full bg-[var(--parchment)]/15">
+      <div className="relative mt-8 h-4 w-72 max-w-full overflow-hidden rounded-full bg-[#0b1320] ring-2 ring-[#0b1320]">
         <div
-          className="h-full rounded-full bg-[var(--gilt)] transition-[width] duration-200"
+          className="h-full rounded-full bg-gradient-to-b from-[#ffd970] to-[#f2a93b] transition-[width] duration-200"
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-full bg-white/15" />
       </div>
-      <p className="mt-3 text-[11px] text-[var(--parchment)]/45">
+      <p className="mt-3 text-xs font-bold text-[var(--parchment)]/60">
         Raising the pines… {Math.round(progress * 100)}%
       </p>
       {stalled ? (
         <div className="mt-6 flex max-w-xs flex-col items-center gap-3">
-          <p className="text-sm text-[var(--parchment)]/80">
+          <p className="text-sm font-semibold text-[var(--parchment)]/85">
             Still loading. Your connection may be slow or have dropped.
           </p>
           <button
-            className="min-h-11 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 text-sm font-semibold text-[var(--parchment)]"
+            className={BTN.primary}
             // Files that already arrived are cached, so a retry picks up where it stopped.
             onClick={() => window.location.reload()}
           >
@@ -113,7 +114,7 @@ export function LoadingScreen({ progress }: { progress: number }) {
         </div>
       ) : (
         <p
-          className="mt-6 min-h-10 max-w-xs text-sm leading-snug text-[var(--parchment)]/70"
+          className="mt-6 min-h-10 max-w-xs text-sm font-semibold leading-snug text-[var(--parchment)]/80"
           aria-live="polite"
         >
           <span className="text-[var(--gilt)]">✦ </span>
@@ -251,10 +252,9 @@ function QualityPicker({
             sfx.ui();
             setQuality(q.id);
           }}
-          className={`min-h-11 rounded-2xl border-2 p-2.5 text-left ${
-            quality === q.id
-              ? "border-[var(--gilt)] bg-[var(--gilt)]/15"
-              : "border-transparent bg-[var(--panel-2)]"
+          aria-pressed={quality === q.id}
+          className={`relative min-h-11 rounded-2xl border-2 bg-[var(--panel-2)] p-2.5 text-left ${
+            quality === q.id ? "border-[var(--gilt)] shadow-[0_0_12px_rgba(255,203,92,0.35)]" : "border-transparent"
           }`}
         >
           <div className="text-sm font-extrabold text-[var(--parchment)]">{q.label}</div>
@@ -652,13 +652,13 @@ export function DeathScreen() {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2a0d0a]/55 p-4">
       <Panel>
-        <h2 className="font-display text-2xl tracking-wide text-[#f0a595] text-outline">YOU FALL</h2>
-        <p className="mt-2 text-sm text-[var(--parchment)]/80">
+        <h2 className="font-display text-4xl leading-none text-[#ff6b5b] text-outline">You fell</h2>
+        <p className="mt-3 text-sm font-semibold text-[var(--parchment)]/85">
           Emberhollow's bells carry you back to the fountain. Your satchel is intact — your pride is
           not. ({deaths} {deaths === 1 ? "fall" : "falls"} so far.)
         </p>
         <button
-          className="mt-5 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 py-2.5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
+          className={`${BTN.primary} mt-5 w-full !min-h-12 !text-base`}
           onClick={() => {
             sfx.ui();
             respawnPlayer();
@@ -684,19 +684,24 @@ export function DialogueBox() {
         paddingRight: "max(1rem, env(safe-area-inset-right))",
       }}
     >
-      <div className="w-full max-w-2xl rounded-xl border border-[var(--gilt)]/35 bg-[var(--panel)]/95 p-4 backdrop-blur">
-        <div className="font-display text-sm tracking-wide text-[var(--gilt)] text-outline">
-          {dialogue.name.toUpperCase()}
+      <div className="w-full max-w-2xl rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] p-4 text-[var(--parchment)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border-[3px] border-[var(--gilt)] bg-[var(--ink)] font-display text-xl text-[var(--gilt)]">
+            {dialogue.name.replace(/^(Warden|Elder|Old|Captain)\s+/, "").charAt(0)}
+          </span>
+          <div className="font-display text-lg leading-none text-[var(--gilt)] text-outline">
+            {dialogue.name}
+          </div>
         </div>
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2.5 space-y-1.5">
           {dialogue.lines.map((line, i) => (
-            <p key={i} className="text-sm leading-relaxed text-[var(--parchment)]/90">
+            <p key={i} className="text-[15px] font-semibold leading-relaxed text-[var(--parchment)]/95">
               {line}
             </p>
           ))}
         </div>
         <button
-          className="mt-3 min-h-11 rounded-lg border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-5 py-2 text-sm text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
+          className={`${BTN.primary} mt-3 !px-6`}
           onClick={() => {
             sfx.ui();
             openDialogue(null);
