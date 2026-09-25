@@ -2,10 +2,11 @@
 
 ## Where the 3D models come from
 
-| Folder                                      | Source                                                                                                                                                                                                             | License             |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| `public/models/kaykit/`                     | [KayKit Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) and [KayKit Skeletons](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) by Kay Lousberg | CC0 (public domain) |
-| `public/models/town`, `nature`, `gy`, `dng` | Kenney kits (Fantasy Town, Nature, Graveyard, Mini Dungeon)                                                                                                                                                        | CC0 (public domain) |
+| Folder                                                     | Source                                                                                                                                                                                                      | License             |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `public/models/kaykit/` characters                         | [KayKit Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) and [Skeletons](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) by Kay Lousberg | CC0 (public domain) |
+| `public/models/kaykit/world.glb`                           | [KayKit Medieval Hexagon](https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0) and [Halloween Bits](https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0) by Kay Lousberg     | CC0 (public domain) |
+| `public/models/town`, `nature`, `gy`, `dng` (the few left) | Kenney kits (Fantasy Town, Nature, Graveyard, Mini Dungeon)                                                                                                                                                 | CC0 (public domain) |
 
 CC0 means no attribution is required and commercial use is fine. We credit the artists here anyway.
 
@@ -27,6 +28,18 @@ The script downloads the packs at pinned commits into `.cache/kaykit/` (git-igno
 4. Quantizes and meshopt-compresses the result. A character is about 100–160 KB and the animation library about 370 KB.
 
 Build tooling (`@gltf-transform/*`, `meshoptimizer`) is a dev dependency only. Nothing extra ships to players: three.js already includes the meshopt decoder.
+
+## World pipeline
+
+`public/models/kaykit/world.glb` is also **generated**:
+
+```sh
+node scripts/models/build-kaykit-world.mjs
+```
+
+It puts every building, tree, rock and prop the world uses into **one** file, each as a named top-level piece standing at its own origin. One file means one download and one shared palette texture on the GPU. The game refers to a piece as `/models/kaykit/world.glb#tree_A` (`K("tree_A")` in `src/game/world/layout.ts`). The script prints each piece's size, which is what the layout's scales are based on.
+
+KayKit Medieval pieces are sized for a hex board (a house is about 1 unit), so the layout scales them up: roughly ×6–8 for buildings and ×5 for trees. Halloween pieces are close to character scale. Keep each piece's size close to its collider radius in the layout, so what blocks the player is what they see.
 
 ### Adding a character
 

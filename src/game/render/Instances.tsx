@@ -21,23 +21,31 @@ interface Part {
   local: THREE.Matrix4;
 }
 
+/**
+ * `url` is a GLB, or `file.glb#piece` for one named piece of a kit file (all
+ * KayKit world pieces live in one file, so they share a single texture).
+ */
 function useParts(url: string): Part[] {
-  const { scene } = useGLTF(url);
+  const [file, piece] = url.split("#") as [string, string | undefined];
+  const { scene } = useGLTF(file);
   const lite = useLiteMaterials();
   return useMemo(() => {
     scene.updateMatrixWorld(true);
+    const root = piece ? scene.getObjectByName(piece) : scene;
+    if (!root) throw new Error(`no piece "${piece}" in ${file}`);
+    const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
     const parts: Part[] = [];
-    scene.traverse((obj) => {
+    root.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       parts.push({
         geometry: mesh.geometry,
         material: lite ? liteMaterials(mesh.material) : mesh.material,
-        local: mesh.matrixWorld.clone(),
+        local: new THREE.Matrix4().multiplyMatrices(toRoot, mesh.matrixWorld),
       });
     });
     return parts;
-  }, [scene, lite]);
+  }, [scene, piece, file, lite]);
 }
 
 /**

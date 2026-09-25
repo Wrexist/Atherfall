@@ -1,8 +1,20 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { SEA_LEVEL, WORLD_RADIUS, groundColor, heightAt } from "../world/terrain";
+import { groundDetailTexture } from "./groundTexture";
 
-export function Terrain({ segments, shadows, lite }: { segments: number; shadows: boolean; lite: boolean }) {
+/** World units per repeat of the painted detail texture. */
+const DETAIL_TILE = 9;
+
+export function Terrain({
+  segments,
+  shadows,
+  lite,
+}: {
+  segments: number;
+  shadows: boolean;
+  lite: boolean;
+}) {
   const geometry = useMemo(() => {
     const size = WORLD_RADIUS * 2.2;
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -24,15 +36,21 @@ export function Terrain({ segments, shadows, lite }: { segments: number; shadows
     geo.computeVertexNormals();
     return geo;
   }, [segments]);
+  const detail = useMemo(() => {
+    const tex = groundDetailTexture();
+    const repeat = (WORLD_RADIUS * 2.2) / DETAIL_TILE;
+    tex?.repeat.set(repeat, repeat);
+    return tex;
+  }, []);
 
   return (
     <>
       {/* The ground covers most of the screen: on Low it uses cheap diffuse shading. */}
       <mesh geometry={geometry} receiveShadow={shadows}>
         {lite ? (
-          <meshLambertMaterial vertexColors />
+          <meshLambertMaterial vertexColors map={detail} />
         ) : (
-          <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
+          <meshStandardMaterial vertexColors map={detail} roughness={0.95} metalness={0} />
         )}
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[6, SEA_LEVEL, 96]}>
@@ -40,7 +58,13 @@ export function Terrain({ segments, shadows, lite }: { segments: number; shadows
         {lite ? (
           <meshLambertMaterial color="#2f7f88" transparent opacity={0.82} />
         ) : (
-          <meshStandardMaterial color="#2f7f88" transparent opacity={0.82} roughness={0.25} metalness={0.15} />
+          <meshStandardMaterial
+            color="#2f7f88"
+            transparent
+            opacity={0.82}
+            roughness={0.25}
+            metalness={0.15}
+          />
         )}
       </mesh>
     </>

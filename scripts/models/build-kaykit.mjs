@@ -14,25 +14,10 @@
 //   5. quantizes and meshopt-compresses the result.
 // See docs/ASSETS.md for the license and how to add or remove a model.
 
-import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { NodeIO } from "@gltf-transform/core";
-import { ALL_EXTENSIONS, EXTMeshoptCompression } from "@gltf-transform/extensions";
+import { EXTMeshoptCompression } from "@gltf-transform/extensions";
 import { dedup, mergeDocuments, prune, quantize, resample } from "@gltf-transform/functions";
-import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
-
-const ROOT = path.resolve(import.meta.dirname, "../..");
-const CACHE = path.join(ROOT, ".cache/kaykit");
-const OUT = path.join(ROOT, "public/models/kaykit");
-
-const PACKS = {
-  adventurers: {
-    base: "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/672074b73ba276876a19e8816ecdc5241817ab47/addons/kaykit_character_pack_adventures",
-  },
-  skeletons: {
-    base: "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/15b62b9bad122f72926c10fb14d622c73819fa54/addons/kaykit_character_pack_skeletons",
-  },
-};
+import { OUT, fetchPackFile, io, ready, report } from "./lib.mjs";
 
 /** Characters: source file, the mesh nodes to keep, and loose weapons to attach. */
 const CHARACTERS = [
@@ -128,39 +113,6 @@ const CLIPS = [
   "Spawn_Ground_Skeletons",
 ];
 const ANIMATION_SOURCE = { pack: "skeletons", src: "Characters/gltf/Skeleton_Minion.glb" };
-
-const io = new NodeIO()
-  .registerExtensions(ALL_EXTENSIONS)
-  .registerDependencies({ "meshopt.decoder": MeshoptDecoder, "meshopt.encoder": MeshoptEncoder });
-
-async function exists(file) {
-  try {
-    await stat(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Download a pack file (and a .gltf's .bin and textures) into the cache once. */
-async function fetchPackFile(pack, rel) {
-  const file = path.join(CACHE, pack, rel);
-  if (await exists(file)) return file;
-  await mkdir(path.dirname(file), { recursive: true });
-  const res = await fetch(`${PACKS[pack].base}/${rel}`);
-  if (!res.ok) throw new Error(`download failed ${res.status}: ${pack}/${rel}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await writeFile(file, buf);
-  if (rel.endsWith(".gltf")) {
-    const json = JSON.parse(buf.toString("utf8"));
-    const deps = [...(json.buffers ?? []), ...(json.images ?? [])]
-      .map((b) => b.uri)
-      .filter(Boolean);
-    for (const uri of deps)
-      await fetchPackFile(pack, path.posix.join(path.posix.dirname(rel), uri));
-  }
-  return file;
-}
 
 const glob = (pattern) =>
   new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
@@ -437,15 +389,8 @@ async function buildAnimations() {
   return file;
 }
 
-await MeshoptEncoder.ready;
-await MeshoptDecoder.ready;
-await mkdir(OUT, { recursive: true });
+await ready();
 const built = [];
 for (const spec of CHARACTERS) built.push(await buildCharacter(spec));
 built.push(await buildAnimations());
-for (const f of built) {
-  const s = await stat(f);
-  console.log(`${path.relative(ROOT, f).replaceAll("\\", "/")}  ${(s.size / 1024).toFixed(0)} KB`);
-}
-const total = (await Promise.all(built.map((f) => stat(f)))).reduce((n, s) => n + s.size, 0);
-console.log(`total ${(total / 1024).toFixed(0)} KB`);
+await report(built);

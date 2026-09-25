@@ -6,13 +6,13 @@ import { world } from "../core/sim";
 // Key frames across the day (dayTime 0..1). Night keeps a strong cool
 // "moonlight" so the player and enemy telegraphs stay readable.
 const KEYS = [
-  { t: 0.0, sky: "#f4c9a0", sun: "#ffc08a", sunI: 1.6, hemi: 0.75, amb: 0.34 }, // dawn
-  { t: 0.25, sky: "#f0cfa1", sun: "#ffcf93", sunI: 2.1, hemi: 0.85, amb: 0.35 }, // noon
-  { t: 0.5, sky: "#e8a878", sun: "#ff9f6a", sunI: 1.5, hemi: 0.7, amb: 0.34 }, // dusk
-  { t: 0.62, sky: "#5a6488", sun: "#aebcff", sunI: 1.1, hemi: 0.62, amb: 0.42 }, // blue hour
-  { t: 0.75, sky: "#39425f", sun: "#b4c2ff", sunI: 1.0, hemi: 0.6, amb: 0.45 }, // midnight
-  { t: 0.9, sky: "#5f6283", sun: "#c9c0ff", sunI: 1.1, hemi: 0.62, amb: 0.42 },
-  { t: 1.0, sky: "#f4c9a0", sun: "#ffc08a", sunI: 1.6, hemi: 0.75, amb: 0.34 },
+  { t: 0.0, sky: "#f7d7b4", sun: "#ffd3a4", sunI: 2.2, hemi: 0.95, amb: 0.22 }, // dawn
+  { t: 0.25, sky: "#a9d9f2", sun: "#fff1da", sunI: 2.7, hemi: 1.05, amb: 0.2 }, // noon
+  { t: 0.5, sky: "#f3b98a", sun: "#ffb277", sunI: 2.1, hemi: 0.9, amb: 0.22 }, // dusk
+  { t: 0.62, sky: "#6f80b3", sun: "#bccbff", sunI: 1.5, hemi: 0.8, amb: 0.36 }, // blue hour
+  { t: 0.75, sky: "#43528a", sun: "#bccbff", sunI: 1.35, hemi: 0.78, amb: 0.4 }, // midnight
+  { t: 0.9, sky: "#6a73a6", sun: "#d2c9ff", sunI: 1.5, hemi: 0.8, amb: 0.36 },
+  { t: 1.0, sky: "#f7d7b4", sun: "#ffd3a4", sunI: 2.2, hemi: 0.95, amb: 0.22 },
 ];
 
 export function DayNight({
@@ -25,7 +25,10 @@ export function DayNight({
   amb: React.RefObject<THREE.AmbientLight | null>;
 }) {
   const scene = useThree((s) => s.scene);
-  const cols = useMemo(() => KEYS.map((k) => ({ sky: new THREE.Color(k.sky), sun: new THREE.Color(k.sun) })), []);
+  const cols = useMemo(
+    () => KEYS.map((k) => ({ sky: new THREE.Color(k.sky), sun: new THREE.Color(k.sun) })),
+    [],
+  );
   const sky = useMemo(() => new THREE.Color(), []);
   const sunC = useMemo(() => new THREE.Color(), []);
   let acc = 0;
@@ -50,7 +53,8 @@ export function DayNight({
     }
     if (hemi.current) {
       hemi.current.intensity = a.hemi + (b.hemi - a.hemi) * k;
-      hemi.current.color.copy(sky).lerp(sunC, 0.5);
+      // Sky fill from above; the ground colour (set once) bounces green from below.
+      hemi.current.color.copy(sky).lerp(sunC, 0.35);
     }
     if (amb.current) amb.current.intensity = a.amb + (b.amb - a.amb) * k;
   });

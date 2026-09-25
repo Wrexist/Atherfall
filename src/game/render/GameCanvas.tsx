@@ -58,8 +58,10 @@ export function GameCanvas() {
         camera={{ fov: 58, near: 0.5, far: 400, position: [0, 10, 20] }}
         gl={{ antialias: quality !== "low", powerPreference: "high-performance" }}
         onCreated={({ gl, scene }) => {
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.05;
+          // Neutral keeps the storybook colours as painted (ACES pushed
+          // everything towards orange-brown and washed the greens out).
+          gl.toneMapping = THREE.NeutralToneMapping;
+          gl.toneMappingExposure = 1.0;
           scene.matrixWorldAutoUpdate = true;
           const el = gl.domElement;
           const myKey = canvasKey;

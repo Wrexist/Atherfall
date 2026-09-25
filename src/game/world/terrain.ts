@@ -137,12 +137,12 @@ export function pathDistance(x: number, z: number): number {
   return best;
 }
 
-const GRASS = new THREE.Color("#6f8f4a");
-const GRASS_DRY = new THREE.Color("#93a04e");
-const FOREST = new THREE.Color("#3f6238");
-const SAND = new THREE.Color("#d8c48d");
-const ROCK = new THREE.Color("#8d8577");
-const DIRT = new THREE.Color("#9c7c53");
+const GRASS = new THREE.Color("#78b545");
+const GRASS_DRY = new THREE.Color("#a3c257");
+const FOREST = new THREE.Color("#4a8a42");
+const SAND = new THREE.Color("#ead69b");
+const ROCK = new THREE.Color("#9a948a");
+const DIRT = new THREE.Color("#c39461");
 
 const _c = new THREE.Color();
 /** Vertex colour for the terrain mesh. */
