@@ -300,3 +300,37 @@ describe("loot on the ground", () => {
     expect(world.drops.some((d) => d.id === 999)).toBe(false);
   });
 });
+
+describe("combat feel", () => {
+  test("knockback is a quick slide, not a teleport", () => {
+    const e = world.enemies.find((x) => x.id === "b1")!;
+    e.x = e.homeX = world.player.x;
+    e.z = e.homeZ = world.player.z + 2.2;
+    e.maxHp = e.hp = 9999;
+    const z0 = e.z;
+    input.attackQueued = true;
+    let hitFrame = -1;
+    for (let i = 0; i < 60 && hitFrame < 0; i++) {
+      stepWorld(DT);
+      if (e.kvx !== 0 || e.kvz !== 0) hitFrame = i;
+    }
+    expect(hitFrame).toBeGreaterThanOrEqual(0);
+    const firstFrame = Math.abs(e.z - z0);
+    run(0.6);
+    const total = Math.abs(e.z - z0);
+    expect(total).toBeGreaterThan(0.2);
+    expect(firstFrame).toBeLessThan(total * 0.5); // spread over several frames
+  });
+
+  test("enemies on the same spot spread apart", () => {
+    const [a, b] = world.enemies.filter((x) => x.type === "bramblekin");
+    for (const e of [a!, b!]) {
+      e.x = e.homeX = world.player.x + 8;
+      e.z = e.homeZ = world.player.z + 8;
+      e.phase = "idle";
+    }
+    world.player.x -= 30; // far enough that they stay idle
+    run(0.3);
+    expect(Math.hypot(a!.x - b!.x, a!.z - b!.z)).toBeGreaterThan(1);
+  });
+});

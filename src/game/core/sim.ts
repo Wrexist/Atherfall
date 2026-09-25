@@ -57,6 +57,9 @@ export interface EnemyRuntime {
   y: number;
   z: number;
   yaw: number;
+  /** Knockback velocity (m/s), decays each frame. */
+  kvx: number;
+  kvz: number;
   hp: number;
   maxHp: number;
   phase: EnemyPhase;
@@ -297,6 +300,8 @@ const TURN = 18;
 const COYOTE = 0.1;
 const JUMP_BUFFER = 0.12;
 /** Steepest walkable rise per metre travelled. */
+/** Knockback decay rate: a hit of `kb` metres slides the enemy ~kb over ~0.25s. */
+const KNOCK_DECAY = 12;
 const MAX_GRADE = 1.8; // steeper than any beach or hill; only sheer rock blocks
 const SWIM_ENTER = 1.15;
 const SWIM_EXIT = 0.95;
@@ -337,6 +342,8 @@ function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
     zones: [],
     slowT: 0,
     bossPhase: 1,
+    kvx: 0,
+    kvz: 0,
     moveIdx: 0,
     move: null,
     chargeLeft: 0,
@@ -737,12 +744,9 @@ function damageEnemy(
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const d = Math.hypot(dx, dz) || 1;
-    const ox = e.x;
-    const oz = e.z;
-    e.x += (dx / d) * kb;
-    e.z += (dz / d) * kb;
-    resolveCollisions(e, 0.6);
-    keepOnLand(e, ox, oz);
+    // A quick slide rather than a teleport; total travel ≈ kb metres.
+    e.kvx += (dx / d) * kb * KNOCK_DECAY;
+    e.kvz += (dz / d) * kb * KNOCK_DECAY;
   }
   if (opts.stagger && !def.boss && e.phase !== "charge") {
     // Interrupts windups — rewarding a well-timed finisher.
@@ -1279,6 +1283,9 @@ function stepPlayer(dt: number, camYaw: number) {
     if (p.actionT >= 0.3) p.action = "none";
   }
 
+  // Being hit costs a moment of control, so the knockback actually reads.
+  if (p.hurtT > 0) ctrl *= 0.25;
+
   // ---- horizontal velocity with acceleration / deceleration
   const moving = mag > 0.05;
   const sprinting = input.sprint && moving && p.action === "none" && p.grounded;
@@ -1525,6 +1532,19 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
   const slow = e.slowT > 0 ? GALE.slowFactor : 1;
   const phaseSpeed = def.boss && e.bossPhase === 2 ? 1.2 : 1;
 
+  if (e.kvx !== 0 || e.kvz !== 0) {
+    const ox = e.x;
+    const oz = e.z;
+    e.x += e.kvx * dt;
+    e.z += e.kvz * dt;
+    resolveCollisions(e, 0.6);
+    keepOnLand(e, ox, oz);
+    const f = Math.exp(-KNOCK_DECAY * dt);
+    e.kvx *= f;
+    e.kvz *= f;
+    if (Math.abs(e.kvx) + Math.abs(e.kvz) < 0.05) e.kvx = e.kvz = 0;
+  }
+
   if (e.phase === "dead") {
     e.zones = [];
     e.respawnIn -= dt;
@@ -1711,6 +1731,41 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (bar) useGame.setState({ bossBar: null });
     } else if (!bar || Math.abs(bar.hp - e.hp) > 0.5 || bar.phase !== e.bossPhase) {
       useGame.setState({ bossBar: { name: def.name, hp: Math.max(0, e.hp), max: e.maxHp, phase: e.bossPhase } });
+    }
+  }
+}
+
+/** Keep nearby enemies from collapsing onto one spot: push overlapping pairs apart. */
+function separateEnemies() {
+  const p = world.player;
+  const list = world.enemies;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    if (a.phase === "dead" || a.phase === "charge") continue;
+    if (Math.abs(a.x - p.x) > 45 || Math.abs(a.z - p.z) > 45) continue;
+    const ra = Math.min(1.6, enemyDef(a.type).scale * 0.32);
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j]!;
+      if (b.phase === "dead" || b.phase === "charge") continue;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const min = ra + Math.min(1.6, enemyDef(b.type).scale * 0.32);
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 0.01;
+      const push = (min - d) * 0.5;
+      const nx = d2 > 0 ? dx / d : 1;
+      const nz = d2 > 0 ? dz / d : 0;
+      const ax = a.x;
+      const az = a.z;
+      const bx = b.x;
+      const bz = b.z;
+      a.x -= nx * push;
+      a.z -= nz * push;
+      b.x += nx * push;
+      b.z += nz * push;
+      keepOnLand(a, ax, az);
+      keepOnLand(b, bx, bz);
     }
   }
 }
@@ -2096,6 +2151,7 @@ export function stepWorld(dtRaw: number) {
 
   stepPlayer(dt, input.yaw);
   for (const e of world.enemies) stepEnemy(e, dt);
+  separateEnemies();
   stepProjectiles(dt);
   stepExploration(dt);
   world.dayTime = (world.dayTime + dt / DAY_LENGTH) % 1;

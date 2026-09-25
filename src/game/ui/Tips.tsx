@@ -17,6 +17,8 @@ interface Tip {
   when: (ctx: TipCtx) => boolean;
   /** Has the player done it? Marks the tip learned. */
   done: (ctx: TipCtx) => boolean;
+  /** Situational (a fight is on): takes over from a basic tip, which returns later. */
+  urgent?: boolean;
 }
 
 interface TipCtx {
@@ -55,6 +57,7 @@ const TIPS: Tip[] = [
   },
   {
     id: "attack",
+    urgent: true,
     touch: "Enemy! Tap Attack — hold it to keep swinging.",
     desk: "Enemy! Click to attack — hold to keep swinging.",
     when: (c) => c.threatened,
@@ -62,6 +65,7 @@ const TIPS: Tip[] = [
   },
   {
     id: "dodge",
+    urgent: true,
     touch: "Red on the ground means a hit is coming — tap Dodge to roll clear.",
     desk: "Red on the ground means a hit is coming — press F or right-click to dodge.",
     when: (c) => c.telegraph,
@@ -69,6 +73,7 @@ const TIPS: Tip[] = [
   },
   {
     id: "heal",
+    urgent: true,
     touch: "Health is low — tap Heal to drink a Sunbloom Draught.",
     desk: "Health is low — press Q to drink a Sunbloom Draught.",
     when: (c) => c.lowHp,
@@ -131,14 +136,14 @@ export function Tips() {
       const done = useSettings.getState().tipsDone;
       const learn = (id: string) => update({ tipsDone: [...done, id] });
       const cur = current.current;
-      if (cur) {
-        if (cur.done(ctx)) {
-          learn(cur.id);
-          show(null);
-        }
+      if (cur && cur.done(ctx)) {
+        learn(cur.id);
+        show(null);
         return;
       }
-      const next = TIPS.find((t) => !done.includes(t.id) && t.when(ctx));
+      const urgent = TIPS.find((t) => t.urgent && !done.includes(t.id) && t !== cur && t.when(ctx));
+      if (cur && !(urgent && !cur.urgent)) return;
+      const next = cur ? urgent : TIPS.find((t) => !done.includes(t.id) && t.when(ctx));
       if (!next) return;
       // Already done before we asked (e.g. talked to Sela while another tip showed)? Skip it.
       if (next.done({ ...ctx, moved: 0, turned: 0, swings: 0, dodged: false, healed: false })) {

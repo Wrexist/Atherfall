@@ -29,7 +29,7 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
   const lookAt = useRef(new THREE.Vector3());
   const desired = useRef(new THREE.Vector3());
 
-  useFrame((_, deltaRaw) => {
+  useFrame(({ clock }, deltaRaw) => {
     const dt = Math.min(deltaRaw, 0.05);
     pollInput();
     stepWorld(dt);
@@ -80,13 +80,19 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     current.current.lerp(desired.current, k);
 
     camera.position.copy(current.current);
-    if (world.cameraShake > 0.001) {
-      const s = world.cameraShake * 0.22;
-      camera.position.x += (Math.random() - 0.5) * s;
-      camera.position.y += (Math.random() - 0.5) * s;
-    }
     lookAt.current.set(targetX, targetY + 0.25, targetZ);
+    const shake = world.cameraShake;
+    if (shake > 0.001) {
+      // Smooth layered sine "noise" instead of per-frame random jitter: reads as
+      // a jolt, not a flicker, and doesn't vary with frame rate.
+      const t = clock.elapsedTime;
+      const s = shake * 0.16;
+      camera.position.x += s * (Math.sin(t * 41.3) + 0.6 * Math.sin(t * 23.7 + 0.8));
+      camera.position.y += s * (Math.sin(t * 37.1 + 1.3) + 0.6 * Math.sin(t * 19.9));
+    }
     camera.lookAt(lookAt.current);
+    // Small roll kick on heavy hits.
+    if (shake > 0.001) camera.rotateZ(shake * 0.035 * Math.sin(clock.elapsedTime * 29));
 
     const sun = sunRef.current;
     if (sun) {
