@@ -74,6 +74,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.32.0",
     "@gltf-transform/core": "4",
     "@gltf-transform/extensions": "4",

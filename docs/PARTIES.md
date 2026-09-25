@@ -1,14 +1,14 @@
 # Parties — design proposal (for review before building)
 
-Status: **proposal**. Nothing here is built yet. The decisions marked **[you decide]** need the owner's call.
+Status: **approved 2026-09-25**. The owner chose: parties of **4**, **personal loot**, **XP shared with members nearby**, and invites from **anyone nearby** by default (players can switch them off). Being built in the order below.
 
 ## What players get
 
 - **Invite nearby players.** Tap Party, and you see the signed-in players near you (from live presence). Tap one to invite them. They get a popup: _"Rowan invites you to a party — Join / No thanks"_.
-- **Up to 4 per party** **[you decide]**. There's one leader, who can remove members. Anyone can leave.
+- **Up to 4 per party**. There's one leader, who can remove members. Anyone can leave.
 - **Shared quest credit.** When a party member kills an enemy your current quest needs, and you're close by, it counts for you too. Everyone progresses together.
 - **Party frames on the HUD.** Name, class, level and a health bar for each other member, under your vitals. Members who go quiet show "away".
-- **Loot stays personal** **[you decide]**. Everyone gets their own drops, as today. Nothing is shared or traded until the server-validated economy exists (roadmap #70).
+- **Loot stays personal**. Everyone gets their own drops, as today. Nothing is shared or traded until the server-validated economy exists (roadmap #70).
 
 ## Why this needs the server (and presence alone isn't enough)
 
@@ -60,12 +60,7 @@ Credit is decided on **your** device, from your own world. A `kill` message from
 
 This is still client-side, so a modified client could fake kills. The worst case is a friend finishing a quest step faster, which is harmless now because loot and gold aren't shared. It gets revisited with the server-validated economy.
 
-**XP** **[you decide]**:
-
-- (a) the killer only, as today;
-- (b) members within range also get the kill's XP.
-
-I'd suggest (b): it's what players expect, and the risk is the same as for quest credit.
+**XP**: members within range also get the kill's XP (owner's decision). It's what players expect, and the risk is the same as for quest credit.
 
 ## HUD (portrait)
 
