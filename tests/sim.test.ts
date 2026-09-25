@@ -5,7 +5,7 @@ import { input } from "../src/game/core/input";
 import { initWorld, pointInZone, stepWorld, world } from "../src/game/core/sim";
 import { useGame } from "../src/game/core/store";
 import { COLLIDERS } from "../src/game/world/layout";
-import { regionAt } from "../src/game/world/terrain";
+import { heightAt, regionAt } from "../src/game/world/terrain";
 
 // Find an open patch of ground (no obstacles within 9m) for combat checks.
 const OPEN = (() => {
@@ -46,6 +46,7 @@ beforeEach(() => {
   const p = world.player;
   p.x = OPEN.x;
   p.z = OPEN.z;
+  p.y = heightAt(OPEN.x, OPEN.z);
   p.yaw = 0; // facing +z
   input.yaw = 0;
   input.moveX = input.moveZ = 0;
@@ -167,12 +168,12 @@ describe("dodge", () => {
 });
 
 describe("abilities", () => {
-  test("locked until quest step, then cooldowns run", () => {
-    useGame.setState({ questStep: 1 });
+  test("locked until level 2, then cooldowns run", () => {
+    useGame.setState({ level: 1 });
     input.abilityQueued = 0;
     stepWorld(DT);
     expect(world.player.cooldowns.galestep).toBe(0);
-    useGame.setState({ questStep: 4 });
+    useGame.setState({ level: 4 });
     const z0 = world.player.z;
     input.abilityQueued = 0;
     run(0.3);
@@ -181,7 +182,7 @@ describe("abilities", () => {
   });
 
   test("Emberburst hits every enemy around once", () => {
-    useGame.setState({ questStep: 4 });
+    useGame.setState({ level: 4 });
     const a = place("b1", OPEN.x + 2, OPEN.z);
     const b = place("b2", OPEN.x - 2, OPEN.z);
     a.maxHp = a.hp = b.maxHp = b.hp = 999;
@@ -193,7 +194,7 @@ describe("abilities", () => {
   });
 
   test("Bark Ward cuts damage taken", () => {
-    useGame.setState({ questStep: 4, hp: 50 });
+    useGame.setState({ level: 4, hp: 50 });
     input.abilityQueued = 2;
     stepWorld(DT);
     expect(world.player.wardT).toBeGreaterThan(3.9);

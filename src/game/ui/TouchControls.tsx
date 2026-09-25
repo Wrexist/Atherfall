@@ -179,8 +179,9 @@ export function TouchControls() {
         <div className="flex gap-2">
           <TouchButton label="Bag" size="h-11 w-14 !rounded-xl" onPress={() => toggleInventory()} />
           <TouchButton label={`Heal ${potions}`} size="h-11 w-14 !rounded-xl" onPress={() => (input.healQueued = true)} />
-          {prompt?.startsWith("Speak") && (
-            <TouchButton label="Talk" size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
+          <TouchButton label="Map" size="h-11 w-14 !rounded-xl" onPress={() => useGame.getState().toggleInventory(true, "map")} />
+          {prompt && /^(Speak|Climb|Open)/.test(prompt) && (
+            <TouchButton label={prompt.startsWith("Climb") ? "Climb" : prompt.startsWith("Open") ? "Open" : "Talk"} size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
           )}
         </div>
       </div>

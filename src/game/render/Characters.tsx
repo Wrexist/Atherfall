@@ -26,6 +26,10 @@ const CLIP: Record<string, string> = {
   burst: "attack-kick-right",
   ward: "interact-left",
   hit: "fall",
+  swim: "walk",
+  tread: "idle",
+  climb: "jump",
+  hang: "static",
   windup: "interact-right",
   die: "die",
   talk: "emote-yes",
@@ -94,7 +98,7 @@ function flashMaterials(materials: THREE.MeshStandardMaterial[], amount: number,
   }
 }
 
-const CLIP_SPEED: Record<string, number> = { attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
+const CLIP_SPEED: Record<string, number> = { swim: 0.7, climb: 0.8, attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
 
 /** Remounts the hero model when the archetype changes. */
 export function PlayerView() {
@@ -124,6 +128,7 @@ function PlayerModel({ url }: { url: string }) {
       if (p.action === "dodge") b.rotation.x = Math.min(1, p.actionT / 0.34) * Math.PI * 2;
       if (p.action === "gale") b.rotation.x = 0.45;
       if (p.hurtT > 0) b.rotation.x = -p.hurtT * 1.3;
+      if (p.swimming) b.rotation.x = p.anim === "swim" ? 1.15 : 0.35;
     }
     if (ward.current) {
       ward.current.visible = p.wardT > 0 || p.shieldHp > 0;

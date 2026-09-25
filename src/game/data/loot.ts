@@ -85,6 +85,20 @@ export const LOOT_TABLES: Record<string, LootTable> = {
     entries: [],
     guaranteed: ["kingsbane", "lantern-crown"],
   },
+  rootfather: { dropChance: 1, potionChance: 1, gold: [30, 40], shards: [3, 3], entries: [{ itemId: "bark-plated-vest", weight: 1 }] },
+  drowned: {
+    dropChance: 0.5,
+    potionChance: 0.35,
+    gold: [6, 14],
+    shards: [0, 2],
+    entries: [
+      { itemId: "tidewrack-pearl", weight: 8 },
+      { itemId: "hollow-pike", weight: 20 },
+      { itemId: "bark-plated-vest", weight: 20 },
+      { itemId: "hunters-band", weight: 14 },
+    ],
+  },
+  tidebound: { dropChance: 1, potionChance: 1, gold: [50, 60], shards: [4, 4], entries: [{ itemId: "sentinel-cuirass", weight: 1 }] },
 };
 
 /** Location pools: the place you fight shapes what you find. */
@@ -96,6 +110,10 @@ export const REGION_LOOT: Record<string, LootEntry[]> = {
   ruins: [
     { itemId: "sunstone-shard", weight: 6 },
     { itemId: "tidewrack-pearl", weight: 5 },
+  ],
+  shore: [
+    { itemId: "tidewrack-pearl", weight: 6 },
+    { itemId: "emberglass-charm", weight: 6 },
   ],
   barrow: [
     { itemId: "lantern-ring", weight: 6 },

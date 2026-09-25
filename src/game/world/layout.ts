@@ -2,6 +2,7 @@
 // enemy spawns and landmarks. Pure data generation, no three.js scene objects.
 
 import { REGIONS, heightAt, mulberry32, pathDistance, slopeAt } from "./terrain";
+import { GULL_ROCK, WATCHSTONE, WAYPOINTS } from "../data/world";
 
 export interface PropInstance {
   model: string;
@@ -103,6 +104,13 @@ export const SPAWNS: SpawnDef[] = [
   { id: "s4", type: "sentinel", x: 72, z: -48, yaw: 0.4 },
   // Miniboss
   { id: "boss", type: "thornmaw", x: 58, z: -34, yaw: 1.6 },
+  // Tidewrack Shore
+  { id: "t1", type: "drowned", x: -16, z: 52, yaw: 0 },
+  { id: "t2", type: "drowned", x: 18, z: 53, yaw: 3 },
+  { id: "t3", type: "drowned", x: 36, z: 48, yaw: 2 },
+  // One-time guardians at secrets
+  { id: "e-root", type: "rootfather", x: -26, z: -76, yaw: 2.4 },
+  { id: "e-tide", type: "tidebound", x: 21, z: 80, yaw: 2.8 },
   // Barrow of Lanterns (dungeon)
   { id: "d1", type: "shade", x: -51, z: 8, yaw: -1.6 },
   { id: "d2", type: "shade", x: -51, z: 20, yaw: -1.6 },
@@ -174,9 +182,9 @@ function handmade(): PropInstance[] {
     [-4.5, -24],
     [-1, -38],
     [-9, -38],
-    [8, 1],
+    [9, 3.6],
     [-8, -1],
-    [5, 22],
+    [6.2, 22.6],
     [-1, 22],
   ];
   for (const [x, z] of lanterns) add("/models/town/lantern.glb", x, z, 0, 2.8, 0.4);
@@ -184,7 +192,8 @@ function handmade(): PropInstance[] {
   // Fences framing the square
   for (let i = 0; i < 7; i++) {
     add("/models/town/fence.glb", -18 + i * 3, 18, 0, 3, 1.0, true);
-    add("/models/town/hedge.glb", 18, -18 + i * 3, Math.PI / 2, 3, 1.2, true);
+    // leave a gap where the east road to the ruins passes through
+    if (i !== 4 && i !== 5) add("/models/town/hedge.glb", 18, -18 + i * 3, Math.PI / 2, 3, 1.2, true);
   }
 
   // --- Whisperpine Woods gateway ---
@@ -202,6 +211,7 @@ function handmade(): PropInstance[] {
     ring.push([rx + Math.cos(a) * 15, rz + Math.sin(a) * 15]);
   }
   ring.forEach(([x, z], i) => {
+    if (pathDistance(x, z) < 2.2) return; // keep the ruins road clear
     const model =
       i % 3 === 0
         ? "/models/gy/pillar-large.glb"
@@ -246,6 +256,18 @@ function handmade(): PropInstance[] {
   add("/models/nature/rock_largeA.glb", -42, 5, 0.7, 3.2, 1.5);
   add("/models/nature/rock_tallB.glb", -42, 23, 1.9, 3.2, 1.4);
 
+  // --- Open-world landmarks ---
+  for (const w of WAYPOINTS) add("/models/gy/pillar-large.glb", w.x, w.z, 0.3, 3.2, 0.7);
+  add("/models/nature/tree_pineTallA.glb", -20, -64, 0.4, 9, 1.8); // the Elder Pine
+  add("/models/gy/column-large.glb", 27, -42, 0.2, 3, 0.8); // Watchstone summit ruin
+  add("/models/gy/debris.glb", 33, -46, 1.2, 3, 0, true);
+  add("/models/town/planks.glb", 20, 83, 0.9, 3.6, 0); // Gull Rock wreck
+  add("/models/town/planks.glb", 26, 80, 2.1, 3.6, 0);
+  add("/models/town/cart.glb", 27, 86, 2.6, 2.6, 1.0);
+  add("/models/dng/stones.glb", 22, 88, 0.3, 3, 0, true);
+  add("/models/nature/rock_tallB.glb", -32, -82, 0.8, 3.6, 1.4); // Hollow Stump grove
+  add("/models/nature/rock_largeA.glb", -24, -84, 2.2, 3.2, 1.4);
+
   // --- Tidewrack Shore teaser ---
   add("/models/town/planks.glb", 9, 62, 0.1, 3.4, 0);
   add("/models/town/planks.glb", 10, 66, 0.1, 3.4, 0);
@@ -274,6 +296,10 @@ function scatter(): PropInstance[] {
     if (Math.hypot(x, z) < 21) return; // village square stays clear
     if (Math.hypot(x - REGIONS.ruins.x, z - REGIONS.ruins.z) < 19) return;
     if (Math.hypot(x - REGIONS.barrow.x, z - REGIONS.barrow.z) < 24) return;
+    if (Math.hypot(x - WATCHSTONE.x, z - WATCHSTONE.z) < 13) return;
+    if (Math.hypot(x - GULL_ROCK.x, z - GULL_ROCK.z) < 14) return;
+    if (Math.hypot(x + 30, z + 80) < 6) return; // keep the cache clearing open
+    if (WAYPOINTS.some((w) => Math.hypot(x - w.x, z - w.z) < 5)) return;
     out.push({ model, x, z, yaw: rand() * 6.28, scale, collide, detail });
   };
 
@@ -378,6 +404,7 @@ export const ALL_MODELS: string[] = Array.from(
     "/models/gy/character-vampire.glb",
     "/models/dng/character-orc.glb",
     "/models/dng/gate.glb",
+    "/models/dng/chest.glb",
     "/models/mini/ranger.glb",
     "/models/mini/arcanist.glb",
   ]),

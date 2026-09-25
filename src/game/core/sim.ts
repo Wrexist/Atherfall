@@ -21,7 +21,8 @@ import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
 import { ITEMS } from "../data/items";
 import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
-import { REGIONS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
+import { REGIONS, SEA_LEVEL, WORLD_RADIUS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
+import { CLIMBS, LANDMARKS, RESOURCES, RESOURCE_RESPAWN, SECRETS, WAYPOINTS } from "../data/world";
 import { sfx } from "./audio";
 import { input } from "./input";
 import { readSave, writeSave, SAVE_VERSION, type SaveFile } from "./persistence";
@@ -179,6 +180,12 @@ export interface PlayerRuntime {
   /** Ability driving the current dash/leap/burst action. */
   abilityId: AbilityId | null;
   hurtT: number;
+  /** In deep water: slow, can't fight, can't jump. */
+  swimming: boolean;
+  /** Id of the climb route being climbed, or null. */
+  climbing: string | null;
+  /** 0 = foot of the route, 1 = top. */
+  climbT: number;
   invuln: number;
   hitFlash: number;
   dead: boolean;
@@ -222,6 +229,9 @@ function freshPlayer(): PlayerRuntime {
     hasteT: 0,
     abilityId: null,
     hurtT: 0,
+    swimming: false,
+    climbing: null,
+    climbT: 0,
     invuln: 0,
     hitFlash: 0,
     dead: false,
@@ -241,6 +251,10 @@ export const world = {
   rains: [] as RainRuntime[],
   defeated: new Set<string>(),
   cameraShake: 0,
+  /** 0..1 through the day; 0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight. */
+  dayTime: 0.12,
+  /** Resource node id → world.time when it regrows (absent = ready). */
+  resourceRegrow: {} as Record<string, number>,
   /** Remaining hit-pause; the simulation freezes while > 0. */
   hitstop: 0,
   /** Counters exposed for tests. */
@@ -266,6 +280,15 @@ const AIR_CONTROL = 3;
 const TURN = 18;
 const COYOTE = 0.1;
 const JUMP_BUFFER = 0.12;
+/** Steepest walkable rise per metre travelled. */
+const MAX_GRADE = 1.8; // steeper than any beach or hill; only sheer rock blocks
+const SWIM_ENTER = 1.15;
+const SWIM_EXIT = 0.95;
+const SWIM_DEPTH = 1.05;
+const CLIMB_SPEED = 2.4;
+/** Seconds for a full day/night cycle. */
+export const DAY_LENGTH = 480;
+let lastSwimHint = -10;
 
 function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
   const def = enemyDef(spawn.type);
@@ -313,7 +336,8 @@ export function initWorld(save: SaveFile | null) {
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
   for (const e of world.enemies) {
-    if (enemyDef(e.type).boss && world.defeated.has(e.id)) {
+    const d0 = enemyDef(e.type);
+    if ((d0.boss || d0.elite) && world.defeated.has(e.id)) {
       e.phase = "dead";
       e.hp = 0;
       e.respawnIn = 99999;
@@ -358,6 +382,9 @@ export function snapshot(): SaveFile {
     questComplete: s.questComplete,
     barrowUnlocked: s.barrowUnlocked,
     codex: s.codex,
+    waypoints: s.waypoints,
+    secrets: s.secrets,
+    landmarks: s.landmarks,
     deaths: s.deaths,
     kills: s.kills,
     elapsed: s.elapsed,
@@ -391,6 +418,9 @@ export function loadSaveIntoStore(): SaveFile | null {
     questComplete: save.questComplete,
     barrowUnlocked: save.barrowUnlocked,
     codex: save.codex,
+    waypoints: Array.from(new Set(["emberhollow", ...(save.waypoints ?? [])])),
+    secrets: save.secrets ?? [],
+    landmarks: save.landmarks ?? [],
     deaths: save.deaths,
     kills: save.kills,
     elapsed: save.elapsed,
@@ -451,10 +481,13 @@ export function respawnPlayer() {
   const store = useGame.getState();
   const stats = statsFor(store);
   const p = world.player;
-  p.x = SPAWN_POINT.x;
-  p.z = SPAWN_POINT.z;
+  const wp = nearestWaypoint(p.x, p.z, store.waypoints);
+  p.x = wp ? wp.x + 1.5 : SPAWN_POINT.x;
+  p.z = wp ? wp.z + 1.5 : SPAWN_POINT.z;
   p.y = heightAt(p.x, p.z);
   p.vy = 0;
+  p.swimming = false;
+  p.climbing = null;
   p.dead = false;
   p.anim = "idle";
   p.action = "none";
@@ -464,6 +497,7 @@ export function respawnPlayer() {
   p.invuln = 1.5;
   store.setHp(Math.round(stats.maxHp * 0.6));
   useGame.setState({ screen: "playing" });
+  if (wp) store.toast(`You wake at ${wp.name}.`, "info");
   for (const e of world.enemies) {
     if (e.phase !== "dead") {
       e.zones = [];
@@ -1046,6 +1080,22 @@ function stepPlayer(dt: number, camYaw: number) {
 
   const { mx, mz, mag } = moveIntent(camYaw);
 
+  if (p.climbing) {
+    stepClimb(p, dt);
+    return;
+  }
+
+  if (p.swimming && (input.attackQueued || input.dodgeQueued || input.abilityQueued !== null || input.jumpQueued)) {
+    input.attackQueued = false;
+    input.dodgeQueued = false;
+    input.abilityQueued = null;
+    input.jumpQueued = false;
+    if (world.time - lastSwimHint > 4) {
+      lastSwimHint = world.time;
+      store.toast("You can't fight or jump while swimming — reach the shore first.", "info");
+    }
+  }
+
   if (input.dodgeQueued) {
     input.dodgeQueued = false;
     tryDodge(p, mx, mz, mag);
@@ -1073,7 +1123,7 @@ function stepPlayer(dt: number, camYaw: number) {
   let ctrl = 1; // movement authority this frame
   const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
   const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1.3 : 1);
-  let speedCap = (input.sprint ? SPRINT : WALK) * speedMul;
+  let speedCap = (input.sprint ? SPRINT : WALK) * speedMul * (p.swimming ? 0.6 : 1);
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
     const melee = basicKind() === "melee";
@@ -1171,6 +1221,36 @@ function stepPlayer(dt: number, camYaw: number) {
   p.x += p.vx * dt;
   p.z += p.vz * dt;
   resolveCollisions(p, 0.55);
+  // Sheer rock (the Watchstone, world rim) can't be walked up — use climb routes.
+  {
+    // Measure the grade over a fixed probe so slow creeping can't sneak up a cliff.
+    const run = Math.hypot(p.x - beforeX, p.z - beforeZ);
+    const probe = 0.5;
+    const ax = run > 1e-5 ? beforeX + ((p.x - beforeX) / run) * probe : beforeX;
+    const az = run > 1e-5 ? beforeZ + ((p.z - beforeZ) / run) * probe : beforeZ;
+    const gOld = heightAt(beforeX, beforeZ);
+    const gAhead = heightAt(ax, az);
+    if (run > 1e-5 && gAhead - gOld > probe * MAX_GRADE && gAhead > p.y + (p.swimming ? 1.2 : 0.2)) {
+      p.x = beforeX;
+      p.z = beforeZ;
+      p.vx *= -0.1;
+      p.vz *= -0.1;
+    }
+  }
+  // Deep water: swim (with a little hysteresis so the shoreline doesn't flicker).
+  {
+    const depth = SEA_LEVEL - heightAt(p.x, p.z);
+    if (!p.swimming && depth > SWIM_ENTER) {
+      p.swimming = true;
+      p.action = "none";
+      p.comboIdx = 0;
+      p.vy = 0;
+      spark(p.x, SEA_LEVEL + 0.05, p.z, "#cfeef2", 1.6, true, 0.5);
+      sfx.land();
+    } else if (p.swimming && depth < SWIM_EXIT) {
+      p.swimming = false;
+    }
+  }
   // Kill velocity into walls so we don't keep grinding against them.
   if (dt > 0) {
     const ax = (p.x - beforeX) / dt;
@@ -1187,42 +1267,52 @@ function stepPlayer(dt: number, camYaw: number) {
     p.yaw = angleLerp(p.yaw, Math.atan2(mx, mz), 1 - Math.exp(-TURN * dt));
   }
 
-  // ---- vertical: coyote time + jump buffer
-  const ground = heightAt(p.x, p.z);
-  p.coyote = p.grounded ? COYOTE : Math.max(0, p.coyote - dt);
-  p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
-  if (p.jumpBuffer > 0 && p.coyote > 0 && (p.action === "none" || p.action === "attack")) {
-    if (p.action === "attack") {
-      p.action = "none";
-      p.comboIdx = 0;
-    }
-    p.vy = JUMP_V;
-    p.grounded = false;
+  if (p.swimming) {
+    // Float with the head above the surface; gentle bob.
+    const target = SEA_LEVEL - SWIM_DEPTH + Math.sin(world.time * 2.2) * 0.06;
+    p.y += (target - p.y) * Math.min(1, dt * 6);
+    p.vy = 0;
+    p.grounded = true;
     p.coyote = 0;
     p.jumpBuffer = 0;
-    sfx.jump();
-  }
-  p.vy += GRAVITY * dt;
-  p.y += p.vy * dt;
-  if (p.y <= ground) {
-    if (!p.grounded && p.vy < -6) {
-      sfx.land();
-      spark(p.x, ground + 0.1, p.z, "#d8c7a0", 0.9, true, 0.3);
-    }
-    p.y = ground;
-    p.vy = 0;
-    p.grounded = true;
-  } else if (p.y - ground > 0.25 || p.vy > 0) {
-    p.grounded = false;
   } else {
-    // Stick to downhill slopes instead of bouncing.
-    p.y = ground;
-    p.vy = 0;
-    p.grounded = true;
+    // ---- vertical: coyote time + jump buffer
+    const ground = heightAt(p.x, p.z);
+    p.coyote = p.grounded ? COYOTE : Math.max(0, p.coyote - dt);
+    p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
+    if (p.jumpBuffer > 0 && p.coyote > 0 && (p.action === "none" || p.action === "attack")) {
+      if (p.action === "attack") {
+        p.action = "none";
+        p.comboIdx = 0;
+      }
+      p.vy = JUMP_V;
+      p.grounded = false;
+      p.coyote = 0;
+      p.jumpBuffer = 0;
+      sfx.jump();
+    }
+    p.vy += GRAVITY * dt;
+    p.y += p.vy * dt;
+    if (p.y <= ground) {
+      if (!p.grounded && p.vy < -6) {
+        sfx.land();
+        spark(p.x, ground + 0.1, p.z, "#d8c7a0", 0.9, true, 0.3);
+      }
+      p.y = ground;
+      p.vy = 0;
+      p.grounded = true;
+    } else if (p.y - ground > 0.25 || p.vy > 0) {
+      p.grounded = false;
+    } else {
+      // Stick to downhill slopes instead of bouncing.
+      p.y = ground;
+      p.vy = 0;
+      p.grounded = true;
+    }
   }
 
   // ---- footsteps
-  if (p.grounded && planar > 1.5 && p.action === "none") {
+  if (p.grounded && !p.swimming && planar > 1.5 && p.action === "none") {
     p.stepAcc += dt * planar;
     const stride = sprinting ? 2.5 : 1.9;
     if (p.stepAcc > stride) {
@@ -1232,6 +1322,10 @@ function stepPlayer(dt: number, camYaw: number) {
   }
 
   // ---- animation state
+  if (p.swimming) {
+    p.anim = planar > 0.5 ? "swim" : "tread";
+    return;
+  }
   const swingAnim = p.action === "attack" ? `attack${p.comboIdx}` : null;
   p.anim =
     p.action === "dodge"
@@ -1350,7 +1444,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
   if (e.phase === "dead") {
     e.zones = [];
     e.respawnIn -= dt;
-    if (e.respawnIn <= 0 && !def.boss) {
+    if (e.respawnIn <= 0 && !def.boss && !def.elite) {
       Object.assign(e, makeEnemy({ id: e.id, type: e.type, x: e.homeX, z: e.homeZ, yaw: e.homeYaw } as (typeof SPAWNS)[number]));
       world.defeated.delete(e.id);
     }
@@ -1388,9 +1482,12 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       e.anim = "walk";
       if (dist > def.attackRange * 0.85) {
         const step = def.speed * slow * phaseSpeed * dt;
+        const ox = e.x;
+        const oz = e.z;
         e.x += (dx / (dist || 1)) * step;
         e.z += (dz / (dist || 1)) * step;
         resolveCollisions(e, 0.6);
+        keepOnLand(e, ox, oz);
       }
       faceToward(e, p.x, p.z, 8, dt);
       if (def.boss) {
@@ -1452,6 +1549,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       e.x += Math.sin(e.yaw) * step;
       e.z += Math.cos(e.yaw) * step;
       resolveCollisions(e, 0.9);
+      keepOnLand(e, bx, bz);
       const moved = Math.hypot(e.x - bx, e.z - bz);
       e.chargeLeft -= step;
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
@@ -1505,9 +1603,12 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
         e.hp = e.maxHp;
       } else {
         const step = def.speed * 0.9 * dt;
+        const ox = e.x;
+        const oz = e.z;
         e.x += (hx / hd) * step;
         e.z += (hz / hd) * step;
         resolveCollisions(e, 0.6);
+        keepOnLand(e, ox, oz);
         faceToward(e, e.homeX, e.homeZ, 6, dt);
       }
       break;
@@ -1538,6 +1639,185 @@ function checkUnlocks() {
     }
   }
   unlockedCount = n;
+}
+
+// ---------------------------------------------------------------- open world
+
+function keepOnLand(e: EnemyRuntime, ox: number, oz: number) {
+  if (heightAt(e.x, e.z) < SEA_LEVEL - 0.6) {
+    e.x = ox;
+    e.z = oz;
+  }
+}
+
+export function nearestWaypoint(x: number, z: number, known: string[]) {
+  let best: (typeof WAYPOINTS)[number] | null = null;
+  let bd = Infinity;
+  for (const w of WAYPOINTS) {
+    if (!known.includes(w.id)) continue;
+    const d = Math.hypot(w.x - x, w.z - z);
+    if (d < bd) {
+      bd = d;
+      best = w;
+    }
+  }
+  return best;
+}
+
+/** True when any living enemy is actively fighting the player. */
+export function inCombat() {
+  return world.enemies.some((e) => e.aggro && e.phase !== "dead" && e.phase !== "return");
+}
+
+export function fastTravel(id: string): { ok: boolean; message: string } {
+  const s = useGame.getState();
+  const w = WAYPOINTS.find((x) => x.id === id);
+  if (!w || !s.waypoints.includes(id)) return { ok: false, message: "You haven't found that waypoint yet." };
+  if (world.player.dead) return { ok: false, message: "You can't travel now." };
+  if (inCombat()) return { ok: false, message: "You can't fast travel while enemies are hunting you." };
+  const p = world.player;
+  p.x = w.x + 1.5;
+  p.z = w.z + 1.5;
+  p.y = heightAt(p.x, p.z);
+  p.vx = p.vz = p.vy = 0;
+  p.swimming = false;
+  p.climbing = null;
+  p.action = "none";
+  world.projectiles.length = 0;
+  world.rains.length = 0;
+  useGame.setState({ inventoryOpen: false });
+  s.toast(`Travelled to ${w.name}.`, "good");
+  sfx.gale();
+  saveNow();
+  return { ok: true, message: "" };
+}
+
+function climbAt(x: number, z: number) {
+  return CLIMBS.find((c) => Math.hypot(c.base.x - x, c.base.z - z) < 2.4 || Math.hypot(c.top.x - x, c.top.z - z) < 2.0) ?? null;
+}
+
+function startClimb(route: (typeof CLIMBS)[number]) {
+  const p = world.player;
+  const fromTop = Math.hypot(route.top.x - p.x, route.top.z - p.z) < Math.hypot(route.base.x - p.x, route.base.z - p.z);
+  p.climbing = route.id;
+  p.climbT = fromTop ? 0.97 : 0.02;
+  p.action = "none";
+  p.comboIdx = 0;
+  p.vx = p.vz = p.vy = 0;
+  p.yaw = Math.atan2(route.top.x - route.base.x, route.top.z - route.base.z);
+  sfx.ui();
+}
+
+function stepClimb(p: PlayerRuntime, dt: number) {
+  const route = CLIMBS.find((c) => c.id === p.climbing);
+  if (!route) {
+    p.climbing = null;
+    return;
+  }
+  const baseY = heightAt(route.base.x, route.base.z);
+  const topY = heightAt(route.top.x, route.top.z);
+  const len = Math.max(1, topY - baseY);
+  input.attackQueued = false;
+  input.abilityQueued = null;
+  input.dodgeQueued = false;
+  // W / joystick up climbs, S climbs down, Space lets go.
+  p.climbT = Math.max(0, Math.min(1, p.climbT + (input.moveZ * CLIMB_SPEED * dt) / len));
+  // Hug the rock face: stay at the base's x/z until the lip, then step over.
+  const lip = 0.9;
+  if (p.climbT < lip) {
+    p.x = route.base.x - Math.sin(p.yaw) * 0.1;
+    p.z = route.base.z - Math.cos(p.yaw) * 0.1;
+    p.y = baseY + (p.climbT / lip) * len;
+  } else {
+    const k = (p.climbT - lip) / (1 - lip);
+    p.x = route.base.x + (route.top.x - route.base.x) * k;
+    p.z = route.base.z + (route.top.z - route.base.z) * k;
+    p.y = topY;
+  }
+  p.anim = Math.abs(input.moveZ) > 0.1 ? "climb" : "hang";
+  p.speedMag = 0;
+  if (input.jumpQueued) {
+    input.jumpQueued = false;
+    p.climbing = null;
+    p.vx = -Math.sin(p.yaw) * 3;
+    p.vz = -Math.cos(p.yaw) * 3;
+    p.x -= Math.sin(p.yaw) * 0.6;
+    p.z -= Math.cos(p.yaw) * 0.6;
+    p.grounded = false;
+    return;
+  }
+  if (p.climbT >= 1) {
+    p.climbing = null;
+    p.grounded = true;
+    useGame.getState().toast(`You reach the top.`, "info");
+  } else if (p.climbT <= 0) {
+    p.climbing = null;
+    p.y = baseY;
+    p.grounded = true;
+  }
+}
+
+function secretNear(x: number, z: number) {
+  return SECRETS.find((c) => Math.hypot(c.x - x, c.z - z) < 2.6) ?? null;
+}
+
+function guardianAlive(secret: (typeof SECRETS)[number]) {
+  if (!secret.guardian) return false;
+  return world.enemies.some((e) => e.type === secret.guardian && e.phase !== "dead");
+}
+
+function openSecret(secret: (typeof SECRETS)[number]) {
+  const s = useGame.getState();
+  if (s.secrets.includes(secret.id)) return;
+  if (guardianAlive(secret)) {
+    s.toast(`Sealed. Its guardian still stands watch.`, "bad");
+    return;
+  }
+  useGame.setState({ secrets: [...s.secrets, secret.id], gold: s.gold + secret.reward.gold, shards: s.shards + secret.reward.shards });
+  s.addItem(secret.reward.itemId);
+  s.toast(`${secret.name}: +${secret.reward.gold} embers, +${secret.reward.shards} shards`, "quest");
+  spark(secret.x, heightAt(secret.x, secret.z) + 0.2, secret.z, "#ffd27a", 3, true, 0.9);
+  sfx.quest();
+  saveNow();
+}
+
+let discoverTimer = 0;
+function stepExploration(dt: number) {
+  const p = world.player;
+  const s = useGame.getState();
+  // Resource crystals regrow; walk over to gather.
+  for (const r of RESOURCES) {
+    const regrow = world.resourceRegrow[r.id];
+    if (regrow !== undefined && world.time < regrow) continue;
+    if (Math.hypot(r.x - p.x, r.z - p.z) < 1.9 && !p.dead) {
+      world.resourceRegrow[r.id] = world.time + RESOURCE_RESPAWN;
+      useGame.setState({ shards: useGame.getState().shards + r.shards });
+      floater(r.x, heightAt(r.x, r.z) + 1.8, r.z, `+${r.shards} shard${r.shards > 1 ? "s" : ""}`, "#b9a4ff");
+      sfx.pickup();
+    }
+  }
+  discoverTimer += dt;
+  if (discoverTimer < 0.25) return;
+  discoverTimer = 0;
+  for (const w of WAYPOINTS) {
+    if (s.waypoints.includes(w.id)) continue;
+    if (Math.hypot(w.x - p.x, w.z - p.z) < 6) {
+      useGame.setState({ waypoints: [...s.waypoints, w.id] });
+      s.toast(`Waypoint found: ${w.name} — fast travel from the map (N).`, "quest");
+      spark(w.x, heightAt(w.x, w.z) + 0.2, w.z, "#9fd8ff", 4, true, 0.8);
+      sfx.quest();
+      saveNow();
+      return;
+    }
+  }
+  for (const l of LANDMARKS) {
+    if (s.landmarks.includes(l.id)) continue;
+    if (Math.hypot(l.x - p.x, l.z - p.z) < 9) {
+      useGame.setState({ landmarks: [...s.landmarks, l.id] });
+      s.openDialogue({ name: l.name, lines: l.lines });
+      return;
+    }
+  }
 }
 
 function stepDrops(dt: number) {
@@ -1642,7 +1922,17 @@ function tryInteract() {
     return;
   }
   const npc = nearestNpc();
-  if (!npc) return;
+  if (!npc) {
+    const p = world.player;
+    const climb = climbAt(p.x, p.z);
+    if (climb && !p.swimming) {
+      startClimb(climb);
+      return;
+    }
+    const secret = secretNear(p.x, p.z);
+    if (secret) openSecret(secret);
+    return;
+  }
   sfx.ui();
   if (npc.id === "sela") {
     const step = QUESTS[store.questIdx]?.steps[store.questStep];
@@ -1674,7 +1964,7 @@ function stepQuest() {
 }
 
 if (import.meta.env.DEV && typeof window !== "undefined") {
-  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone, initWorld, saveNow };
+  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone, initWorld, saveNow, fastTravel };
   (window as unknown as Record<string, unknown>)["__aetherInput"] = input;
 }
 
@@ -1704,6 +1994,8 @@ export function stepWorld(dtRaw: number) {
   stepPlayer(dt, input.yaw);
   for (const e of world.enemies) stepEnemy(e, dt);
   stepProjectiles(dt);
+  stepExploration(dt);
+  world.dayTime = (world.dayTime + dt / DAY_LENGTH) % 1;
   stepRains();
   stepDrops(dt);
   stepQuest();
@@ -1725,8 +2017,21 @@ export function stepWorld(dtRaw: number) {
     if (region) store.discoverPlace(region);
   }
   const npc = nearestNpc();
-  const prompt = npc
+  const pp = world.player;
+  const climb = !pp.climbing && !pp.swimming ? climbAt(pp.x, pp.z) : null;
+  const secret = secretNear(pp.x, pp.z);
+  const prompt = pp.climbing
+    ? "W climb · S descend · Space let go"
+    : npc
     ? `Speak with ${npc.name}`
+    : climb
+      ? `Climb the ${climb.name}`
+      : secret && !store.secrets.includes(secret.id)
+        ? guardianAlive(secret)
+          ? `${secret.name} — sealed by its guardian`
+          : `Open ${secret.name}`
+        : pp.swimming
+          ? "Swimming — head for shore to fight"
     : world.drops.some((d) => !d.taken && Math.hypot(d.x - world.player.x, d.z - world.player.z) < 3.5)
       ? "Walk over loot to pick it up"
       : null;

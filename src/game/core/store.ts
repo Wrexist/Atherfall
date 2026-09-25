@@ -23,7 +23,7 @@ export type { InvEntry, DerivedStats, Quality };
 export { xpForLevel };
 
 export type Screen = "loading" | "title" | "playing" | "paused" | "dead";
-export type JournalTab = "satchel" | "forge" | "build" | "codex";
+export type JournalTab = "satchel" | "forge" | "build" | "codex" | "map";
 
 export interface Toast {
   id: number;
@@ -61,6 +61,12 @@ export interface GameState {
   questComplete: boolean;
   barrowUnlocked: boolean;
   codex: Codex;
+  /** Discovered fast-travel waypoints. */
+  waypoints: string[];
+  /** Opened secret caches. */
+  secrets: string[];
+  /** Landmarks whose story has been read. */
+  landmarks: string[];
 
   region: string | null;
   regionId: string | null;
@@ -139,6 +145,9 @@ const INITIAL: GameState = {
   questComplete: false,
   barrowUnlocked: false,
   codex: emptyCodex(),
+  waypoints: ["emberhollow"],
+  secrets: [],
+  landmarks: [],
   region: "Emberhollow",
   regionId: "village",
   interactPrompt: null,
@@ -361,6 +370,9 @@ export const useGame = create<GameState & GameActions>((set, get) => {
       set({
         ...INITIAL,
         codex: emptyCodex(),
+        waypoints: ["emberhollow"],
+        secrets: [],
+        landmarks: [],
         equipped: { ...EMPTY_EQUIPPED },
         screen: get().screen,
         quality: get().quality,

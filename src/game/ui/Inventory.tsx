@@ -8,12 +8,14 @@ import { REGIONS } from "../world/terrain";
 import { VILLAGE_REGION, statsFor, useGame, type InvEntry, type JournalTab } from "../core/store";
 import { FORGE, abilityUnlocked, compareToEquipped, forgePreview, itemStats, salvageValue, sellValue, xpForLevel } from "../core/rules";
 import { SlotIcon } from "./Cooldowns";
+import { WorldMap } from "./WorldMap";
 
 const TABS: Array<{ id: JournalTab; label: string; key: string }> = [
   { id: "satchel", label: "Satchel", key: "I" },
   { id: "forge", label: "Forge", key: "" },
   { id: "build", label: "Build", key: "B" },
   { id: "codex", label: "Codex", key: "K" },
+  { id: "map", label: "Map", key: "N" },
 ];
 
 function itemName(e: InvEntry) {
@@ -21,7 +23,7 @@ function itemName(e: InvEntry) {
   return `${d?.name ?? e.itemId}${e.plus ? ` +${e.plus}` : ""}`;
 }
 
-function StatLine({ label, value, delta, suffix = "" }: { label: string; value: number | string; delta?: number; suffix?: string }) {
+function StatLine({ label, value, delta, suffix = "" }: { label: string; value: number | string; delta?: number | undefined; suffix?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 text-xs">
       <span className="text-[var(--parchment)]/65">{label}</span>
@@ -526,6 +528,7 @@ export function InventoryPanel() {
           {tab === "forge" && <Forge />}
           {tab === "build" && <Build />}
           {tab === "codex" && <Codex />}
+          {tab === "map" && <WorldMap />}
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@
 // Everything (rendering, physics, prop scatter, camera) samples these helpers.
 
 import * as THREE from "three";
+import { GULL_ROCK, WATCHSTONE } from "../data/world";
 
 export const WORLD_RADIUS = 112;
 export const SEA_LEVEL = 0.45;
@@ -82,6 +83,14 @@ export function heightAt(x: number, z: number): number {
   if (z > 44) {
     h -= Math.pow(z - 44, 1.45) * 0.055;
   }
+
+  // Watchstone: a lone flat-topped pillar with sheer sides (climbable vines)
+  const ws = Math.hypot(x - WATCHSTONE.x, z - WATCHSTONE.z);
+  if (ws < WATCHSTONE.radius + 1.8) h += WATCHSTONE.rise * smoothstep(WATCHSTONE.radius + 1.6, WATCHSTONE.radius, ws);
+
+  // Gull Rock: an island off Tidewrack, reachable by swimming
+  const gr = Math.hypot(x - GULL_ROCK.x, z - GULL_ROCK.z);
+  if (gr < GULL_ROCK.radius * 2) h += GULL_ROCK.rise * smoothstep(GULL_ROCK.radius * 1.6, GULL_ROCK.radius * 0.5, gr);
 
   // Rim cliffs so the world reads as enclosed
   const d = Math.hypot(x, z);
