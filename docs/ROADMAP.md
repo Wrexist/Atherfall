@@ -150,7 +150,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 
 | # | Pri | Item | Status |
 |---|-----|------|--------|
-| 80 | P1 | A second device (or a delayed request) could overwrite a newer cloud save. The database now keeps the newest save (`…_saves_keep_newest.sql`); "Keep this device's" re-stamps the save it keeps. Checked on real Postgres: fails on the old schema, passes on the new. | ✅ |
+| 80 | P1 | A second device (or a delayed request) could overwrite a newer cloud save. Saves now carry a server-owned revision (`…_saves_revision.sql`): uploads build on the revision the device last saw and are refused if another device saved since (the game stops syncing and tells the player); one device's uploads go one at a time. No device clocks involved (a first fix ordered by clock time and was rejected in review). Checked on real Postgres: 7/7, including a device with a wrong clock. | ✅ |
 | 81 | P1 | Backgrounding uploaded *before* the game made its final save, so that save waited on a timer a frozen phone never fires. Saves made while hidden now upload at once. | ✅ |
 | 82 | P1 | Pressing Continue while the cloud check was running dropped its result and turned cloud saves off for the session. The check now runs outside the title screen, the start buttons wait for it (8s max), and a "cloud is newer" question replaces them so it's never below the fold. | ✅ |
 | 83 | P2 | Damaged equipped items in a save kept a missing uid or a non-numeric `plus` (unusable item, NaN stats). They're now rebuilt like satchel items and must match their slot. | ✅ |
