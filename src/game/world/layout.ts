@@ -46,6 +46,9 @@ export interface SpawnDef {
 
 const M = 3; // cottage module size in world units
 
+/** Blocks the barrow entrance until the starter quest is done. */
+export const BARROW_GATE = { x: -46, z: 14, r: 3.6 };
+
 export const COTTAGES: CottageDef[] = [
   { x: -13, z: -4, yaw: 0.25, w: 2, d: 2, roof: "#8c4b39" },
   { x: -10, z: 9, yaw: -0.5, w: 2, d: 3, roof: "#a35c3a" },
@@ -62,6 +65,15 @@ export const NPCS: NpcDef[] = [
     x: 3.2,
     z: 3.6,
     yaw: -2.3,
+    scale: 2.1,
+  },
+  {
+    id: "smith",
+    name: "Oda the Smith",
+    model: "/models/mini/smith.glb",
+    x: 7.5,
+    z: -2.5,
+    yaw: -1.2,
     scale: 2.1,
   },
   {
@@ -91,6 +103,15 @@ export const SPAWNS: SpawnDef[] = [
   { id: "s4", type: "sentinel", x: 72, z: -48, yaw: 0.4 },
   // Miniboss
   { id: "boss", type: "thornmaw", x: 58, z: -34, yaw: 1.6 },
+  // Barrow of Lanterns (dungeon)
+  { id: "d1", type: "shade", x: -51, z: 8, yaw: -1.6 },
+  { id: "d2", type: "shade", x: -51, z: 20, yaw: -1.6 },
+  { id: "d3", type: "shade", x: -58, z: 5.5, yaw: -1.2 },
+  { id: "d4", type: "shade", x: -58, z: 22.5, yaw: -2.0 },
+  { id: "d5", type: "shade", x: -56, z: 14, yaw: -1.6 },
+  { id: "w1", type: "warden", x: -65, z: 7, yaw: 1.2 },
+  { id: "w2", type: "warden", x: -65, z: 21, yaw: 2.0 },
+  { id: "king", type: "lanternking", x: -70, z: 14, yaw: 1.57 },
 ];
 
 const TREES = [
@@ -198,6 +219,33 @@ function handmade(): PropInstance[] {
   add("/models/gy/debris.glb", rx - 3, rz - 8, 1.1, 3, 0.6, true);
   add("/models/gy/rocks-tall.glb", rx + 9, rz + 14, 0.5, 3, 1.2);
 
+  // --- Barrow of Lanterns: walled court with an east gate ---
+  const W = 3.4;
+  const x0 = -74, x1 = -46, z0 = 2, z1 = 26;
+  for (let x = x0; x <= x1 + 0.01; x += W) {
+    add("/models/dng/wall.glb", x, z0, 0, W, 1.9);
+    add("/models/dng/wall.glb", x, z1, 0, W, 1.9);
+  }
+  for (let z = z0 + W; z < z1 - 0.01; z += W) {
+    add("/models/dng/wall.glb", x0, z, 0, W, 1.9);
+    // leave a two-segment opening in the east wall for the gate
+    if (Math.abs(z - BARROW_GATE.z) > W) add("/models/dng/wall.glb", x1, z, 0, W, 1.9);
+  }
+  for (const [cx, cz] of [[-54, 10], [-54, 18], [-62, 10], [-62, 18]] as const) {
+    add("/models/dng/column.glb", cx, cz, 0, 3.4, 0.95);
+  }
+  add("/models/gy/fire-basket.glb", -48.5, 10.5, 0, 2.6, 0.6);
+  add("/models/gy/fire-basket.glb", -48.5, 17.5, 0, 2.6, 0.6);
+  add("/models/gy/fire-basket.glb", -72, 9, 0, 2.6, 0.6);
+  add("/models/gy/fire-basket.glb", -72, 19, 0, 2.6, 0.6);
+  add("/models/dng/chest.glb", -72, 14, Math.PI / 2, 3, 0.9);
+  add("/models/dng/banner.glb", -72.2, 11.5, Math.PI / 2, 3.4, 0, true);
+  add("/models/dng/banner.glb", -72.2, 16.5, Math.PI / 2, 3.4, 0, true);
+  add("/models/dng/stones.glb", -60, 24, 0.4, 3, 0, true);
+  add("/models/dng/stones.glb", -50, 4, 1.4, 3, 0, true);
+  add("/models/nature/rock_largeA.glb", -42, 5, 0.7, 3.2, 1.5);
+  add("/models/nature/rock_tallB.glb", -42, 23, 1.9, 3.2, 1.4);
+
   // --- Tidewrack Shore teaser ---
   add("/models/town/planks.glb", 9, 62, 0.1, 3.4, 0);
   add("/models/town/planks.glb", 10, 66, 0.1, 3.4, 0);
@@ -225,6 +273,7 @@ function scatter(): PropInstance[] {
     if (pathDistance(x, z) < 4.5) return;
     if (Math.hypot(x, z) < 21) return; // village square stays clear
     if (Math.hypot(x - REGIONS.ruins.x, z - REGIONS.ruins.z) < 19) return;
+    if (Math.hypot(x - REGIONS.barrow.x, z - REGIONS.barrow.z) < 24) return;
     out.push({ model, x, z, yaw: rand() * 6.28, scale, collide, detail });
   };
 
@@ -327,5 +376,9 @@ export const ALL_MODELS: string[] = Array.from(
     "/models/gy/character-zombie.glb",
     "/models/gy/character-skeleton.glb",
     "/models/gy/character-vampire.glb",
+    "/models/dng/character-orc.glb",
+    "/models/dng/gate.glb",
+    "/models/mini/ranger.glb",
+    "/models/mini/arcanist.glb",
   ]),
 );
