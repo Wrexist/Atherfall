@@ -44,6 +44,9 @@ function enterMobileFullscreen() {
   root
     .requestFullscreen({ navigationUI: "hide" })
     .then(() => {
+      // Phones only: tablets play in either orientation (the manifest stays
+      // "any" for the same reason, since it applies to every installed device).
+      if (Math.min(screen.width, screen.height) >= 600) return undefined;
       const orientation = screen.orientation as ScreenOrientation & {
         lock?: (o: string) => Promise<void>;
       };
