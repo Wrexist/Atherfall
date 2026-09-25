@@ -4,6 +4,8 @@ import { AbilityBar, CombatStates } from "./Cooldowns";
 import { EmotePicker } from "./Emotes";
 import { Tips } from "./Tips";
 import { usePresence } from "../online/presence";
+import { useAccount } from "../online/account";
+import { togglePartyPanel } from "./Party";
 import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 import { THREAT_DOT, useFinePointer, usePortrait, useThreatened } from "./layout";
@@ -265,6 +267,7 @@ function InteractPrompt({ s, className }: { s: HudState; className: string }) {
 
 /** Bag / Map / Menu / Emote on touch screens held upright: top right, away from both thumbs. */
 function PortraitMenuButtons() {
+  const signedIn = useAccount((a) => a.status === "signed-in");
   const threat = useThreatened();
   const minimap = useSettings((p) => p.minimap);
   const btn =
@@ -291,6 +294,12 @@ function PortraitMenuButtons() {
         >
           <Glyph id="map" className="h-6 w-6" />
           <span className={label}>Map</span>
+        </button>
+      )}
+      {signedIn && (
+        <button className={btn} aria-label="Party" onPointerDown={() => togglePartyPanel()}>
+          <Glyph id="party" className="h-6 w-6" />
+          <span className={label}>Party</span>
         </button>
       )}
       <button
@@ -369,6 +378,7 @@ export function Hud() {
   const s = useHudState();
   const reserve = useMinimapReserve();
   const minimap = useSettings((p) => p.minimap);
+  const signedIn = useAccount((a) => a.status === "signed-in");
   if (portrait) return <PortraitHud s={s} online={online} fine={fine} />;
 
   return (
@@ -428,27 +438,29 @@ export function Hud() {
           className={`absolute bottom-0 left-0 hidden ${s.dialogue ? "" : "[@media(pointer:fine)]:block"}`}
         >
           <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 rounded-2xl bg-[var(--panel)]/80 px-3 py-2 text-xs font-bold text-[var(--parchment)]/90 ring-2 ring-[#0b1320]/50">
-            {(s.level <= 2
-              ? [
-                  ["WASD", "move"],
-                  ["Shift", "sprint"],
-                  ["Click", "attack"],
-                  ["Space", "jump"],
-                  ["E", "talk"],
-                  [`Q`, `draught (${s.potions})`],
-                  ["F / RMB", "dodge"],
-                  ["1 2 3", "abilities"],
-                  ["I B K N", "bag, hero, codex, map"],
-                  ["V C X", "wave, cheer, sit"],
-                  ["Esc", "menu"],
-                ]
-              : [
-                  [`Q`, `draught (${s.potions})`],
-                  ["I", "bag"],
-                  ["N", "map"],
-                  ["Esc", "menu"],
-                ]
-            ).map(([k, v]) => (
+            {[
+              ...(s.level <= 2
+                ? [
+                    ["WASD", "move"],
+                    ["Shift", "sprint"],
+                    ["Click", "attack"],
+                    ["Space", "jump"],
+                    ["E", "talk"],
+                    [`Q`, `draught (${s.potions})`],
+                    ["F / RMB", "dodge"],
+                    ["1 2 3", "abilities"],
+                    ["I B K N", "bag, hero, codex, map"],
+                    ["V C X", "wave, cheer, sit"],
+                    ["Esc", "menu"],
+                  ]
+                : [
+                    [`Q`, `draught (${s.potions})`],
+                    ["I", "bag"],
+                    ["N", "map"],
+                    ["Esc", "menu"],
+                  ]),
+              ...(signedIn ? [["P", "party"]] : []),
+            ].map(([k, v]) => (
               <span key={k}>
                 <b className="text-[var(--gilt)]">{k}</b> {v}
               </span>

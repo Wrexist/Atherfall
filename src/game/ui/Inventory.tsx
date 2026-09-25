@@ -881,12 +881,15 @@ export function InventoryPanel() {
         paddingLeft: "max(0.5rem, env(safe-area-inset-left))",
         paddingRight: "max(0.5rem, env(safe-area-inset-right))",
       }}
-      onClick={() => toggle(false)}
+      // Close on a press that starts on the backdrop: the tap that opened the
+      // journal (Bag acts on finger-down) must not also close it.
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) toggle(false);
+      }}
     >
       <div
         data-testid="journal"
         className="relative flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-1 border-b-2 border-[var(--edge)]/60 bg-[var(--ink)]/35 px-1.5 py-1.5 sm:px-3">
           <div className="flex min-w-0 flex-1 gap-1">

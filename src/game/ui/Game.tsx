@@ -21,7 +21,9 @@ import {
   WebglError,
 } from "./Menus";
 import { TouchControls } from "./TouchControls";
+import { InvitePopup, PartyPanel, togglePartyPanel, usePartyPanel } from "./Party";
 import { useOnline } from "../online/useOnline";
+import { useAccount } from "../online/account";
 
 function webglAvailable() {
   try {
@@ -93,6 +95,7 @@ export function Game() {
           e.preventDefault();
           input.lockQueued = true;
         }
+        if (e.code === "KeyP" && useAccount.getState().status === "signed-in") togglePartyPanel();
         const emote = EMOTES.find((em) => em.key === e.code);
         if (emote) input.emoteQueued = emote.id;
         if (e.code === "Digit1") input.abilityQueued = 0;
@@ -101,6 +104,7 @@ export function Game() {
       }
       if (e.code === "Escape") {
         if (state.inventoryOpen) state.toggleInventory(false);
+        else if (usePartyPanel.getState().open) usePartyPanel.setState({ open: false });
         else if (state.screen === "playing") useGame.setState({ screen: "paused" });
         else if (state.screen === "paused") useGame.setState({ screen: "playing" });
       }
@@ -232,6 +236,8 @@ export function Game() {
       {overlay && <TouchControls />}
       <DialogueBox />
       <InventoryPanel />
+      <PartyPanel />
+      {overlay && <InvitePopup />}
       <PauseMenu />
       <DeathScreen />
       <TitleScreen save={save} onSaveChanged={setSave} />

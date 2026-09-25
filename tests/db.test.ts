@@ -232,3 +232,32 @@ describe("parties", () => {
     expect((await attempt("", `select public.invite_to_party('${U.Rowan}')`)).ok).toBe(false);
   });
 });
+
+describe("party invite list", () => {
+  const live = (who: Name) =>
+    as(who, "select id, from_name, seconds_left from public.my_party_invites()").then(
+      (r) => r.rows,
+    );
+
+  test("shows only live, unanswered invites to you, with the inviter's name and time left", async () => {
+    await db.exec(
+      "delete from public.party_members; delete from public.parties; delete from public.party_invites;",
+    );
+    const a = await as("Ash", `select public.invite_to_party('${U.Bram}') as id`);
+    const b = await as("Kess", `select public.invite_to_party('${U.Bram}') as id`);
+    const c = await as("Mira", `select public.invite_to_party('${U.Bram}') as id`);
+    await as("Bram", `select public.decline_invite('${b.rows[0]!["id"]}')`);
+    await db.exec(
+      `update public.party_invites set expires_at = now() - interval '1 second' where id = '${c.rows[0]!["id"]}'`,
+    );
+    const rows = await live("Bram");
+    expect(rows.map((r) => r["id"])).toEqual([a.rows[0]!["id"]]);
+    expect(rows[0]!["from_name"]).toBe("Ash");
+    const left = Number(rows[0]!["seconds_left"]);
+    expect(left).toBeGreaterThan(100);
+    expect(left).toBeLessThanOrEqual(120);
+    expect(await live("Ash")).toEqual([]); // the inviter's own invite isn't "to" them
+    const signedOut = await attempt("", "select * from public.my_party_invites()");
+    expect(signedOut.ok ? signedOut.rows : []).toEqual([]);
+  });
+});

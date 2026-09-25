@@ -4,6 +4,7 @@ import { useGame } from "../core/store";
 import { initAccount, useAccount } from "./account";
 import { onlineConfigured } from "./client";
 import { dropPendingUpload, queueUpload, setBackgrounded, useCloudSync } from "./cloudSave";
+import { startParties } from "./party";
 import { joinWorld, leaveWorld, updateMeta } from "./presence";
 
 /**
@@ -46,6 +47,12 @@ export function useOnline() {
   useEffect(() => {
     if (status === "signed-out") dropPendingUpload();
   }, [status]);
+
+  // Parties follow the signed-in player (and reset on sign-out).
+  useEffect(() => {
+    if (!onlineConfigured || status !== "signed-in" || !userId) return undefined;
+    return startParties();
+  }, [status, userId]);
 
   // Another device saved mid-session: say so in the game, not just on the title screen.
   useEffect(

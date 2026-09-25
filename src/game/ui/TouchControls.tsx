@@ -5,6 +5,8 @@ import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
 import { EmotePicker } from "./Emotes";
 import { THREAT_DOT, usePortrait, useThreatened } from "./layout";
+import { useAccount } from "../online/account";
+import { togglePartyPanel } from "./Party";
 import { Glyph } from "./kit";
 
 const KNOB = 52;
@@ -304,6 +306,7 @@ export function TouchControls() {
   const lefty = useSettings((s) => s.leftHanded);
   const portrait = usePortrait();
   const threat = useThreatened();
+  const signedIn = useAccount((a) => a.status === "signed-in");
   /** Left-handed: everything mirrored left to right. */
   const ang = (a: number) => (lefty ? 180 - a : a);
 
@@ -451,6 +454,9 @@ export function TouchControls() {
             className={threat ? `relative ${THREAT_DOT}` : ""}
             onPress={() => useGame.getState().toggleInventory(true, "map")}
           />
+          {signedIn && (
+            <TouchButton label="Party" size="h-11 w-14 !rounded-xl" onPress={() => togglePartyPanel()} />
+          )}
           <TouchButton
             label="Menu"
             size="h-11 w-14 !rounded-xl"

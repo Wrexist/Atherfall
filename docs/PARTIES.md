@@ -87,8 +87,8 @@ Invite popup: centred, big buttons, auto-dismisses after 30 s. A **"Party invite
 
 ## Build order (each a small, tested PR)
 
-1. **Database:** tables, security rules and functions, with a Postgres test script like the saves one (fake invites refused, non-members can't join the channel).
-2. **Party state and invites in the game:** Party button, invite list from presence, invite popup, leave and remove.
+1. ✅ **Database:** tables, security rules and functions, with a Postgres test script like the saves one (fake invites refused, non-members can't join the channel).
+2. ✅ **Party state and invites in the game:** Party button, invite list from presence, invite popup, leave and remove. Which invites are live, and for how long, comes from the server's clock (`my_party_invites()`), because a phone's clock can be minutes off.
 3. **Party channel:** HUD frames and health.
 4. **Shared kill credit and XP,** with unit tests for the four fairness rules.
 
