@@ -8,8 +8,8 @@ export type CameraMode = "top" | "behind";
 
 /** Top view heading: the camera sits south of the player, looking north. */
 export const TOP_YAW = Math.PI;
-/** Top view tilt above the horizon, radians (~57°). */
-export const TOP_PITCH = 1.0;
+/** Top view tilt above the horizon, radians (~52°): low enough to see the village ahead. */
+export const TOP_PITCH = 0.9;
 /** Width of world the top view keeps across any screen shape, degrees. */
 export const TOP_HFOV = 42;
 /** Vertical field of view range for the top view, degrees. */
@@ -51,7 +51,7 @@ export interface TopFraming {
 export function topFraming(aspect: number): TopFraming {
   const fov = Math.min(TOP_VFOV_MAX, Math.max(TOP_VFOV_MIN, verticalFov(TOP_HFOV, aspect)));
   const upright = aspect < 1;
-  return { fov, distance: upright ? 15.5 : 21, lookAhead: upright ? 2.4 : 0.6 };
+  return { fov, distance: upright ? 11.5 : 15.5, lookAhead: upright ? 2.0 : 0.6 };
 }
 
 /** Field of view for a camera mode on a screen of this aspect (width / height). */

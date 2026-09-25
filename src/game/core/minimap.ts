@@ -1,7 +1,7 @@
 // Minimap geometry, kept free of the DOM so it can be tested.
 
 /** Minimap width in CSS pixels at size 1. */
-export const MINIMAP_BASE_PX = 112;
+export const MINIMAP_BASE_PX = 100;
 /** World metres from the centre to the edge at zoom 1. */
 export const MINIMAP_RADIUS_M = 34;
 

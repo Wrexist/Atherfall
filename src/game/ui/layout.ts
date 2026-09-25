@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { inCombat } from "../core/sim";
+import { inCombat, world } from "../core/sim";
 
 /** Tracks a media query (false during SSR and the first render). */
 function useMedia(query: string) {
@@ -36,6 +36,23 @@ export function useThreatened() {
     return () => clearInterval(iv);
   }, []);
   return threat;
+}
+
+/** Enemies close enough to fight (or one locked on): the Target button only shows then. */
+export const NEAR_ENEMY_M = 18;
+export function enemiesNear(px: number, pz: number, enemies: readonly { x: number; z: number; hp: number }[], locked: boolean) {
+  return locked || enemies.some((e) => e.hp > 0 && Math.hypot(e.x - px, e.z - pz) < NEAR_ENEMY_M);
+}
+export function useEnemiesNear() {
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const iv = setInterval(
+      () => setNear(enemiesNear(world.player.x, world.player.z, world.enemies, !!world.lockId)),
+      250,
+    );
+    return () => clearInterval(iv);
+  }, []);
+  return near;
 }
 
 /** A pulsing red dot for a button whose screen hides an ongoing fight. */

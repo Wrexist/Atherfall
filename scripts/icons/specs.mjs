@@ -97,4 +97,29 @@ export const ICONS = [
     pad: 1.0,
   },
   { id: "arcanist", dir: "classes", file: `${ADV}/Mage.glb`, mesh: "2H_Staff", rot: [10, 25, -40] },
+  // Class portraits for the player frame: the head as the camera sees it.
+  {
+    id: "vanguard",
+    dir: "portraits",
+    file: `${ADV}/Knight.glb`,
+    mesh: "Knight_Helmet",
+    rot: [8, -18, 0],
+    pad: 1.02,
+  },
+  {
+    id: "ranger",
+    dir: "portraits",
+    file: `${ADV}/Rogue_Hooded.glb`,
+    mesh: "Rogue_Head_Hooded",
+    rot: [8, -18, 0],
+    pad: 1.02,
+  },
+  {
+    id: "arcanist",
+    dir: "portraits",
+    file: `${ADV}/Mage.glb`,
+    mesh: "Mage_Head",
+    rot: [8, -18, 0],
+    pad: 1.02,
+  },
 ];

@@ -18,6 +18,8 @@ export const CLASS_TONE: Record<ArchetypeId, string> = {
   arcanist: "#8fb8ff",
 };
 export const classIconUrl = (id: ArchetypeId) => assetUrl(`/icons/classes/${id}.png`);
+/** The head as the camera sees it, for the player frame. */
+export const portraitUrl = (id: ArchetypeId) => assetUrl(`/icons/portraits/${id}.png`);
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────
 
@@ -91,6 +93,23 @@ const GLYPHS = {
     d: "M5.6 4.2 12 10.6l6.4-6.4 1.4 1.4-6.4 6.4 6.4 6.4-1.4 1.4-6.4-6.4-6.4 6.4-1.4-1.4 6.4-6.4-6.4-6.4 1.4-1.4Z",
   },
   check: { fill: "#ffffff", d: "M9.5 16.2 4.8 11.5l-1.6 1.6 6.3 6.3L21 7.9l-1.6-1.6-9.9 9.9Z" },
+  potion: {
+    fill: "#ff3b4a",
+    d: "M9 2h6v2h-1v3.2a7 7 0 1 1-4 0V4H9V2Zm-2.9 12a5.9 5.9 0 0 0 11.8 0H6.1Z",
+  },
+  swoosh: {
+    fill: "#e8eef7",
+    d: "M5 19 15.6 8.4H10V6h9.6v9.6h-2.4v-5.6L6.6 20.6 5 19ZM3 12l5-5h2.4l-5 5H3Zm5 7 5-5v2.4L10.4 19H8Z",
+  },
+  up: { fill: "#e8eef7", d: "M12 3 4 12h5v9h6v-9h5L12 3Z" },
+  crosshair: {
+    fill: "#e8eef7",
+    d: "M11 2h2v3.1A7 7 0 0 1 18.9 11H22v2h-3.1A7 7 0 0 1 13 18.9V22h-2v-3.1A7 7 0 0 1 5.1 13H2v-2h3.1A7 7 0 0 1 11 5.1V2Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z",
+  },
+  sword: {
+    fill: "#e8eef7",
+    d: "M20.5 2.5 21.5 3.5 20 9 11 18l1.5 1.5-1.4 1.4-2.2-2.2-2.8 2.8-1.6-1.6 2.8-2.8-2.2-2.2 1.4-1.4L8 14l9-9 3.5-2.5Z",
+  },
   gear: {
     fill: "#c8d3e2",
     d: "M10.3 2h3.4l.5 2.6a7.7 7.7 0 0 1 1.9 1.1l2.5-.9 1.7 2.9-2 1.7a7.7 7.7 0 0 1 0 2.2l2 1.7-1.7 2.9-2.5-.9a7.7 7.7 0 0 1-1.9 1.1l-.5 2.6h-3.4l-.5-2.6a7.7 7.7 0 0 1-1.9-1.1l-2.5.9-1.7-2.9 2-1.7a7.7 7.7 0 0 1 0-2.2l-2-1.7 1.7-2.9 2.5.9a7.7 7.7 0 0 1 1.9-1.1l.5-2.6ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z",
