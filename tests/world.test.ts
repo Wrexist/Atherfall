@@ -25,6 +25,17 @@ function calmEnemies() {
   }
 }
 /** Walk toward a target with camera-relative input (camera yaw faces the target). */
+function walkRoute(pts: Array<[number, number]>, maxSec = 60) {
+  const regions = new Set<string>();
+  let reached = false;
+  for (const [x, z] of pts) {
+    const r = walkTo(x, z, maxSec);
+    r.regions.forEach((v) => regions.add(v));
+    reached = r.reached;
+    if (!reached) break;
+  }
+  return { reached, regions };
+}
 function walkTo(x: number, z: number, maxSec = 60) {
   const p = world.player;
   const regions = new Set<string>();
@@ -54,11 +65,12 @@ beforeEach(() => {
 describe("region boundaries", () => {
   test("walk from the village into the woods, the ruins and down to the shore without menus", () => {
     calmEnemies();
-    const woods = walkTo(REGIONS.woods.x, REGIONS.woods.z + 10, 40);
+    // Follow the village roads like a player would.
+    const woods = walkRoute([[0, 8], [1, -10], [-3, -28], [-6, -44]], 30);
     expect(woods.reached).toBe(true);
     expect(woods.regions.has("woods")).toBe(true);
-    put(4, -10);
-    const ruins = walkTo(50, -26, 40);
+    put(6, 2);
+    const ruins = walkRoute([[22, -6], [38, -16], [50, -26]], 30);
     expect(ruins.reached).toBe(true);
     expect(ruins.regions.has("ruins")).toBe(true);
     put(2, 10);
@@ -70,7 +82,7 @@ describe("region boundaries", () => {
   test("the starter 'reach the woods' step triggers on arrival", () => {
     calmEnemies();
     useGame.setState({ questIdx: 0, questStep: 1 });
-    walkTo(REGIONS.woods.x, REGIONS.woods.z + 12, 40);
+    walkRoute([[0, 8], [1, -10], [-3, -28], [-6, -44]], 30);
     expect(useGame.getState().questStep).toBe(2);
   });
 

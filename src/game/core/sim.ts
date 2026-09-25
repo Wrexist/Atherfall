@@ -1223,10 +1223,14 @@ function stepPlayer(dt: number, camYaw: number) {
   resolveCollisions(p, 0.55);
   // Sheer rock (the Watchstone, world rim) can't be walked up — use climb routes.
   {
-    const gNew = heightAt(p.x, p.z);
-    const gOld = heightAt(beforeX, beforeZ);
+    // Measure the grade over a fixed probe so slow creeping can't sneak up a cliff.
     const run = Math.hypot(p.x - beforeX, p.z - beforeZ);
-    if (gNew - gOld > 0.05 && gNew - gOld > run * MAX_GRADE && gNew > p.y + 0.3) {
+    const probe = 0.5;
+    const ax = run > 1e-5 ? beforeX + ((p.x - beforeX) / run) * probe : beforeX;
+    const az = run > 1e-5 ? beforeZ + ((p.z - beforeZ) / run) * probe : beforeZ;
+    const gOld = heightAt(beforeX, beforeZ);
+    const gAhead = heightAt(ax, az);
+    if (run > 1e-5 && gAhead - gOld > probe * MAX_GRADE && gAhead > p.y + 0.2) {
       p.x = beforeX;
       p.z = beforeZ;
       p.vx *= -0.1;
