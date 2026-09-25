@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import * as THREE from "three";
-import { SEA_LEVEL, WORLD_RADIUS, groundColor, heightAt } from "../world/terrain";
+import { WORLD_RADIUS, groundColor, heightAt } from "../world/terrain";
 import { groundDetailTexture } from "./groundTexture";
+import { Water } from "./Water";
 
 /** World units per repeat of the painted detail texture. */
 const DETAIL_TILE = 9;
@@ -53,20 +54,7 @@ export function Terrain({
           <meshStandardMaterial vertexColors map={detail} roughness={0.95} metalness={0} />
         )}
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[6, SEA_LEVEL, 96]}>
-        <planeGeometry args={[340, 220]} />
-        {lite ? (
-          <meshLambertMaterial color="#2f7f88" transparent opacity={0.82} />
-        ) : (
-          <meshStandardMaterial
-            color="#2f7f88"
-            transparent
-            opacity={0.82}
-            roughness={0.25}
-            metalness={0.15}
-          />
-        )}
-      </mesh>
+      <Water />
     </>
   );
 }

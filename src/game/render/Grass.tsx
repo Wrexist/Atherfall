@@ -135,7 +135,7 @@ interface Spot {
 function open(x: number, z: number) {
   if (Math.hypot(x, z) > 104) return false;
   if (slopeAt(x, z) > 0.45) return false;
-  if (heightAt(x, z) < 1.2) return false; // no grass on the beach or in water
+  if (heightAt(x, z) < SEA_LEVEL + 2.2) return false; // none in the water or on the sand
   if (pathDistance(x, z) < 2.1) return false; // roads stay worn
   if (Math.hypot(x, z) < 6.5) return false; // the fountain square
   for (const c of COLLIDERS) {
