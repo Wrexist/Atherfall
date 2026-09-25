@@ -35,8 +35,32 @@ describe("asset paths", () => {
       }
     };
     walk(join(import.meta.dir, "../src"));
-    const direct = /(useGLTF(?:\.preload)?|\.register)\(\s*["'`]\/(?!\/)|href:\s*["'`]\/(?!\/)/;
-    const offenders = files.filter((f) => direct.test(readFileSync(f, "utf8")));
+    const direct =
+      /(useGLTF(?:\.preload)?|\.register)\(\s*["'`]\/(?!\/)|(href:|src=)\s*["'`{]*\/(?!\/)/;
+    const offenders = files.filter((f) => {
+      const text = readFileSync(f, "utf8");
+      // Icons in public/icons must go through assetUrl() on the same line.
+      const bareIcon = text
+        .split("\n")
+        .some((line) => /["'`]\/icons\//.test(line) && !line.includes("assetUrl("));
+      return direct.test(text) || bareIcon;
+    });
     expect(offenders).toEqual([]);
   }, 30_000); // reads every source file; slow on a cold disk
+});
+
+describe("icons", () => {
+  test("every item and class has its icon in public/icons", async () => {
+    const { existsSync } = await import("node:fs");
+    const { ITEMS } = await import("../src/game/data/items");
+    const { ARCHETYPE_LIST } = await import("../src/game/data/archetypes");
+    const root = join(import.meta.dir, "../public/icons");
+    const missing = [
+      ...Object.keys(ITEMS).filter((id) => !existsSync(join(root, "items", `${id}.png`))),
+      ...ARCHETYPE_LIST.filter((a) => !existsSync(join(root, "classes", `${a.id}.png`))).map(
+        (a) => a.id,
+      ),
+    ];
+    expect(missing).toEqual([]);
+  });
 });

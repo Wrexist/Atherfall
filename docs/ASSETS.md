@@ -52,6 +52,24 @@ KayKit Medieval pieces are sized for a hex board (a house is about 1 unit), so t
 
 Delete the `CHARACTERS` entry and the output `.glb`, remove its `RIGS` line, and point the data back at another model. If no KayKit model is left, also delete `animations.glb`, the script and the four dev dependencies.
 
+## Icons
+
+`public/icons/items/<item id>.png` and `public/icons/classes/<class id>.png` are **generated**: 3D pieces lit, framed and outlined like game icons, so they match the world's art. Weapons, armour and the skull idol come from the KayKit packs above (CC0). Rings, charms, the pearl, crystals, the heartseed and the crown are simple shapes built in `scripts/icons/page.js`. Each icon is 128×128, about 10 KB.
+
+```sh
+node scripts/models/build-kaykit.mjs          # once: fetches the packs into .cache/kaykit
+node scripts/icons/render-icons.mjs [ids] --sheet sheet.png
+```
+
+The renderer needs Playwright with Chromium. If it isn't installed in this project, point `PLAYWRIGHT` at another copy's `index.mjs`. `--sheet` also saves a labelled contact sheet for checking the icons by eye.
+
+- **New item:** add a line to `scripts/icons/specs.mjs` (a pack piece, or a `proc` shape), render it, and commit the PNG. `tests/assets.test.ts` fails if any item or class has no icon. Until the icon exists the game shows an empty tile.
+- **Removing it:** delete `scripts/icons/` and the tiles show empty. The PNGs stand on their own.
+
+## Fonts
+
+Lilita One (headings) and Nunito (text), both SIL Open Font License, loaded from Google Fonts in `src/routes/__root.tsx`. The service worker caches them for offline play.
+
 ## Size budget
 
 The whole `public/` folder is cached by the service worker for offline play, so every kilobyte is a download on mobile data. Rough targets:

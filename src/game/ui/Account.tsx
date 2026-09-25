@@ -21,13 +21,13 @@ import {
   type LocalSaves,
 } from "../online/cloudSave";
 import { usePresence } from "../online/presence";
+import { BTN } from "./kit";
 
+// 16px text in inputs: smaller makes iPhones zoom in on focus.
 const input =
-  "mt-1 block min-h-11 w-full rounded-lg border border-[var(--gilt)]/30 bg-[var(--ink)]/70 px-3 text-base text-[var(--parchment)] outline-none focus:border-[var(--gilt)]/70";
-const primary =
-  "min-h-11 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35 disabled:opacity-50";
-const secondary =
-  "min-h-11 rounded-lg border border-[var(--gilt)]/25 px-4 text-sm text-[var(--parchment)]/85 hover:bg-[var(--ink)]/40";
+  "mt-1 block min-h-12 w-full rounded-xl border-2 border-[var(--edge)] bg-[var(--ink)]/70 px-3 text-base font-semibold text-[var(--parchment)] outline-none focus:border-[var(--gilt)]";
+const primary = BTN.primary;
+const secondary = BTN.secondary;
 
 /** One line for the title screen / pause menu: who you are, or an invitation to sign in. */
 export function AccountLine({ onOpen }: { onOpen?: () => void }) {
@@ -120,11 +120,11 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] p-5 text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
       >
         {mode === "reset" ? (
           <div>
-            <h2 className="font-display text-sm tracking-[0.18em] text-[var(--gilt)]">
+            <h2 className="font-display text-xl tracking-wide text-[var(--gilt)] text-outline">
               RESET PASSWORD
             </h2>
             <p className="mt-1 text-xs text-[var(--parchment)]/70">
@@ -132,16 +132,17 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
             </p>
           </div>
         ) : (
-          <div className="flex gap-1">
+          <div className="flex gap-1 rounded-full bg-[var(--ink)]/60 p-1">
             {(["signin", "signup"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setMode(m)}
-                className={`min-h-11 flex-1 rounded-md font-display text-xs tracking-[0.15em] ${
+                aria-pressed={mode === m}
+                className={`min-h-11 flex-1 rounded-full font-display text-sm tracking-wide ${
                   mode === m
-                    ? "bg-[var(--gilt)]/25 text-[var(--parchment)]"
-                    : "text-[var(--parchment)]/70"
+                    ? "bg-gradient-to-b from-[#ffd970] to-[#f2a93b] text-[#3a2206]"
+                    : "text-[var(--parchment)]/75"
                 }`}
               >
                 {m === "signin" ? "SIGN IN" : "CREATE ACCOUNT"}
@@ -151,7 +152,7 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
         )}
 
         {mode === "signup" && (
-          <label className="mt-4 block text-sm text-[var(--parchment)]/85">
+          <label className="mt-4 block text-sm font-bold text-[var(--parchment)]/90">
             Player name{" "}
             <span className="text-xs text-[var(--parchment)]/60">(what others see)</span>
             <input
@@ -166,7 +167,7 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
             {nameHint && <span className="mt-1 block text-xs text-[#f0a595]">{nameHint}</span>}
           </label>
         )}
-        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+        <label className="mt-3 block text-sm font-bold text-[var(--parchment)]/90">
           Email
           <input
             className={input}
@@ -179,7 +180,7 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
           />
         </label>
         {mode !== "reset" && (
-          <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+          <label className="mt-3 block text-sm font-bold text-[var(--parchment)]/90">
             Password
             <input
               className={input}
@@ -251,9 +252,17 @@ export function NewPasswordDialog() {
   if (!recovering) return null;
   const mismatch = again.length > 0 && again !== password;
   return (
-    <div className="fixed inset-0 z-[56] flex items-center justify-center bg-[var(--ink)]/85 p-4">
+    <div
+      className="fixed inset-0 z-[56] flex items-center justify-center bg-[var(--ink)]/85 p-4"
+      style={{
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+      }}
+    >
+      {/* Capped and scrollable like the account form: with the keyboard up on a
+          small phone, Save must stay reachable. */}
       <form
-        className="w-full max-w-md rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] p-5 text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
         onSubmit={async (e) => {
           e.preventDefault();
           if (mismatch) return;
@@ -261,10 +270,10 @@ export function NewPasswordDialog() {
           await setNewPassword(password);
         }}
       >
-        <h2 className="font-display text-sm tracking-[0.18em] text-[var(--gilt)]">
+        <h2 className="font-display text-xl tracking-wide text-[var(--gilt)] text-outline">
           CHOOSE A NEW PASSWORD
         </h2>
-        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+        <label className="mt-3 block text-sm font-bold text-[var(--parchment)]/90">
           New password
           <input
             className={input}
@@ -276,7 +285,7 @@ export function NewPasswordDialog() {
             required
           />
         </label>
-        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+        <label className="mt-3 block text-sm font-bold text-[var(--parchment)]/90">
           Type it again
           <input
             className={input}
@@ -344,7 +353,7 @@ export function CloudSaveChoice({ local }: { local: LocalSaves }) {
   const choice = useCloudSync((c) => c.choice);
   if (!choice) return null;
   return (
-    <div className="mt-4 rounded-lg border border-[var(--gilt)]/40 bg-[var(--ink)]/50 p-3">
+    <div className="mt-4 rounded-2xl border-2 border-[var(--gilt)] bg-[var(--panel-2)] p-3">
       <p className="text-sm font-semibold text-[var(--parchment)]">
         Your cloud save is newer than this device's.
       </p>

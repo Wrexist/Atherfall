@@ -230,7 +230,7 @@ export function Game() {
   if (webgl === false) return <WebglError />;
 
   return (
-    <div ref={shellRef} className="fixed inset-0 overflow-hidden bg-[var(--ink)] touch-none">
+    <div ref={shellRef} id="game-shell" className="fixed inset-0 overflow-hidden bg-[var(--ink)] touch-none">
       <GameCanvas />
       {overlay && <Hud />}
       {overlay && <TouchControls />}

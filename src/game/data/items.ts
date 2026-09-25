@@ -48,10 +48,10 @@ export interface ItemDef {
 }
 
 export const RARITY_COLOR: Record<Rarity, string> = {
-  common: "#cbbfa6",
-  uncommon: "#8fd18a",
-  rare: "#7fc4ef",
-  epic: "#d8a44f",
+  common: "#c3cbd6",
+  uncommon: "#6ee06a",
+  rare: "#4fb0ff",
+  epic: "#ffb23f",
 };
 
 export const RARITY_LABEL: Record<Rarity, string> = {
