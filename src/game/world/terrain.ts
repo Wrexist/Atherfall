@@ -149,7 +149,9 @@ const _c = new THREE.Color();
 export function groundColor(x: number, z: number, h: number, out = _c): THREE.Color {
   const slope = slopeAt(x, z);
   const forestT = Math.min(1, gauss(x - REGIONS.woods.x, z - REGIONS.woods.z, 40) * 1.4);
-  out.copy(GRASS).lerp(GRASS_DRY, 0.5 + 0.5 * Math.sin(x * 0.09 + z * 0.07));
+  // Organic light and dark meadow patches, like a painted ground.
+  const patch = 0.5 + 0.5 * Math.sin(x * 0.11 + Math.sin(z * 0.19) * 1.8) * Math.cos(z * 0.09 - x * 0.04);
+  out.copy(GRASS).lerp(GRASS_DRY, patch);
   out.lerp(FOREST, forestT * 0.75);
 
   // Beach band around sea level

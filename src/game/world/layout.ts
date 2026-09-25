@@ -140,6 +140,10 @@ const SIZE_FIX: Record<string, number> = {
   [K("rock_E")]: 2.4,
   [K("rock_C")]: 3.0,
   [K("rock_D")]: 3.2,
+  [K("rock_A")]: 2.6,
+  [K("rock_B")]: 2.4,
+  "/models/nature/plant_bushDetailed.glb": 1.25,
+  "/models/nature/stump_old.glb": 0.8,
 };
 
 /** One in four trees is an autumn pine, for colour. */
@@ -154,12 +158,13 @@ const TREES = [
   K("pine_orange"),
 ];
 
+/** Walk-through undergrowth (grass tufts and flowers are drawn separately, see render/Grass.tsx). */
 const SMALL = [
-  "/models/nature/grass.glb",
-  "/models/nature/grass_large.glb",
   "/models/nature/plant_bushDetailed.glb",
-  "/models/nature/flower_yellowA.glb",
-  "/models/nature/flower_purpleB.glb",
+  K("rock_A"),
+  "/models/nature/plant_bushDetailed.glb",
+  K("rock_B"),
+  "/models/nature/stump_old.glb",
   "/models/nature/mushroom_redGroup.glb",
 ];
 

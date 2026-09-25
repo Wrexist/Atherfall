@@ -33,6 +33,8 @@ import { WorldObjects } from "./WorldObjects";
 import { QuestMarker } from "./QuestMarker";
 import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
+import { Meadow } from "./Grass";
+import { SlashTrail } from "./Slash";
 
 /** Every model file the scene can show, so all downloads start together. */
 export const MODEL_URLS = Array.from(
@@ -187,7 +189,9 @@ export function Scene() {
         />
       ))}
 
+      <Meadow quality={quality} shadows={q.shadows} />
       <PlayerView />
+      <SlashTrail />
       <EnemyViews />
       <NpcViews />
       <DropViews />
