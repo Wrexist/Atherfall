@@ -3,7 +3,7 @@ import { onSave } from "../core/sim";
 import { useGame } from "../core/store";
 import { initAccount, useAccount } from "./account";
 import { onlineConfigured } from "./client";
-import { dropPendingUpload, queueUpload, setBackgrounded } from "./cloudSave";
+import { dropPendingUpload, queueUpload, setBackgrounded, useCloudSync } from "./cloudSave";
 import { joinWorld, leaveWorld, updateMeta } from "./presence";
 
 /**
@@ -46,6 +46,16 @@ export function useOnline() {
   useEffect(() => {
     if (status === "signed-out") dropPendingUpload();
   }, [status]);
+
+  // Another device saved mid-session: say so in the game, not just on the title screen.
+  useEffect(
+    () =>
+      useCloudSync.subscribe((now, before) => {
+        if (now.phase === "conflict" && before.phase !== "conflict" && now.message)
+          useGame.getState().toast(now.message, "bad");
+      }),
+    [],
+  );
 
   // Be in the shared world while in the game, signed in and on screen.
   const [visible, setVisible] = useState(true);
