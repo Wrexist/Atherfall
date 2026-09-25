@@ -122,10 +122,12 @@ export function setBackgrounded(hidden: boolean) {
 
 /**
  * Upload the pending save now (app going to the background, sign-out, …).
- * One upload at a time, each on top of the revision the last one produced, so
- * a slow request can never land after (and undo) a newer one.
+ * Every upload, the title screen's included, goes through here: one at a
+ * time, each on top of the revision the last one produced, so a slow request
+ * can never land after (and undo) a newer one, or look like another device.
+ * Resolves with this call's result (null if there was nothing to send).
  */
-export async function flushUpload() {
+export async function flushUpload(): Promise<UploadResult | null> {
   if (timer) {
     clearTimeout(timer);
     timer = null;
@@ -134,10 +136,12 @@ export async function flushUpload() {
   const save = pending;
   const user = syncedUser;
   pending = null;
-  if (!save || !user) return;
+  if (!save || !user) return null;
   lastUpload = Date.now();
+  let result: UploadResult | null = null;
   const mine = (async () => {
     const r = await cloud.upload(save, revision);
+    result = r;
     if (syncedUser !== user) return; // signed out meanwhile
     if (r.ok) revision = r.revision;
     else if (r.conflict) stopForConflict();
@@ -149,6 +153,7 @@ export async function flushUpload() {
   } finally {
     if (inFlight === mine) inFlight = null;
   }
+  return result;
 }
 
 /** Another device saved to the cloud: keep playing locally, never overwrite it. */
@@ -199,14 +204,16 @@ export interface LocalSaves {
   adopt: (save: SaveFile) => void;
 }
 
-/** Upload during reconciliation; a conflict here means the cloud changed while we looked. */
+/**
+ * Upload during reconciliation, through the same one-at-a-time queue as play:
+ * if the player starts before it lands, their first saves wait behind it
+ * (a conflict here means the cloud really did change while we looked).
+ */
 async function reconcileUpload(save: SaveFile, base: number, userId: string) {
   markSynced(userId, base);
-  const r = await cloud.upload(save, base);
-  if (syncedUser !== userId) return false;
-  if (r.ok) revision = r.revision;
-  else if (r.conflict) stopForConflict();
-  return r.ok;
+  pending = save;
+  const r = await flushUpload();
+  return syncedUser === userId && !!r?.ok;
 }
 
 /**
