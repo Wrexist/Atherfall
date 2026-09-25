@@ -6,6 +6,7 @@ import { ITEMS, MODIFIERS, RARITY_COLOR, RARITY_LABEL, RARITY_ORDER, SLOTS, SLOT
 import { QUESTS } from "../data/quests";
 import { REGIONS } from "../world/terrain";
 import { VILLAGE_REGION, statsFor, useGame, type InvEntry, type JournalTab } from "../core/store";
+import { saveNow } from "../core/sim";
 import { FORGE, abilityUnlocked, compareToEquipped, forgePreview, itemStats, salvageValue, sellValue, xpForLevel } from "../core/rules";
 import { SlotIcon } from "./Cooldowns";
 import { WorldMap } from "./WorldMap";
@@ -311,7 +312,10 @@ function Forge() {
           <button
             data-testid="forge-upgrade"
             disabled={!preview.canUpgrade || !inVillage}
-            onClick={() => s.forge(chosen.uid)}
+            onClick={() => {
+              s.forge(chosen.uid);
+              saveNow(); // a failed forge can't be undone by reloading
+            }}
             className="mt-3 w-full rounded-md border border-[var(--gilt)]/60 bg-[var(--gilt)]/20 px-3 py-2 text-sm font-semibold text-[var(--parchment)] disabled:opacity-40"
           >
             {!inVillage ? "Visit Oda in Emberhollow" : preview.canUpgrade ? `Upgrade for ${preview.cost.gold} embers + ${preview.cost.shards} shards` : preview.reason}

@@ -107,21 +107,21 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
 | 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |
 
-## Phase 4 — Remaining gameplay bugs
+## Phase 4 — Remaining gameplay bugs ✅ (tests in `tests/regressions.test.ts` and `tests/world.test.ts`)
 
-| # | Pri | Item |
-|---|-----|------|
-| 53 | P2 | A thorns kill during a boss charge can leave a zombie boss (double loot). Add `if (e.phase === "dead") return` after `damagePlayer` in `stepEnemy`. |
-| 54 | P2 | `damagePlayer` writes HP from a stale store read, which can erase lifesteal or level-up heals. |
-| 55 | P2 | A boss that resets keeps phase 2. |
-| 56 | P2 | Shard nodes: regrow timers aren't reset on a new game and aren't saved, so reloading refills them. |
-| 57 | P2 | Fixed RNG seed on every load, plus forging doesn't save at once: loot, crits and forge rolls can be save-scummed. |
-| 58 | P2 | ✅ Pressing E mid-climb restarted the climb (fixed, with a test). |
-| 59 | P2 | Ability numbers are hardcoded in the sim instead of read from data (ward 0.4, heal, haste 1.3, slow 0.45). |
-| 60 | P2 | Any hit cancels Emberburst or Frost Nova but still spends the cooldown. |
-| 61 | P2 | The drop cap deletes the oldest *untaken* loot, and drops never despawn. |
-| 62 | P2 | Leash exploit: returning enemies can be hit but never fight back. |
-| 63 | P2 | Blink skips the steep-slope check, so the Arcanist can skip the Watchstone climb. |
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 53 | P2 | A thorns kill at the end of a boss charge left a zombie boss (double loot). | ✅ |
+| 54 | P2 | `damagePlayer` wrote HP from a stale store read, erasing lifesteal or level-up heals triggered by thorns. | ✅ |
+| 55 | P2 | A boss that resets now returns to its calm first phase. | ✅ |
+| 56 | P2 | Shard nodes reset for a new game. **Still to do:** regrow timers aren't saved, so reloading refills the 6 nodes (small payoff). | ◐ |
+| 57 | P2 | Each session gets a fresh random seed (tests keep the fixed one), and forging saves at once, so rolls can't be save-scummed. | ✅ |
+| 58 | P2 | Pressing E mid-climb restarted the climb. | ✅ |
+| 59 | P2 | Ward, heal, haste and slow numbers are now read from `combat.ts` data. | ✅ |
+| 60 | P2 | Ability casts have armour: a hit no longer cancels Emberburst or Frost Nova after the cooldown is spent. | ✅ |
+| 61 | P2 | Unclaimed loot fades (coin after 3 min, gear after 5), so the drop cap no longer deletes fresh loot. | ✅ |
+| 62 | P2 | Leash exploit: enemies walking home "Evade" hits. | ✅ |
+| 63 | P2 | Blink obeys the same steep-slope rule as walking. | ✅ |
 
 ## Phase 5 — Ship as a real phone app
 

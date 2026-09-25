@@ -43,6 +43,8 @@ function enterMobileFullscreen() {
     .catch(() => undefined);
 }
 
+const freshSeed = () => (Math.random() * 2 ** 32) >>> 0;
+
 export function LoadingScreen({ progress }: { progress: number }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6">
@@ -95,7 +97,7 @@ export function TitleScreen({ save: bootSave }: { save: SaveFile | null }) {
       clearSave();
       useGame.getState().resetProgress();
     }
-    initWorld(useSave ? save : null);
+    initWorld(useSave ? save : null, freshSeed());
     useGame.setState({ screen: "playing" });
     saveNow();
   };
@@ -263,7 +265,7 @@ function PauseMenuBody() {
             onClick={() => {
               clearSave();
               useGame.getState().resetProgress();
-              initWorld(null);
+              initWorld(null, freshSeed());
               useGame.setState({ screen: "title" });
             }}
           >

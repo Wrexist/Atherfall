@@ -13,6 +13,7 @@ import {
   GALE,
   SHOTS,
   SWINGS,
+  type AbilityEffect,
   type AbilityId,
 } from "../data/combat";
 import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
@@ -202,6 +203,10 @@ export interface PlayerRuntime {
 
 export const SPAWN_POINT = { x: 0, z: 12 };
 
+// Tuning read from data (combat.ts) rather than repeated as magic numbers here.
+const WARD = ABILITIES.barkward.effect as Extract<AbilityEffect, { kind: "ward" }>;
+const SECOND_WIND = ABILITIES.secondwind.effect as Extract<AbilityEffect, { kind: "heal" }>;
+
 function freshPlayer(): PlayerRuntime {
   return {
     x: SPAWN_POINT.x,
@@ -299,6 +304,9 @@ const SWIM_DEPTH = 1.05;
 const CLIMB_SPEED = 2.4;
 /** Seconds for a full day/night cycle. */
 export const DAY_LENGTH = 480;
+/** Seconds unclaimed loot stays on the ground. */
+export const DROP_LIFE_ITEM = 300;
+export const DROP_LIFE_COIN = 180;
 let lastSwimHint = -10;
 let wardHeal = 0;
 
@@ -335,8 +343,12 @@ function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
   };
 }
 
-export function initWorld(save: SaveFile | null) {
-  rand = mulberry32(SEED);
+/**
+ * `seed` drives loot, crits and variance. Tests use the fixed SEED for repeatable
+ * runs; real play passes a fresh one, so reloading can't replay the same rolls.
+ */
+export function initWorld(save: SaveFile | null, seed = SEED) {
+  rand = mulberry32(seed);
   world.time = 0;
   world.hitstop = 0;
   world.drops.length = 0;
@@ -345,6 +357,7 @@ export function initWorld(save: SaveFile | null) {
   world.projectiles.length = 0;
   world.rains.length = 0;
   world.stats = { swings: 0, hits: 0, evades: 0 };
+  world.resourceRegrow = {};
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
   for (const e of world.enemies) {
@@ -629,7 +642,7 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
   if (p.invuln > 0) return;
   const stats = statsFor(store);
   let dealt = Math.max(2, Math.round(amount - stats.defense * 0.45));
-  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * 0.4));
+  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * WARD.damageTaken));
   if (p.shieldHp > 0) {
     const absorbed = Math.min(p.shieldHp, dealt);
     p.shieldHp -= absorbed;
@@ -645,7 +658,8 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
     const reflect = Math.max(1, Math.round(dealt * stats.mods.thorns));
     damageEnemy(attacker, reflect, { knock: 0, stagger: false, big: false });
   }
-  const hp = Math.max(0, store.hp - dealt);
+  // Re-read: thorns above can trigger lifesteal or a level-up heal in between.
+  const hp = Math.max(0, useGame.getState().hp - dealt);
   store.setHp(hp);
   p.invuln = 0.45;
   p.hitFlash = 0.3;
@@ -656,7 +670,9 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
   const d = Math.hypot(dx, dz) || 1;
   p.vx = (dx / d) * 7;
   p.vz = (dz / d) * 7;
-  if (p.action === "attack" || p.action === "burst" || p.action === "ward-cast") {
+  // Basic swings are interrupted; ability casts have armour, since their
+  // cooldown is already spent.
+  if (p.action === "attack") {
     p.action = "none";
     p.comboIdx = 0;
     p.comboBuffered = false;
@@ -684,6 +700,12 @@ function damageEnemy(
 ) {
   const def = enemyDef(e.type);
   if (e.phase === "dead" || e.phase === "roar") return false;
+  if (e.phase === "return") {
+    // Leashed enemies walking home shrug off hits (and heal): no farming a foe
+    // from just past its leash while it can't fight back.
+    floater(e.x, e.y + def.scale * 1.1, e.z, "Evade", "#d8cfbf");
+    return false;
+  }
   const p = world.player;
   e.hp -= amount;
   e.hitFlash = 0.22;
@@ -728,7 +750,7 @@ function damageEnemy(
     e.timer = 0.45;
     e.zones = [];
     e.telegraph = 0;
-  } else if (e.phase === "idle" || e.phase === "return") {
+  } else if (e.phase === "idle") {
     e.phase = "chase";
   }
   if (def.boss && e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) startRoar(e);
@@ -1002,6 +1024,9 @@ function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag:
         const pos = { x: p.x + bx * 0.5, z: p.z + bz * 0.5 };
         resolveCollisions(pos, 0.55);
         if (Math.hypot(pos.x - p.x, pos.z - p.z) < 0.25) break;
+        // Same rule as walking: sheer rock stops you (the Watchstone must be climbed).
+        const rise = heightAt(pos.x, pos.z) - heightAt(p.x, p.z);
+        if (rise > 0.5 * MAX_GRADE && heightAt(pos.x, pos.z) > p.y + 0.2) break;
         p.x = pos.x;
         p.z = pos.z;
       }
@@ -1113,7 +1138,7 @@ function stepPlayer(dt: number, camYaw: number) {
     const before = p.wardT;
     p.wardT = Math.max(0, p.wardT - dt);
     const max = statsFor(store).maxHp;
-    wardHeal += ((before - p.wardT) / 4) * max * 0.2;
+    wardHeal += ((before - p.wardT) / WARD.duration) * max * WARD.healFraction;
     // Flush whole points only: a store write per frame re-renders the HUD at 60Hz.
     if (store.hp < max && (wardHeal >= 1 || p.wardT === 0)) {
       store.setHp(Math.min(max, store.hp + wardHeal));
@@ -1181,7 +1206,7 @@ function stepPlayer(dt: number, camYaw: number) {
   p.actionT += dt;
   let ctrl = 1; // movement authority this frame
   const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
-  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1.3 : 1);
+  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1 + SECOND_WIND.haste : 1);
   let speedCap = (input.sprint ? SPRINT : WALK) * speedMul * (p.swimming ? 0.6 : 1);
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
@@ -1497,7 +1522,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
   const p = world.player;
   e.hitFlash = Math.max(0, e.hitFlash - dt);
   e.slowT = Math.max(0, e.slowT - dt);
-  const slow = e.slowT > 0 ? 0.45 : 1;
+  const slow = e.slowT > 0 ? GALE.slowFactor : 1;
   const phaseSpeed = def.boss && e.bossPhase === 2 ? 1.2 : 1;
 
   if (e.phase === "dead") {
@@ -1592,6 +1617,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
           world.cameraShake = Math.max(world.cameraShake, 0.3);
         }
         if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z, e);
+        if ((e.phase as EnemyPhase) === "dead") return; // thorns killed it mid-swing
       }
       if (e.timer <= 0) {
         e.phase = "recover";
@@ -1614,6 +1640,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
         e.struck = true;
         damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2, e);
+        if ((e.phase as EnemyPhase) === "dead") return; // thorns killed it mid-charge
       }
       if (Math.floor(world.time * 30) % 3 === 0) spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
       if (e.chargeLeft <= 0.01 || moved < step * 0.4) {
@@ -1660,6 +1687,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
         e.phase = "idle";
         e.yaw = e.homeYaw;
         e.hp = e.maxHp;
+        e.bossPhase = 1; // a full reset: the retry starts calm and roars again at half health
       } else {
         const step = def.speed * 0.9 * dt;
         const ox = e.x;
@@ -1909,6 +1937,12 @@ function stepDrops(dt: number) {
     if (d.taken) continue;
     const dist = Math.hypot(d.x - p.x, d.z - p.z);
     if (dist < 2.0 && !p.dead) collectDrop(d);
+  }
+  // Unclaimed loot fades after a while (gear lasts longer than coin); if the cap
+  // is still hit, the oldest *collected* entries go first, never fresh loot.
+  for (let i = world.drops.length - 1; i >= 0; i--) {
+    const d = world.drops[i]!;
+    if (!d.taken && world.time - d.born > (d.itemId ? DROP_LIFE_ITEM : DROP_LIFE_COIN)) world.drops.splice(i, 1);
   }
   if (world.drops.length > 60) world.drops.splice(0, world.drops.length - 60);
   for (let i = world.drops.length - 1; i >= 0; i--) {
