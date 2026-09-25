@@ -23,11 +23,20 @@ import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
 import { ITEMS } from "../data/items";
 import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
-import { REGIONS, SEA_LEVEL, WORLD_RADIUS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
+import {
+  REGIONS,
+  SEA_LEVEL,
+  WORLD_RADIUS,
+  clampToWorld,
+  heightAt,
+  mulberry32,
+  regionAt,
+} from "../world/terrain";
 import { CLIMBS, LANDMARKS, RESOURCES, RESOURCE_RESPAWN, SECRETS, WAYPOINTS } from "../data/world";
 import { setMuted as setAudioMuted, sfx } from "./audio";
 import { input } from "./input";
 import { useSettings } from "./settings";
+import { EMOTE_BY_ID, type EmoteId } from "../data/emotes";
 import { readSave, writeSave, SAVE_VERSION, type SaveFile } from "./persistence";
 import { statsFor, useGame } from "./store";
 
@@ -168,6 +177,9 @@ export interface PlayerRuntime {
   speedMag: number;
   action: PlayerAction;
   actionT: number;
+  /** Social gesture playing (wave, cheer, sit), and for how long. */
+  emote: EmoteId | null;
+  emoteT: number;
   comboIdx: number;
   comboBuffered: boolean;
   lastSwingEnd: number;
@@ -227,6 +239,8 @@ function freshPlayer(): PlayerRuntime {
     speedMag: 0,
     action: "none",
     actionT: 0,
+    emote: null,
+    emoteT: 0,
     comboIdx: 0,
     comboBuffered: false,
     lastSwingEnd: -10,
@@ -241,7 +255,17 @@ function freshPlayer(): PlayerRuntime {
     dodgeIframe: 0,
     dodgeDirX: 0,
     dodgeDirZ: 1,
-    cooldowns: { galestep: 0, emberburst: 0, barkward: 0, vault: 0, arrowrain: 0, secondwind: 0, blink: 0, frostnova: 0, aegis: 0 },
+    cooldowns: {
+      galestep: 0,
+      emberburst: 0,
+      barkward: 0,
+      vault: 0,
+      arrowrain: 0,
+      secondwind: 0,
+      blink: 0,
+      frostnova: 0,
+      aegis: 0,
+    },
     wardT: 0,
     shieldHp: 0,
     shieldT: 0,
@@ -303,7 +327,10 @@ export function cycleLock() {
   const fx = Math.sin(ahead);
   const fz = Math.cos(ahead);
   const candidates = world.enemies
-    .filter((e) => e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE)
+    .filter(
+      (e) =>
+        e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE,
+    )
     .map((e) => {
       const dx = e.x - p.x;
       const dz = e.z - p.z;
@@ -505,8 +532,15 @@ export function loadSaveIntoStore(): SaveFile | null {
     // Saved on the death screen: wake at the nearest known waypoint like a respawn.
     const known = Array.from(new Set(["emberhollow", ...(save.waypoints ?? [])]));
     const wp = nearestWaypoint(save.player.x, save.player.z, known);
-    save.player = { ...save.player, x: wp ? wp.x + 1.5 : SPAWN_POINT.x, z: wp ? wp.z + 1.5 : SPAWN_POINT.z };
-    save.hp = Math.round(statsFor({ archetype: save.archetype, level: save.level, equipped: save.equipped }).maxHp * 0.6);
+    save.player = {
+      ...save.player,
+      x: wp ? wp.x + 1.5 : SPAWN_POINT.x,
+      z: wp ? wp.z + 1.5 : SPAWN_POINT.z,
+    };
+    save.hp = Math.round(
+      statsFor({ archetype: save.archetype, level: save.level, equipped: save.equipped }).maxHp *
+        0.6,
+    );
   }
   useGame.getState().hydrate({
     archetype: save.archetype,
@@ -582,7 +616,12 @@ function killPlayer() {
   p.anim = "die";
   sfx.death();
   const store = useGame.getState();
-  useGame.setState({ deaths: store.deaths + 1, screen: "dead", bossBar: null, inventoryOpen: false });
+  useGame.setState({
+    deaths: store.deaths + 1,
+    screen: "dead",
+    bossBar: null,
+    inventoryOpen: false,
+  });
   saveNow();
 }
 
@@ -626,17 +665,34 @@ function playerHasWeapon() {
 
 function pushDrop(x: number, z: number, part: Partial<DropRuntime>) {
   dropId += 1;
-  world.drops.push({ id: dropId, x, y: heightAt(x, z), z, potion: false, gold: 0, shards: 0, born: world.time, taken: false, ...part });
+  world.drops.push({
+    id: dropId,
+    x,
+    y: heightAt(x, z),
+    z,
+    potion: false,
+    gold: 0,
+    shards: 0,
+    born: world.time,
+    taken: false,
+    ...part,
+  });
 }
 
 function dropLoot(enemy: EnemyRuntime) {
   const def = enemyDef(enemy.type);
   const loot = rollLoot(def.lootTable, regionAt(enemy.x, enemy.z), rand);
   // The starter quest requires equipping a weapon: guarantee the first one.
-  if (!def.boss && !playerHasWeapon() && !loot.items.some((id) => ITEMS[id]?.slot === "weapon")) loot.items.unshift("wayfarer-blade");
+  if (!def.boss && !playerHasWeapon() && !loot.items.some((id) => ITEMS[id]?.slot === "weapon"))
+    loot.items.unshift("wayfarer-blade");
   const bounty = statsFor(useGame.getState()).mods.bounty ?? 0;
   const gold = Math.round(loot.gold * (1 + bounty));
-  pushDrop(enemy.x, enemy.z, { potion: loot.potion, gold, shards: loot.shards, itemId: loot.items[0] });
+  pushDrop(enemy.x, enemy.z, {
+    potion: loot.potion,
+    gold,
+    shards: loot.shards,
+    itemId: loot.items[0],
+  });
   loot.items.slice(1).forEach((itemId, i) => {
     const a = (i + 1) * 2.1;
     pushDrop(enemy.x + Math.cos(a) * 1.4, enemy.z + Math.sin(a) * 1.4, { itemId });
@@ -670,7 +726,15 @@ function killEnemy(enemy: EnemyRuntime) {
   saveNow();
 }
 
-function spark(x: number, y: number, z: number, color: string, size = 0.45, ring = false, life = 0.45) {
+function spark(
+  x: number,
+  y: number,
+  z: number,
+  color: string,
+  size = 0.45,
+  ring = false,
+  life = 0.45,
+) {
   sparkId += 1;
   world.sparks.push({ id: sparkId, x, y, z, born: world.time, color, size, ring, life });
   if (world.sparks.length > 32) world.sparks.shift();
@@ -846,7 +910,11 @@ function moveIntent(camYaw: number) {
 /** Soft aim: at swing start, face a nearby enemy roughly in front. */
 function autoFace(p: PlayerRuntime, range: number) {
   const locked = lockedEnemy();
-  if (locked && locked.phase !== "dead" && Math.hypot(locked.x - p.x, locked.z - p.z) < range * 1.5) {
+  if (
+    locked &&
+    locked.phase !== "dead" &&
+    Math.hypot(locked.x - p.x, locked.z - p.z) < range * 1.5
+  ) {
     p.yaw = Math.atan2(locked.x - p.x, locked.z - p.z);
     return;
   }
@@ -910,9 +978,15 @@ function fireShot(p: PlayerRuntime, idx: number) {
 function explode(pr: ProjectileRuntime) {
   for (const e of world.enemies) {
     if (e.phase === "dead" || pr.hit.has(e.id)) continue;
-    if (Math.hypot(e.x - pr.x, e.z - pr.z) > pr.radius + (enemyDef(e.type).boss ? 1 : 0.3)) continue;
+    if (Math.hypot(e.x - pr.x, e.z - pr.z) > pr.radius + (enemyDef(e.type).boss ? 1 : 0.3))
+      continue;
     pr.hit.add(e.id);
-    damageEnemy(e, pr.damage, { knock: pr.big ? 1.2 : 0.4, stagger: pr.big, big: pr.big, crit: pr.crit });
+    damageEnemy(e, pr.damage, {
+      knock: pr.big ? 1.2 : 0.4,
+      stagger: pr.big,
+      big: pr.big,
+      crit: pr.crit,
+    });
   }
   spark(pr.x, heightAt(pr.x, pr.z) + 0.1, pr.z, pr.color, pr.radius, true, 0.4);
   sfx.hit(pr.big ? 2 : 0);
@@ -943,7 +1017,12 @@ function stepProjectiles(dt: number) {
           break;
         }
         pr.hit.add(e.id);
-        damageEnemy(e, pr.damage, { knock: pr.big ? 1.0 : 0.3, stagger: pr.big, big: pr.big, crit: pr.crit });
+        damageEnemy(e, pr.damage, {
+          knock: pr.big ? 1.0 : 0.3,
+          stagger: pr.big,
+          big: pr.big,
+          crit: pr.crit,
+        });
         world.hitstop = Math.max(world.hitstop, pr.big ? 0.05 : 0.03);
         sfx.hit(pr.big ? 2 : 0);
         if (!pr.pierce) {
@@ -981,14 +1060,18 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
 /** Returns true once the press is used (a swing starts or the next hit is queued). */
 function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number): boolean {
   if (p.action === "attack") {
-    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) {
+    if (
+      p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM &&
+      p.comboIdx < SWINGS.length
+    ) {
       p.comboBuffered = true;
       return true;
     }
     return false;
   }
   if (p.action !== "none" || p.attackCooldown > 0) return false;
-  const chaining = world.time - p.lastSwingEnd <= COMBO_GRACE && p.comboIdx > 0 && p.comboIdx < SWINGS.length;
+  const chaining =
+    world.time - p.lastSwingEnd <= COMBO_GRACE && p.comboIdx > 0 && p.comboIdx < SWINGS.length;
   startSwing(p, chaining ? p.comboIdx : 0, mx, mz, mag);
   return true;
 }
@@ -1011,7 +1094,12 @@ function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
     if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
     p.hitIds.add(e.id);
     const hit = playerHit(swing.damageMult);
-    damageEnemy(e, hit.dmg, { knock: swing.knockback, stagger: swing.staggers, big: finisher, crit: hit.crit });
+    damageEnemy(e, hit.dmg, {
+      knock: swing.knockback,
+      stagger: swing.staggers,
+      big: finisher,
+      crit: hit.crit,
+    });
     confirmed = true;
   }
   if (confirmed) {
@@ -1122,7 +1210,15 @@ function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag:
     case "rain": {
       const tx = p.x + fx * eff.reach;
       const tz = p.z + fz * eff.reach;
-      world.rains.push({ x: tx, z: tz, r: eff.radius, born: world.time, ticks: eff.ticks, next: 0, mult: eff.damageMult });
+      world.rains.push({
+        x: tx,
+        z: tz,
+        r: eff.radius,
+        born: world.time,
+        ticks: eff.ticks,
+        next: 0,
+        mult: eff.damageMult,
+      });
       p.action = "ward-cast";
       sfx.swing(1);
       break;
@@ -1206,7 +1302,8 @@ function stepPlayer(dt: number, camYaw: number) {
   p.attackCooldown = Math.max(0, p.attackCooldown - dt);
   p.dodgeCd = Math.max(0, p.dodgeCd - dt);
   p.dodgeIframe = Math.max(0, p.dodgeIframe - dt);
-  for (const id of Object.keys(p.cooldowns) as AbilityId[]) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
+  for (const id of Object.keys(p.cooldowns) as AbilityId[])
+    p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
   p.hasteT = Math.max(0, p.hasteT - dt);
   p.shieldT = Math.max(0, p.shieldT - dt);
   if (p.shieldT <= 0) p.shieldHp = 0;
@@ -1230,7 +1327,10 @@ function stepPlayer(dt: number, camYaw: number) {
   }
 
   if (p.swimming) p.bufAttack = p.bufDodge = p.bufAbility = 0;
-  if (p.swimming && (input.attackQueued || input.dodgeQueued || input.abilityQueued !== null || input.jumpQueued)) {
+  if (
+    p.swimming &&
+    (input.attackQueued || input.dodgeQueued || input.abilityQueued !== null || input.jumpQueued)
+  ) {
     input.attackQueued = false;
     input.dodgeQueued = false;
     input.abilityQueued = null;
@@ -1282,7 +1382,10 @@ function stepPlayer(dt: number, camYaw: number) {
   p.actionT += dt;
   let ctrl = 1; // movement authority this frame
   const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
-  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1 + SECOND_WIND.haste : 1);
+  const speedMul =
+    arche.moveMult *
+    (1 + (statsFor(store).mods.swift ?? 0)) *
+    (p.hasteT > 0 ? 1 + SECOND_WIND.haste : 1);
   let speedCap = (input.sprint ? SPRINT : WALK) * speedMul * (p.swimming ? 0.6 : 1);
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
@@ -1290,7 +1393,8 @@ function stepPlayer(dt: number, camYaw: number) {
     ctrl = melee ? 0.15 : 0.5;
     speedCap = melee ? 1.4 : 2.6;
     if (melee) {
-      if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow) applySwingHits(p, swing);
+      if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow)
+        applySwingHits(p, swing);
     } else if (p.actionT >= 0.09 && !p.hitIds.has("__fired")) {
       p.hitIds.add("__fired");
       fireShot(p, p.comboIdx - 1);
@@ -1338,10 +1442,17 @@ function stepPlayer(dt: number, camYaw: number) {
       let any = false;
       for (const e of world.enemies) {
         if (e.phase === "dead") continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) > eff.radius + (enemyDef(e.type).boss ? 1 : 0)) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) > eff.radius + (enemyDef(e.type).boss ? 1 : 0))
+          continue;
         if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
         const hit = playerHit(eff.damageMult);
-        damageEnemy(e, hit.dmg, { knock: eff.knockback, stagger: true, big: true, crit: hit.crit, slowFor: eff.slowFor });
+        damageEnemy(e, hit.dmg, {
+          knock: eff.knockback,
+          stagger: true,
+          big: true,
+          crit: hit.crit,
+          slowFor: eff.slowFor,
+        });
         any = true;
       }
       spark(p.x, p.y + 0.15, p.z, eff.color, eff.radius, true, 0.55);
@@ -1361,7 +1472,8 @@ function stepPlayer(dt: number, camYaw: number) {
   // ---- horizontal velocity with acceleration / deceleration
   const moving = mag > 0.05;
   const sprinting = input.sprint && moving && p.action === "none" && p.grounded;
-  const target = p.action === "none" || p.action === "attack" || p.action === "ward-cast" ? speedCap * mag : 0;
+  const target =
+    p.action === "none" || p.action === "attack" || p.action === "ward-cast" ? speedCap * mag : 0;
   if (ctrl > 0) {
     const tx = mx * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
     const tz = mz * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
@@ -1393,7 +1505,11 @@ function stepPlayer(dt: number, camYaw: number) {
     const az = run > 1e-5 ? beforeZ + ((p.z - beforeZ) / run) * probe : beforeZ;
     const gOld = heightAt(beforeX, beforeZ);
     const gAhead = heightAt(ax, az);
-    if (run > 1e-5 && gAhead - gOld > probe * MAX_GRADE && gAhead > p.y + (p.swimming ? 1.2 : 0.2)) {
+    if (
+      run > 1e-5 &&
+      gAhead - gOld > probe * MAX_GRADE &&
+      gAhead > p.y + (p.swimming ? 1.2 : 0.2)
+    ) {
       p.x = beforeX;
       p.z = beforeZ;
       p.vx *= -0.1;
@@ -1489,6 +1605,7 @@ function stepPlayer(dt: number, camYaw: number) {
     p.anim = planar > 0.5 ? "swim" : "tread";
     return;
   }
+  stepEmote(p, dt, mag > 0.1);
   const swingAnim = p.action === "attack" ? `attack${p.comboIdx}` : null;
   p.anim =
     p.action === "dodge"
@@ -1511,7 +1628,30 @@ function stepPlayer(dt: number, camYaw: number) {
                     ? "sprint"
                     : planar > 0.6
                       ? "walk"
-                      : "idle";
+                      : p.emote
+                        ? `emote-${p.emote}`
+                        : "idle";
+}
+
+/**
+ * Emotes play only while standing still: moving, any action, leaving the
+ * ground, swimming or getting hit ends one. Queuing the one already playing
+ * stops it (so Sit again stands up).
+ */
+function stepEmote(p: PlayerRuntime, dt: number, moving: boolean) {
+  const queued = input.emoteQueued;
+  input.emoteQueued = null;
+  const busy = p.action !== "none" || !p.grounded || p.swimming || p.hurtT > 0 || moving;
+  if (queued) {
+    if (p.emote === queued) p.emote = null;
+    else if (!busy) {
+      p.emote = queued;
+      p.emoteT = 0;
+    }
+  }
+  if (!p.emote) return;
+  p.emoteT += dt;
+  if (busy || p.emoteT >= EMOTE_BY_ID[p.emote].seconds) p.emote = null;
 }
 
 // ---------------------------------------------------------------- enemies
@@ -1520,7 +1660,12 @@ function faceToward(e: EnemyRuntime, tx: number, tz: number, k: number, dt: numb
   e.yaw = angleLerp(e.yaw, Math.atan2(tx - e.x, tz - e.z), 1 - Math.exp(-k * dt));
 }
 
-function beginWindup(e: EnemyRuntime, duration: number, zones: Zone[], move: BossMove | null = null) {
+function beginWindup(
+  e: EnemyRuntime,
+  duration: number,
+  zones: Zone[],
+  move: BossMove | null = null,
+) {
   e.phase = "windup";
   e.timer = duration;
   e.windupTotal = duration;
@@ -1562,7 +1707,9 @@ function startRoar(e: EnemyRuntime) {
   spark(e.x, e.y + 0.2, e.z, "#c96b3a", 6.5, true, 0.8);
   world.cameraShake = 0.8;
   sfx.roar();
-  useGame.getState().toast(`${enemyDef(e.type).name} is enraged — the ground itself answers!`, "bad");
+  useGame
+    .getState()
+    .toast(`${enemyDef(e.type).name} is enraged — the ground itself answers!`, "bad");
 }
 
 const BOSS_P1: BossMove[] = ["cleave", "cleave", "charge"];
@@ -1581,7 +1728,12 @@ function bossChoose(e: EnemyRuntime, dist: number) {
     beginWindup(e, 0.85 * speedMul, [basicZone(e)], "cleave");
   } else if (move === "charge") {
     const len = Math.min(16, Math.max(8, dist + 3));
-    beginWindup(e, 1.0 * speedMul, [{ kind: "line", x: e.x, z: e.z, yaw: e.yaw, len, w: 2.8 }], "charge");
+    beginWindup(
+      e,
+      1.0 * speedMul,
+      [{ kind: "line", x: e.x, z: e.z, yaw: e.yaw, len, w: 2.8 }],
+      "charge",
+    );
     e.chargeLeft = len;
   } else {
     // Three root eruptions: on the player and to either side of them.
@@ -1621,7 +1773,16 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
     e.zones = [];
     e.respawnIn -= dt;
     if (e.respawnIn <= 0 && !def.boss && !def.elite) {
-      Object.assign(e, makeEnemy({ id: e.id, type: e.type, x: e.homeX, z: e.homeZ, yaw: e.homeYaw } as (typeof SPAWNS)[number]));
+      Object.assign(
+        e,
+        makeEnemy({
+          id: e.id,
+          type: e.type,
+          x: e.homeX,
+          z: e.homeZ,
+          yaw: e.homeYaw,
+        } as (typeof SPAWNS)[number]),
+      );
       world.defeated.delete(e.id);
     }
     return;
@@ -1699,10 +1860,12 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (!e.struck) {
         e.struck = true;
         const hit = e.zones.some(
-          (z) => pointInZone(z, p.x, p.z) && (z.kind !== "cone" || !lineBlocked(e.x, e.z, p.x, p.z)),
+          (z) =>
+            pointInZone(z, p.x, p.z) && (z.kind !== "cone" || !lineBlocked(e.x, e.z, p.x, p.z)),
         );
         for (const z of e.zones) {
-          if (z.kind === "circle") spark(z.x, heightAt(z.x, z.z) + 0.1, z.z, "#b9774a", z.r, true, 0.4);
+          if (z.kind === "circle")
+            spark(z.x, heightAt(z.x, z.z) + 0.1, z.z, "#b9774a", z.r, true, 0.4);
         }
         if (e.move === "roots" || def.zone.kind === "circle") {
           sfx.slam();
@@ -1731,10 +1894,16 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       e.chargeLeft -= step;
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
         e.struck = true;
-        damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2, e);
+        damagePlayer(
+          Math.round(def.damage * 1.25),
+          e.x - Math.sin(e.yaw) * 2,
+          e.z - Math.cos(e.yaw) * 2,
+          e,
+        );
         if ((e.phase as EnemyPhase) === "dead") return; // thorns killed it mid-charge
       }
-      if (Math.floor(world.time * 30) % 3 === 0) spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
+      if (Math.floor(world.time * 30) % 3 === 0)
+        spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
       if (e.chargeLeft <= 0.01 || moved < step * 0.4) {
         e.phase = "recover";
         e.timer = def.recover + 0.3; // punish window after a charge
@@ -1802,7 +1971,9 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
     if (!show) {
       if (bar) useGame.setState({ bossBar: null });
     } else if (!bar || Math.abs(bar.hp - e.hp) > 0.5 || bar.phase !== e.bossPhase) {
-      useGame.setState({ bossBar: { name: def.name, hp: Math.max(0, e.hp), max: e.maxHp, phase: e.bossPhase } });
+      useGame.setState({
+        bossBar: { name: def.name, hp: Math.max(0, e.hp), max: e.maxHp, phase: e.bossPhase },
+      });
     }
   }
 }
@@ -1889,9 +2060,11 @@ export function inCombat() {
 export function fastTravel(id: string): { ok: boolean; message: string } {
   const s = useGame.getState();
   const w = WAYPOINTS.find((x) => x.id === id);
-  if (!w || !s.waypoints.includes(id)) return { ok: false, message: "You haven't found that waypoint yet." };
+  if (!w || !s.waypoints.includes(id))
+    return { ok: false, message: "You haven't found that waypoint yet." };
   if (world.player.dead) return { ok: false, message: "You can't travel now." };
-  if (inCombat()) return { ok: false, message: "You can't fast travel while enemies are hunting you." };
+  if (inCombat())
+    return { ok: false, message: "You can't fast travel while enemies are hunting you." };
   const p = world.player;
   p.x = w.x + 1.5;
   p.z = w.z + 1.5;
@@ -1910,12 +2083,19 @@ export function fastTravel(id: string): { ok: boolean; message: string } {
 }
 
 function climbAt(x: number, z: number) {
-  return CLIMBS.find((c) => Math.hypot(c.base.x - x, c.base.z - z) < 2.4 || Math.hypot(c.top.x - x, c.top.z - z) < 2.0) ?? null;
+  return (
+    CLIMBS.find(
+      (c) =>
+        Math.hypot(c.base.x - x, c.base.z - z) < 2.4 || Math.hypot(c.top.x - x, c.top.z - z) < 2.0,
+    ) ?? null
+  );
 }
 
 function startClimb(route: (typeof CLIMBS)[number]) {
   const p = world.player;
-  const fromTop = Math.hypot(route.top.x - p.x, route.top.z - p.z) < Math.hypot(route.base.x - p.x, route.base.z - p.z);
+  const fromTop =
+    Math.hypot(route.top.x - p.x, route.top.z - p.z) <
+    Math.hypot(route.base.x - p.x, route.base.z - p.z);
   p.climbing = route.id;
   p.climbT = fromTop ? 0.97 : 0.02;
   p.action = "none";
@@ -1991,9 +2171,16 @@ function openSecret(secret: (typeof SECRETS)[number]) {
     s.toast(`Sealed. Its guardian still stands watch.`, "bad");
     return;
   }
-  useGame.setState({ secrets: [...s.secrets, secret.id], gold: s.gold + secret.reward.gold, shards: s.shards + secret.reward.shards });
+  useGame.setState({
+    secrets: [...s.secrets, secret.id],
+    gold: s.gold + secret.reward.gold,
+    shards: s.shards + secret.reward.shards,
+  });
   s.addItem(secret.reward.itemId);
-  s.toast(`${secret.name}: +${secret.reward.gold} embers, +${secret.reward.shards} shards`, "quest");
+  s.toast(
+    `${secret.name}: +${secret.reward.gold} embers, +${secret.reward.shards} shards`,
+    "quest",
+  );
   spark(secret.x, heightAt(secret.x, secret.z) + 0.2, secret.z, "#ffd27a", 3, true, 0.9);
   sfx.quest();
   saveNow();
@@ -2010,7 +2197,13 @@ function stepExploration(dt: number) {
     if (Math.hypot(r.x - p.x, r.z - p.z) < 1.9 && !p.dead) {
       world.resourceRegrow[r.id] = world.time + RESOURCE_RESPAWN;
       useGame.setState({ shards: useGame.getState().shards + r.shards });
-      floater(r.x, heightAt(r.x, r.z) + 1.8, r.z, `+${r.shards} shard${r.shards > 1 ? "s" : ""}`, "#b9a4ff");
+      floater(
+        r.x,
+        heightAt(r.x, r.z) + 1.8,
+        r.z,
+        `+${r.shards} shard${r.shards > 1 ? "s" : ""}`,
+        "#b9a4ff",
+      );
       sfx.pickup();
     }
   }
@@ -2069,7 +2262,8 @@ function stepDrops(dt: number) {
   // is still hit, the oldest *collected* entries go first, never fresh loot.
   for (let i = world.drops.length - 1; i >= 0; i--) {
     const d = world.drops[i]!;
-    if (!d.taken && world.time - d.born > (d.itemId ? DROP_LIFE_ITEM : DROP_LIFE_COIN)) world.drops.splice(i, 1);
+    if (!d.taken && world.time - d.born > (d.itemId ? DROP_LIFE_ITEM : DROP_LIFE_COIN))
+      world.drops.splice(i, 1);
   }
   if (world.drops.length > 60) world.drops.splice(0, world.drops.length - 60);
   for (let i = world.drops.length - 1; i >= 0; i--) {
@@ -2115,9 +2309,14 @@ function selaLines(): string[] {
       case 2:
         return ["Three Bramblekin. Keep count, and keep your distance between swings."];
       case 3:
-        return ["Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence."];
+        return [
+          "Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence.",
+        ];
       case 4:
-        return ["Thornmaw nests in the Sunken Arch, east along the old road.", "It charges. Let it commit, then answer."];
+        return [
+          "Thornmaw nests in the Sunken Arch, east along the old road.",
+          "It charges. Let it commit, then answer.",
+        ];
       default:
         return ["Thornmaw's fang, still warm. You did not run. Good.", quest?.completionText ?? ""];
     }
@@ -2129,7 +2328,9 @@ function selaLines(): string[] {
         `Go when you are ready — level ${quest?.recommendedLevel ?? "4–7"} is my advice. Oda at the forge can sharpen what you carry.`,
       ];
     case 1:
-      return ["Shades move faster than anything in the woods. Let them swing into nothing, then answer."];
+      return [
+        "Shades move faster than anything in the woods. Let them swing into nothing, then answer.",
+      ];
     case 2:
       return ["The Lantern King sits at the back of the barrow. Break his light."];
     default:
@@ -2166,7 +2367,8 @@ function tryInteract() {
   if (npc.id === "sela") {
     const step = QUESTS[store.questIdx]?.steps[store.questStep];
     store.openDialogue({ name: npc.name, lines: selaLines() });
-    if (!store.questComplete && step && step.kind === "talk" && step.npc === "sela") store.advanceQuest();
+    if (!store.questComplete && step && step.kind === "talk" && step.npc === "sela")
+      store.advanceQuest();
   } else if (npc.id === "elder") {
     store.openDialogue({ name: npc.name, lines: elderLines() });
     store.toggleInventory(true, "build");
@@ -2193,7 +2395,16 @@ function stepQuest() {
 }
 
 if (import.meta.env.DEV && typeof window !== "undefined") {
-  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone, initWorld, saveNow, fastTravel };
+  (window as unknown as Record<string, unknown>)["__aether"] = {
+    world,
+    useGame,
+    lineBlocked,
+    stepWorld,
+    pointInZone,
+    initWorld,
+    saveNow,
+    fastTravel,
+  };
   (window as unknown as Record<string, unknown>)["__aetherInput"] = input;
 }
 
@@ -2268,18 +2479,20 @@ export function stepWorld(dtRaw: number) {
   const prompt = pp.climbing
     ? "Climbing — up to climb, down to descend, Jump to let go"
     : npc
-    ? `Speak with ${npc.name}`
-    : climb
-      ? `Climb the ${climb.name}`
-      : secret && !store.secrets.includes(secret.id)
-        ? guardianAlive(secret)
-          ? `${secret.name} — sealed by its guardian`
-          : `Open ${secret.name}`
-        : pp.swimming
-          ? "Swimming — head for shore to fight"
-    : world.drops.some((d) => !d.taken && Math.hypot(d.x - world.player.x, d.z - world.player.z) < 3.5)
-      ? "Walk over loot to pick it up"
-      : null;
+      ? `Speak with ${npc.name}`
+      : climb
+        ? `Climb the ${climb.name}`
+        : secret && !store.secrets.includes(secret.id)
+          ? guardianAlive(secret)
+            ? `${secret.name} — sealed by its guardian`
+            : `Open ${secret.name}`
+          : pp.swimming
+            ? "Swimming — head for shore to fight"
+            : world.drops.some(
+                  (d) => !d.taken && Math.hypot(d.x - world.player.x, d.z - world.player.z) < 3.5,
+                )
+              ? "Walk over loot to pick it up"
+              : null;
   if (prompt !== lastPrompt) {
     lastPrompt = prompt;
     useGame.setState({ interactPrompt: prompt });

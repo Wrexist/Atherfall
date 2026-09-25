@@ -34,6 +34,7 @@ import { QuestMarker } from "./QuestMarker";
 import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
 import { BlobShadows, HeroRing } from "./Blobs";
+import { EmoteBubbles } from "./EmoteBubbles";
 import { Meadow } from "./Grass";
 import { SlashTrail } from "./Slash";
 
@@ -208,6 +209,7 @@ export function Scene() {
       <WorldObjects />
       <QuestMarker />
       <RemotePlayers />
+      <EmoteBubbles />
     </>
   );
 }

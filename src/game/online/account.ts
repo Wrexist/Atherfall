@@ -20,6 +20,8 @@ interface AccountState {
   error: string | null;
   /** Informational message, e.g. "check your email to confirm". */
   notice: string | null;
+  /** Opened from a password-reset email: the player must choose a new password. */
+  recovering: boolean;
 }
 
 export const useAccount = create<AccountState>(() => ({
@@ -30,6 +32,7 @@ export const useAccount = create<AccountState>(() => ({
   busy: false,
   error: null,
   notice: null,
+  recovering: false,
 }));
 
 /** Same rule as the database constraint: 3–16 letters, digits, spaces, _ or -. */
@@ -76,7 +79,44 @@ export function initAccount() {
   if (!sb || started) return;
   started = true;
   void sb.auth.getSession().then(({ data }) => applySession(data.session));
-  sb.auth.onAuthStateChange((_event, session) => applySession(session));
+  sb.auth.onAuthStateChange((event, session) => {
+    // A reset link signs the player in just far enough to set a new password.
+    if (event === "PASSWORD_RECOVERY") useAccount.setState({ recovering: true });
+    applySession(session);
+  });
+}
+
+/**
+ * Email a password-reset link that opens the game. The reply is the same
+ * whether or not the email has an account, so nobody can probe for players.
+ */
+export async function requestPasswordReset(email: string) {
+  const sb = backend();
+  if (!sb) return false;
+  const ok = await run(async () => {
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/`,
+    });
+    if (error) throw error;
+    useAccount.setState({
+      notice: "If that email has an account, a reset link is on its way. Open it on this device.",
+    });
+    return true;
+  });
+  return !!ok;
+}
+
+/** Finish a reset: the player arrived from the email link and picked a new password. */
+export async function setNewPassword(password: string) {
+  const sb = backend();
+  if (!sb) return false;
+  const ok = await run(async () => {
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) throw error;
+    useAccount.setState({ recovering: false, notice: "Password changed. You're signed in." });
+    return true;
+  });
+  return !!ok;
 }
 
 /** Friendlier wording for the errors players actually hit. */
@@ -91,6 +131,8 @@ function explain(message: string): string {
     return "Confirm your email first (check your inbox), then sign in.";
   if (m.includes("rate limit") || m.includes("too many"))
     return "Too many attempts — wait a minute and try again.";
+  if (m.includes("different from the old password"))
+    return "Pick a password you haven't used for this account.";
   if (m.includes("fetch") || m.includes("network"))
     return "Can't reach the server. Check your connection.";
   return message;
