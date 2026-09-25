@@ -215,6 +215,16 @@ function handmade(): PropInstance[] {
   add(K("crate_big"), 10.4, -5, 0.2, 5, 0, true);
   add(K("sack"), -6.4, 5.4, 1.1, 6, 0, true);
   add(K("weaponrack"), 9.2, -4.4, -1.2, 6, 0, true);
+  // A busier market: goods stacked round the stall.
+  add(K("crate_big"), 8.6, 10.6, 0.5, 4.2, 0, true);
+  add(K("barrel"), 10.2, 9.4, 0.2, 4.4, 0, true);
+  add(K("sack"), 8.9, 7.1, 2.2, 5.2, 0, true);
+  add(K("sack"), 3.4, 7.4, 0.7, 4.6, 0, true);
+  // The forge corner by the fire: stock, tools and fuel.
+  add(K("barrel"), 3.6, -7.8, 1.1, 4.6, 0, true);
+  add(K("crate_big"), 4.3, -5.0, 0.3, 4.4, 0, true);
+  add(K("weaponrack"), 7.0, -8.0, 0.4, 5.2, 0, true);
+  add(K("wheelbarrow"), 2.2, -6.2, 2.8, 4.6, 0, true);
 
   // Lantern posts along the north road and the village square
   const lanterns = LANTERNS;

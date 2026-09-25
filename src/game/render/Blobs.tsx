@@ -1,6 +1,8 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { ITEMS, RARITY_COLOR } from "../data/items";
+import { useGame } from "../core/store";
 import { world } from "../core/sim";
 import { enemyDef } from "../data/enemies";
 import { remotes } from "../online/presence";
@@ -90,6 +92,10 @@ export function BlobShadows() {
 /** A faint gold ring under the hero, so you can always find yourself in a fight. */
 export function HeroRing() {
   const ref = useRef<THREE.Mesh>(null);
+  // Your weapon's rarity shows under your feet: rare and better glow.
+  const rarity = useGame((g) => (g.equipped.weapon ? ITEMS[g.equipped.weapon.itemId]?.rarity : undefined));
+  const rare = rarity === "rare" || rarity === "epic";
+  const ringColor = rarity && rarity !== "common" ? RARITY_COLOR[rarity] : "#ffe3a0";
   const geometry = useMemo(() => new THREE.RingGeometry(0.72, 0.9, 40).rotateX(-Math.PI / 2), []);
   useFrame(() => {
     const m = ref.current;
@@ -100,7 +106,13 @@ export function HeroRing() {
   });
   return (
     <mesh ref={ref} geometry={geometry} renderOrder={3}>
-      <meshBasicMaterial color="#ffe3a0" transparent opacity={0.4} depthWrite={false} />
+      <meshBasicMaterial
+        color={ringColor}
+        transparent
+        opacity={rare ? 0.62 : 0.4}
+        depthWrite={false}
+        blending={rare ? THREE.AdditiveBlending : THREE.NormalBlending}
+      />
     </mesh>
   );
 }
