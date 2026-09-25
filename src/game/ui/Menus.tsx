@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { STARTER_QUEST } from "../data/quests";
 import { setMuted as setAudioMuted, sfx } from "../core/audio";
-import { } from "../core/persistence";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
-import { useGame, type Quality } from "../core/store";
+import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
 const QUALITIES: Array<{ id: Quality; label: string; note: string }> = [
