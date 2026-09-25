@@ -44,7 +44,7 @@ export function CooldownSweep({ id }: { id: SlotId }) {
     const deg = Math.ceil(frac * 360);
     if (sweep.current && deg !== lastDeg.current) {
       lastDeg.current = deg;
-      sweep.current.style.background = deg > 0 ? `conic-gradient(rgba(12,8,6,0.72) ${deg}deg, transparent 0deg)` : "transparent";
+      sweep.current.style.background = deg > 0 ? `conic-gradient(rgba(8,12,22,0.72) ${deg}deg, transparent 0deg)` : "transparent";
     }
     if (label.current) {
       const txt = left > 0.05 ? (left >= 1 ? Math.ceil(left).toString() : left.toFixed(1)) : "";
@@ -138,15 +138,17 @@ export function AbilityBar() {
           <div key={s.id} className="flex w-16 flex-col items-center gap-1" title={s.on ? s.name : `Unlocks at ${s.hint}`}>
             <div
               data-testid={`slot-${s.id}`}
-              className={`relative flex h-12 w-12 items-center justify-center rounded-lg border ${
-                s.on ? "border-[var(--gilt)]/50 bg-[var(--panel)]/85 text-[var(--parchment)]" : "border-[var(--parchment)]/15 bg-[var(--panel)]/50 text-[var(--parchment)]/25"
+              className={`relative flex h-12 w-12 items-center justify-center rounded-xl border-2 shadow-[0_3px_0_rgba(0,0,0,0.4)] ${
+                s.on
+                  ? "border-[var(--gilt)] bg-gradient-to-b from-[#3a5078] to-[#22324f] text-white"
+                  : "border-[#56627a] bg-[#1c2940]/70 text-[var(--parchment)]/30"
               }`}
             >
               <SlotIcon id={s.id} />
               {s.on && <CooldownSweep id={s.id} />}
-              <span className="absolute -right-1 -top-1 rounded bg-[var(--ink)] px-1 font-mono text-[10px] text-[var(--gilt)]">{s.key}</span>
+              <span className="absolute -right-1.5 -top-1.5 rounded-md bg-[var(--gilt)] px-1 font-mono text-[10px] font-bold text-[#3a2206] ring-2 ring-[#0b1320]">{s.key}</span>
             </div>
-            <span className={`w-full truncate text-center text-[10px] ${s.on ? "text-[var(--parchment)]/85" : "text-[var(--parchment)]/40"}`}>
+            <span className={`w-full truncate text-center text-[10px] font-extrabold text-outline ${s.on ? "text-[var(--parchment)]" : "text-[var(--parchment)]/45"}`}>
               {s.on ? s.name : s.hint}
             </span>
           </div>

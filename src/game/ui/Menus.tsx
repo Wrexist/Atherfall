@@ -16,6 +16,8 @@ import { PHONE_SIDEWAYS } from "./layout";
 import { LOADING_TIPS, loadStalled } from "../core/loading";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
+import { BTN } from "./kit";
+import { editMinimap } from "./Minimap";
 
 const QUALITIES: Array<{ id: Quality; label: string; note: string }> = [
   { id: "low", label: "Low", note: "No shadows, short draw distance — best on phones" },
@@ -27,7 +29,7 @@ function Panel({ children }: { children: React.ReactNode }) {
   return (
     // Capped to the visible height and scrollable: on a landscape phone (~390px tall)
     // the pause menu and controls list would otherwise be clipped off-screen.
-    <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-5 shadow-2xl backdrop-blur sm:p-6">
+    <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] p-5 text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)] sm:p-6">
       {children}
     </div>
   );
@@ -81,7 +83,7 @@ export function LoadingScreen({ progress }: { progress: number }) {
   }, [progress]);
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
-      <h1 className="font-display text-3xl tracking-[0.3em] text-[var(--gilt)] sm:text-4xl sm:tracking-[0.4em]">
+      <h1 className="font-display text-3xl tracking-wide text-[var(--gilt)] text-outline sm:text-4xl">
         AETHERFALL
       </h1>
       <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
@@ -175,9 +177,9 @@ export function TitleScreen({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--ink)]/80 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--ink)]/80 p-4">
       <Panel>
-        <h1 className="font-display text-3xl tracking-[0.35em] text-[var(--gilt)]">AETHERFALL</h1>
+        <h1 className="font-display text-5xl leading-none text-[var(--gilt)] text-outline">Aetherfall</h1>
         <p className="mt-1 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
           Chapter one · Dawnreach
         </p>
@@ -194,7 +196,7 @@ export function TitleScreen({
           <div className="mt-5 flex flex-wrap gap-2">
             {save && (
               <button
-                className="rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 py-2.5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35 disabled:opacity-50"
+                className={BTN.primary}
                 disabled={cloudBusy}
                 onClick={() => start(true)}
               >
@@ -202,18 +204,14 @@ export function TitleScreen({
               </button>
             )}
             <button
-              className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
-                save
-                  ? "border border-[var(--gilt)]/25 text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
-                  : "border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
-              } disabled:opacity-50`}
+              className={save ? BTN.secondary : BTN.primary}
               disabled={cloudBusy}
               onClick={() => start(false)}
             >
               {save ? "New journey" : "Begin"}
             </button>
             <button
-              className="rounded-lg border border-[var(--gilt)]/25 px-4 py-2.5 text-sm text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
+              className={BTN.secondary}
               onClick={() => setShowControls((v) => !v)}
             >
               Controls
@@ -227,7 +225,7 @@ export function TitleScreen({
         <AccountLine onOpen={() => setAccountOpen(true)} />
 
         <div className="mt-5">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
+          <div className="font-display text-[15px] tracking-wide text-[var(--gilt)] text-outline">Graphics</div>
           <QualityPicker quality={quality} setQuality={setQuality} />
         </div>
       </Panel>
@@ -253,13 +251,13 @@ function QualityPicker({
             sfx.ui();
             setQuality(q.id);
           }}
-          className={`rounded-lg border p-2 text-left ${
+          className={`min-h-11 rounded-2xl border-2 p-2.5 text-left ${
             quality === q.id
-              ? "border-[var(--gilt)]/60 bg-[var(--gilt)]/15"
-              : "border-[var(--gilt)]/20 hover:bg-[var(--ink)]/40"
+              ? "border-[var(--gilt)] bg-[var(--gilt)]/15"
+              : "border-transparent bg-[var(--panel-2)]"
           }`}
         >
-          <div className="text-sm text-[var(--parchment)]">{q.label}</div>
+          <div className="text-sm font-extrabold text-[var(--parchment)]">{q.label}</div>
           <div className="text-[11px] leading-snug text-[var(--parchment)]/55">{q.note}</div>
         </button>
       ))}
@@ -322,7 +320,7 @@ function PauseMenuBody() {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--ink)]/35 p-4">
       <Panel>
-        <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">PAUSED</h2>
+        <h2 className="font-display text-xl tracking-wide text-[var(--gilt)] text-outline">PAUSED</h2>
         <p className="mt-1 text-xs text-[var(--parchment)]/60">
           {s.questComplete
             ? "All quests complete"
@@ -330,7 +328,7 @@ function PauseMenuBody() {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            className="rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 py-2.5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
+            className={BTN.primary}
             onClick={() => {
               sfx.ui();
               useGame.setState({ screen: "playing" });
@@ -339,7 +337,7 @@ function PauseMenuBody() {
             Resume
           </button>
           <button
-            className="rounded-lg border border-[var(--gilt)]/25 px-4 py-2.5 text-sm text-[var(--parchment)]/85 hover:bg-[var(--ink)]/40"
+            className={BTN.secondary}
             onClick={() => {
               saveNow();
               useGame.getState().toast("Progress saved", "good");
@@ -348,7 +346,7 @@ function PauseMenuBody() {
             Save now
           </button>
           <button
-            className="rounded-lg border border-[#e8735a]/40 px-4 py-2.5 text-sm text-[#f0a595] hover:bg-[#e8735a]/15"
+            className={BTN.danger}
             onClick={() => {
               clearSave();
               useGame.getState().resetProgress();
@@ -361,7 +359,7 @@ function PauseMenuBody() {
         </div>
 
         <div className="mt-5">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
+          <div className="font-display text-[15px] tracking-wide text-[var(--gilt)] text-outline">Graphics</div>
           <QualityPicker quality={s.quality} setQuality={s.setQuality} />
         </div>
 
@@ -375,6 +373,8 @@ function PauseMenuBody() {
             }}
           />
         </div>
+
+        <MinimapSettings />
 
         <ComfortSettings />
 
@@ -409,14 +409,14 @@ function Toggle({
       }}
     >
       <span>
-        <span className="block text-sm text-[var(--parchment)]">{label}</span>
+        <span className="block text-sm font-bold text-[var(--parchment)]">{label}</span>
         {note && <span className="block text-xs text-[var(--parchment)]/70">{note}</span>}
       </span>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
           on
-            ? "border-[var(--gilt)]/70 bg-[var(--gilt)]/45"
-            : "border-[var(--parchment)]/25 bg-[var(--ink)]/60"
+            ? "border-[#b8741a] bg-[var(--gilt)]"
+            : "border-[var(--edge)] bg-[var(--ink)]/70"
         }`}
       >
         <span
@@ -446,9 +446,9 @@ function Slider({
 }) {
   return (
     <label className="block py-1.5">
-      <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
+      <span className="flex items-baseline justify-between text-sm font-bold text-[var(--parchment)]">
         {label}
-        <span className="text-xs text-[var(--parchment)]/70">{show(value)}</span>
+        <span className="text-xs font-extrabold text-[var(--gilt)]">{show(value)}</span>
       </span>
       <input
         type="range"
@@ -463,13 +463,95 @@ function Slider({
   );
 }
 
+/** Minimap options: show, size, zoom, shape, opacity, and where it sits. */
+function MinimapSettings() {
+  const prefs = useSettings();
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  return (
+    <div className="mt-5">
+      <div className="font-display text-[15px] tracking-wide text-[var(--gilt)] text-outline">
+        Minimap
+      </div>
+      <div className="divide-y divide-[var(--gilt)]/10">
+        <Toggle
+          label="Show minimap"
+          note="Tap it for the full map. Hold it to move it."
+          on={prefs.minimap}
+          onChange={(v) => prefs.update({ minimap: v })}
+        />
+        {prefs.minimap && (
+          <>
+            <Slider
+              label="Size"
+              value={prefs.minimapScale}
+              min={0.7}
+              max={1.6}
+              show={pct}
+              onChange={(v) => prefs.update({ minimapScale: v })}
+            />
+            <Slider
+              label="Zoom"
+              value={prefs.minimapZoom}
+              min={0.5}
+              max={2}
+              show={(v) => `${v.toFixed(1)}×`}
+              onChange={(v) => prefs.update({ minimapZoom: v })}
+            />
+            <Slider
+              label="Opacity"
+              value={prefs.minimapOpacity}
+              min={0.35}
+              max={1}
+              show={pct}
+              onChange={(v) => prefs.update({ minimapOpacity: v })}
+            />
+            <Toggle
+              label="Round minimap"
+              note="Off: square"
+              on={prefs.minimapRound}
+              onChange={(v) => prefs.update({ minimapRound: v })}
+            />
+            <div className="flex flex-wrap gap-2 py-2">
+              <button
+                data-testid="move-minimap"
+                className={BTN.secondary}
+                onClick={() => {
+                  sfx.ui();
+                  editMinimap(true);
+                  useGame.setState({ screen: "playing" });
+                }}
+              >
+                Move minimap
+              </button>
+              <button
+                className={BTN.ghost}
+                onClick={() =>
+                  prefs.update({
+                    minimapAt: { portrait: null, landscape: null },
+                    minimapScale: 1,
+                    minimapZoom: 1,
+                    minimapOpacity: 0.95,
+                    minimapRound: true,
+                  })
+                }
+              >
+                Reset minimap
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Controls and comfort: stored per device, not in the save. */
 function ComfortSettings() {
   const prefs = useSettings();
   const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   return (
     <div className="mt-5">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Controls</div>
+      <div className="font-display text-[15px] tracking-wide text-[var(--gilt)] text-outline">Controls</div>
       <Toggle
         label="Top-down camera"
         note="High view with north up. Off: the camera follows behind you and you steer the view."
@@ -570,7 +652,7 @@ export function DeathScreen() {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#2a0d0a]/55 p-4">
       <Panel>
-        <h2 className="font-display text-2xl tracking-[0.25em] text-[#f0a595]">YOU FALL</h2>
+        <h2 className="font-display text-2xl tracking-wide text-[#f0a595] text-outline">YOU FALL</h2>
         <p className="mt-2 text-sm text-[var(--parchment)]/80">
           Emberhollow's bells carry you back to the fountain. Your satchel is intact — your pride is
           not. ({deaths} {deaths === 1 ? "fall" : "falls"} so far.)
@@ -603,7 +685,7 @@ export function DialogueBox() {
       }}
     >
       <div className="w-full max-w-2xl rounded-xl border border-[var(--gilt)]/35 bg-[var(--panel)]/95 p-4 backdrop-blur">
-        <div className="font-display text-sm tracking-[0.2em] text-[var(--gilt)]">
+        <div className="font-display text-sm tracking-wide text-[var(--gilt)] text-outline">
           {dialogue.name.toUpperCase()}
         </div>
         <div className="mt-2 space-y-1.5">
@@ -663,7 +745,7 @@ export function RotateHint() {
         <path d="M10 44a22 22 0 0 0 18 14M54 20A22 22 0 0 0 36 6" strokeLinecap="round" />
         <path d="M24 55l4 3-3 4M40 3l-4 3 3 4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">
+      <h2 className="font-display text-xl tracking-wide text-[var(--gilt)] text-outline">
         ROTATE YOUR DEVICE
       </h2>
       <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">

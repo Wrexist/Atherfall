@@ -63,17 +63,23 @@
   --color-ink: var(--ink);
   --color-gilt: var(--gilt);
   --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-edge: var(--edge);
   --font-display: var(--font-display);
+  --font-sans: var(--font-body);
 }
 
 :root {
   --radius: 0.625rem;
-  /* Aetherfall game palette (storybook dusk) */
-  --parchment: #f3e4c8;
-  --ink: #17110d;
-  --gilt: #e5b45c;
-  --panel: #2a1f18;
-  --font-display: "Cinzel", Georgia, serif;
+  /* Aetherfall game palette: slate panels and gold, after Eternal Hero */
+  --parchment: #f4f1ea; /* text */
+  --ink: #0e1624; /* backdrops and wells */
+  --gilt: #ffcb5c; /* headings, highlights */
+  --panel: #1c2940; /* panel body */
+  --panel-2: #26375a; /* cards inside panels */
+  --edge: #3f5782; /* borders */
+  --font-display: "Lilita One", "Nunito", system-ui, sans-serif;
+  --font-body: "Nunito", ui-sans-serif, system-ui, sans-serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -157,7 +163,17 @@
 @layer base {
   .font-display {
     font-family: var(--font-display);
-    letter-spacing: 0.04em;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+  /* Chunky dark outline for headings and numbers over busy backgrounds. */
+  .text-outline {
+    text-shadow:
+      0 2px 0 #0b1320,
+      1px 1px 0 #0b1320,
+      -1px 1px 0 #0b1320,
+      1px -1px 0 #0b1320,
+      -1px -1px 0 #0b1320;
   }
 }
 
