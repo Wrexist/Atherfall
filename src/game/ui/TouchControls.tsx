@@ -5,6 +5,7 @@ import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
 import { EmotePicker } from "./Emotes";
 import { THREAT_DOT, usePortrait, useThreatened } from "./layout";
+import { Glyph } from "./kit";
 
 const KNOB = 52;
 const BASE = 128;
@@ -117,17 +118,22 @@ function Joystick({
           right
             ? "right-[max(1.75rem,env(safe-area-inset-right))]"
             : "left-[max(1.75rem,env(safe-area-inset-left))]"
-        } flex items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 transition-opacity`}
+        } flex items-center justify-center rounded-full border-2 border-white/25 bg-[#0b1320]/35 shadow-[inset_0_0_18px_rgba(0,0,0,0.35)] transition-opacity`}
       >
         <div
           ref={knob}
           style={{ width: KNOB_PX, height: KNOB_PX }}
-          className="rounded-full border border-[var(--gilt)]/50 bg-[var(--gilt)]/30"
+          className="rounded-full bg-gradient-to-b from-[#ffd970] to-[#f2a93b] shadow-[0_3px_0_#b8741a] ring-2 ring-[#0b1320]/70"
         />
       </div>
     </div>
   );
 }
+
+const DISC =
+  "bg-gradient-to-b from-[#3a5078] to-[#22324f] text-[var(--parchment)] ring-2 ring-[#0b1320]/70 shadow-[0_4px_0_rgba(0,0,0,0.4)] active:translate-y-px active:brightness-125";
+const GOLD_DISC =
+  "bg-gradient-to-b from-[#ffd970] to-[#f2a93b] text-[#3a2206] ring-[3px] ring-[#0b1320]/75 shadow-[0_5px_0_#9a5f12] active:translate-y-px active:brightness-110";
 
 function TouchButton({
   label,
@@ -135,6 +141,8 @@ function TouchButton({
   onRelease,
   size = "h-16 w-16",
   className = "",
+  primary = false,
+  icon,
 }: {
   label: string;
   onPress: () => void;
@@ -142,10 +150,16 @@ function TouchButton({
   onRelease?: () => void;
   size?: string;
   className?: string;
+  /** The big gold button (Attack). */
+  primary?: boolean;
+  icon?: React.ReactNode;
 }) {
   return (
     <button
-      className={`pointer-events-auto touch-none rounded-full border border-[var(--gilt)]/40 bg-[var(--panel)]/70 text-xs font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35 ${size} ${className}`}
+      aria-label={label}
+      className={`pointer-events-auto flex touch-none flex-col items-center justify-center rounded-full text-xs font-black uppercase tracking-wide ${
+        primary ? GOLD_DISC : `${DISC} text-outline`
+      } ${size} ${className}`}
       onPointerDown={(e) => {
         e.preventDefault();
         // Capture so the release is seen even if the thumb slides off the button.
@@ -155,7 +169,8 @@ function TouchButton({
       // Fires on lift, cancel, or if the browser drops the capture for any reason.
       onLostPointerCapture={onRelease}
     >
-      {label}
+      {icon}
+      <span className={icon ? "mt-0.5 text-[10px] leading-none" : ""}>{label}</span>
     </button>
   );
 }
@@ -214,14 +229,14 @@ function ArcButton({
       aria-label={label}
       data-testid={`touch-${id}`}
       style={{ transform: `translate(calc(${x}px - 50%), calc(${-y}px - 50%))` }}
-      className={`pointer-events-auto absolute left-1/2 top-1/2 flex ${size} touch-none flex-col items-center justify-center overflow-hidden rounded-full border border-[var(--gilt)]/45 bg-[var(--panel)]/75 text-[var(--parchment)] active:bg-[var(--gilt)]/35`}
+      className={`pointer-events-auto absolute left-1/2 top-1/2 flex ${size} touch-none flex-col items-center justify-center overflow-hidden rounded-full ${DISC}`}
       onPointerDown={(e) => {
         e.preventDefault();
         onPress();
       }}
     >
       {id === "jump" ? (
-        <span className="text-[11px] font-semibold uppercase tracking-wider">Jump</span>
+        <span className="text-[11px] font-black uppercase tracking-wide text-outline">Jump</span>
       ) : id === "heal" ? (
         <>
           <svg
@@ -236,7 +251,7 @@ function ArcButton({
             <path d="M9 3h6M10 3v4.5L6.5 13a5.5 5.5 0 1 0 11 0L14 7.5V3" />
             <path d="M8 14h8" />
           </svg>
-          <span className="text-[9px] font-semibold uppercase tracking-wide">{label}</span>
+          <span className="text-[9px] font-black uppercase tracking-wide text-outline">{label}</span>
         </>
       ) : id === "target" ? (
         <>
@@ -252,14 +267,14 @@ function ArcButton({
             <circle cx="12" cy="12" r="7" />
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
           </svg>
-          <span className="text-[9px] font-semibold uppercase tracking-wide">Target</span>
+          <span className="text-[9px] font-black uppercase tracking-wide text-outline">Target</span>
         </>
       ) : (
         <>
           <SlotIcon id={id} className="h-5 w-5" />
           {/* Long names ("Emberburst") shrink to fit the round button. */}
           <span
-            className={`font-semibold uppercase ${label.length > 7 ? "text-[7.5px] tracking-normal" : "text-[9px] tracking-wide"}`}
+            className={`font-black uppercase text-outline ${label.length > 7 ? "text-[7.5px] tracking-normal" : "text-[9px] tracking-wide"}`}
           >
             {label}
           </span>
@@ -307,6 +322,8 @@ export function TouchControls() {
   const attack = (
     <TouchButton
       label="Attack"
+      primary
+      icon={<Glyph id="attack" className={portrait ? "h-9 w-9" : "h-8 w-8"} color="#fff" />}
       size={portrait ? "h-[5.25rem] w-[5.25rem]" : "h-20 w-20"}
       className="!text-sm"
       onPress={() => {

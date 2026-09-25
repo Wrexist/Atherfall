@@ -24,6 +24,24 @@ export interface Settings {
   leftHanded: boolean;
   /** First-run tips already learned or dismissed. */
   tipsDone: string[];
+  /** Minimap in the HUD. */
+  minimap: boolean;
+  /** Minimap size multiplier, 0.7–1.6. */
+  minimapScale: number;
+  /** Minimap zoom: higher shows less ground in more detail, 0.5–2. */
+  minimapZoom: number;
+  /** Round (true) or square minimap. */
+  minimapRound: boolean;
+  /** Minimap opacity, 0.35–1. */
+  minimapOpacity: number;
+  /** Where the player moved the minimap, per screen shape (null = top-right corner). */
+  minimapAt: { portrait: ScreenPos | null; landscape: ScreenPos | null };
+}
+
+/** A point as fractions of the screen's width and height (survives rotation and resizing). */
+export interface ScreenPos {
+  x: number;
+  y: number;
 }
 
 export const SETTINGS_KEY = "aetherfall.settings";
@@ -40,9 +58,24 @@ export const DEFAULT_SETTINGS: Settings = {
   stickOpacity: 0.6,
   leftHanded: false,
   tipsDone: [],
+  minimap: true,
+  minimapScale: 1,
+  minimapZoom: 1,
+  minimapRound: true,
+  minimapOpacity: 0.95,
+  minimapAt: { portrait: null, landscape: null },
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** A stored screen position, or null if it's missing or broken. */
+function screenPos(raw: unknown): ScreenPos | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { x, y } = raw as Partial<ScreenPos>;
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y))
+    return null;
+  return { x: clamp(x, 0, 1), y: clamp(y, 0, 1) };
+}
 
 /**
  * Stored settings, made safe: unknown keys dropped, wrong types replaced by
@@ -61,6 +94,11 @@ export function sanitizeSettings(raw: unknown): Settings {
   out.stickOpacity = clamp(out.stickOpacity, 0.25, 1);
   if (out.camera !== "top" && out.camera !== "behind") out.camera = DEFAULT_SETTINGS.camera;
   out.tipsDone = Array.isArray(r.tipsDone) ? r.tipsDone.filter((t) => typeof t === "string") : [];
+  out.minimapScale = clamp(out.minimapScale, 0.7, 1.6);
+  out.minimapZoom = clamp(out.minimapZoom, 0.5, 2);
+  out.minimapOpacity = clamp(out.minimapOpacity, 0.35, 1);
+  const at = (r.minimapAt ?? {}) as Partial<Settings["minimapAt"]>;
+  out.minimapAt = { portrait: screenPos(at.portrait), landscape: screenPos(at.landscape) };
   return out;
 }
 
