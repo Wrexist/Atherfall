@@ -12,6 +12,8 @@ export interface Settings {
   floatingStick: boolean;
   /** Holding Attack keeps chaining swings. */
   holdToAttack: boolean;
+  /** Turn to and attack enemies in reach on your own (walking, or standing in a fight). */
+  autoAttack: boolean;
   /** High 3/4 view (default) or the orbiting behind-the-back camera. */
   camera: CameraMode;
   /** Cap the game at 30 fps: a cooler phone and longer play. */
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   floatingStick: true,
   holdToAttack: true,
+  autoAttack: true,
   camera: "top",
   batterySaver: false,
   stickSize: 1,

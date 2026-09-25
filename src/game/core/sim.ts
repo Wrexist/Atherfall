@@ -19,6 +19,7 @@ import {
 import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
 import { QUESTS } from "../data/quests";
 import { abilityUnlocked } from "./rules";
+import { AUTO_RANGE, pickAutoTarget, shouldAutoAttack } from "./autoAttack";
 import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
 import { ITEMS } from "../data/items";
@@ -1043,6 +1044,13 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   const kind = basicKind();
   if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
   autoFace(p, kind === "melee" ? swing.range + 1.6 : kind === "arrow" ? 20 : 15);
+  // Auto-attack: face the enemy in reach whichever way you're walking.
+  const auto = useSettings.getState().autoAttack
+    ? pickAutoTarget(p.x, p.z, world.enemies, AUTO_RANGE[kind], world.lockId)
+    : null;
+  if (auto) p.yaw = Math.atan2(auto.x - p.x, auto.z - p.z);
+  // Backing away while swinging: no lunge dragging you back toward the enemy.
+  const retreating = mag > 0.2 && mx * Math.sin(p.yaw) + mz * Math.cos(p.yaw) < 0;
   p.action = "attack";
   p.actionT = 0;
   p.comboIdx = idx + 1;
@@ -1050,7 +1058,7 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   p.hitIds = new Set();
   p.swingSerial += 1;
   p.animKey += 1;
-  const lunge = kind === "melee" ? swing.lunge : 0;
+  const lunge = kind === "melee" && !retreating ? swing.lunge : 0;
   p.vx = Math.sin(p.yaw) * lunge;
   p.vz = Math.cos(p.yaw) * lunge;
   world.stats.swings += 1;
@@ -1359,6 +1367,15 @@ function stepPlayer(dt: number, camYaw: number) {
   if (input.attackHeld && p.bufAttack <= 0 && !p.swimming && useSettings.getState().holdToAttack) {
     p.bufAttack = INPUT_BUFFER;
   }
+  // Auto-attack (a setting, on by default; see core/autoAttack.ts): walk into
+  // reach of an enemy, or stand still in a fight, and the hero swings.
+  const autoTarget =
+    useSettings.getState().autoAttack && !p.swimming
+      ? pickAutoTarget(p.x, p.z, world.enemies, AUTO_RANGE[basicKind()], world.lockId)
+      : null;
+  if (p.bufAttack <= 0 && shouldAutoAttack(!!autoTarget, mag > 0.05, inCombat())) {
+    p.bufAttack = INPUT_BUFFER;
+  }
   if (p.bufDodge > 0) {
     p.bufDodge = tryDodge(p, mx, mz, mag) ? 0 : p.bufDodge - dt;
     if (p.bufDodge === 0 && p.action === "dodge") p.bufAttack = 0; // a dodge cancels a pending attack
@@ -1544,6 +1561,11 @@ function stepPlayer(dt: number, camYaw: number) {
 
   if (moving && (p.action === "none" || p.action === "ward-cast")) {
     p.yaw = angleLerp(p.yaw, Math.atan2(mx, mz), 1 - Math.exp(-TURN * dt));
+  }
+  // Swinging at an auto target: keep turning to it as it (or you) moves.
+  if (autoTarget && p.action === "attack") {
+    const want = Math.atan2(autoTarget.x - p.x, autoTarget.z - p.z);
+    p.yaw = angleLerp(p.yaw, want, 1 - Math.exp(-TURN * 1.5 * dt));
   }
 
   if (p.swimming) {

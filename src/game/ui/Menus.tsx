@@ -595,6 +595,12 @@ function ComfortSettings() {
           onChange={(v) => prefs.update({ batterySaver: v })}
         />
         <Toggle
+          label="Auto-attack"
+          note="Turn to and attack enemies in reach as you walk, and keep fighting when you stand still"
+          on={prefs.autoAttack}
+          onChange={(v) => prefs.update({ autoAttack: v })}
+        />
+        <Toggle
           label="Hold Attack to keep swinging"
           on={prefs.holdToAttack}
           onChange={(v) => prefs.update({ holdToAttack: v })}
