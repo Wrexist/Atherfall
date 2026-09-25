@@ -176,5 +176,5 @@ Verified for #84–85 in Chromium as an iPhone 13 upright (390×844) and a 1280�
 | # | Item |
 |---|------|
 | 77 | 389 Prettier formatting errors: run `npm run format` once in its own commit. |
-| 78 | `README.md` still says "Exact Screenshot Match". Replace it with a real project description. |
-| 79 | Add CI (typecheck, lint, `bun test`) on every push. |
+| 78 | ✅ `README.md` describes the game, how to run and check it, where the code lives, and the art credits. |
+| 79 | ✅ CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, tests and build on every pull request and push to `main`. |
