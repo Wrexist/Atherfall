@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { STARTER_QUEST } from "../data/quests";
 import { setMuted as setAudioMuted, sfx } from "../core/audio";
-import { clearSave } from "../core/persistence";
+import { } from "../core/persistence";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
 import { useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";

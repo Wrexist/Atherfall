@@ -1,15 +1,16 @@
 import { useEffect, useRef } from "react";
-import { ABILITIES, DODGE, abilityUnlocked, type AbilityDef } from "../data/combat";
+import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
+import { ABILITIES, DODGE, type AbilityId } from "../data/combat";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
+import { abilityUnlocked } from "../core/rules";
 
-export type SlotId = "dodge" | AbilityDef["id"];
+export type SlotId = "dodge" | AbilityId;
 
 function cooldownOf(id: SlotId): { left: number; max: number } {
   const p = world.player;
   if (id === "dodge") return { left: p.dodgeCd, max: DODGE.cooldown };
-  const def = ABILITIES.find((a) => a.id === id)!;
-  return { left: p.cooldowns[id], max: def.cooldown };
+  return { left: p.cooldowns[id], max: ABILITIES[id].cooldown };
 }
 
 /** Reads cooldowns straight from the simulation every animation frame. */
@@ -20,7 +21,7 @@ export function CooldownSweep({ id }: { id: SlotId }) {
     let raf = 0;
     const tick = () => {
       const { left, max } = cooldownOf(id);
-      const frac = max > 0 ? left / max : 0;
+      const frac = max > 0 ? Math.min(1, left / max) : 0;
       if (sweep.current) {
         sweep.current.style.background = frac > 0 ? `conic-gradient(rgba(12,8,6,0.72) ${frac * 360}deg, transparent 0deg)` : "transparent";
       }
@@ -45,10 +46,18 @@ export function CooldownSweep({ id }: { id: SlotId }) {
   );
 }
 
-export function useUnlocked() {
-  const step = useGame((s) => s.questStep);
-  const done = useGame((s) => s.questComplete);
-  return ABILITIES.map((a) => abilityUnlocked(a, step, done));
+/** Current archetype's three ability slots with unlock state. */
+export function useAbilitySlots() {
+  const archetype = useGame((s) => s.archetype);
+  const level = useGame((s) => s.level);
+  return ARCHETYPES[archetype].abilities.map((id, i) => ({
+    id,
+    def: ABILITIES[id],
+    key: String(i + 1),
+    index: i,
+    unlocked: abilityUnlocked(level, i),
+    unlockLevel: ABILITY_UNLOCK_LEVELS[i],
+  }));
 }
 
 const ICON: Record<SlotId, string> = {
@@ -56,6 +65,12 @@ const ICON: Record<SlotId, string> = {
   galestep: "M3 12h13M3 7h9M3 17h9M16 7l5 5-5 5",
   emberburst: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
   barkward: "M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z",
+  vault: "M20 12H7M11 7l-5 5 5 5M4 5v14",
+  arrowrain: "M6 3v10M12 3v12M18 3v10M4 11l2 3 2-3M10 13l2 3 2-3M16 11l2 3 2-3M4 20h16",
+  secondwind: "M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10zM9 12h6M12 9v6",
+  blink: "M4 12h4M16 12h4M12 4v4M12 16v4M8 8l8 8M16 8l-8 8",
+  frostnova: "M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M9 4l3 3 3-3M9 20l3-3 3 3",
+  aegis: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z",
 };
 
 export function SlotIcon({ id, className = "h-6 w-6" }: { id: SlotId; className?: string }) {
@@ -66,7 +81,7 @@ export function SlotIcon({ id, className = "h-6 w-6" }: { id: SlotId; className?
   );
 }
 
-/** Live combat state chips (ward, evade window, combo step). */
+/** Live combat state chips (ward, shield, haste, evade window, combo step). */
 export function CombatStates() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -76,6 +91,8 @@ export function CombatStates() {
       const parts: string[] = [];
       if (p.dodgeIframe > 0 || p.action === "gale") parts.push(`<span class="text-[#bfe6ff]">EVADE</span>`);
       if (p.wardT > 0) parts.push(`<span class="text-[#c9e39a]">WARD ${p.wardT.toFixed(1)}s</span>`);
+      if (p.shieldHp > 0) parts.push(`<span class="text-[#b9a4ff]">AEGIS ${Math.ceil(p.shieldHp)}</span>`);
+      if (p.hasteT > 0) parts.push(`<span class="text-[#9fe39a]">HASTE ${p.hasteT.toFixed(1)}s</span>`);
       if (p.action === "attack") {
         const pips = [1, 2, 3].map((n) => (n <= p.comboIdx ? "◆" : "◇")).join(" ");
         parts.push(`<span class="text-[var(--gilt)]">${pips}</span>`);
@@ -92,17 +109,17 @@ export function CombatStates() {
 
 /** Desktop ability bar, bottom centre. */
 export function AbilityBar() {
-  const unlocked = useUnlocked();
+  const abilities = useAbilitySlots();
   const slots: Array<{ id: SlotId; name: string; key: string; on: boolean; hint?: string }> = [
     { id: "dodge", name: "Dodge", key: "F", on: true },
-    ...ABILITIES.map((a, i) => ({ id: a.id, name: a.name, key: a.key, on: unlocked[i]!, hint: a.unlockHint })),
+    ...abilities.map((a) => ({ id: a.id, name: a.def.name, key: a.key, on: a.unlocked, hint: `Level ${a.unlockLevel}` })),
   ];
   return (
     <div className="flex flex-col items-center gap-1">
       <CombatStates />
       <div className="flex gap-2">
         {slots.map((s) => (
-          <div key={s.id} className="flex w-16 flex-col items-center gap-1" title={s.on ? s.name : `Locked — ${s.hint}`}>
+          <div key={s.id} className="flex w-16 flex-col items-center gap-1" title={s.on ? s.name : `Unlocks at ${s.hint}`}>
             <div
               data-testid={`slot-${s.id}`}
               className={`relative flex h-12 w-12 items-center justify-center rounded-lg border ${

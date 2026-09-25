@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { applyLook, input, setSprintTouch, touch } from "../core/input";
 import { useGame } from "../core/store";
-import { ABILITIES } from "../data/combat";
-import { CombatStates, CooldownSweep, SlotIcon, useUnlocked, type SlotId } from "./Cooldowns";
+import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
 
 const KNOB = 52;
 
@@ -158,7 +157,7 @@ export function TouchControls() {
   const potions = useGame((s) => s.potions);
   const prompt = useGame((s) => s.interactPrompt);
   const toggleInventory = useGame((s) => s.toggleInventory);
-  const unlocked = useUnlocked();
+  const slots = useAbilitySlots();
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(pointer: coarse)").matches);
@@ -168,9 +167,7 @@ export function TouchControls() {
 
   // Two rings around Attack: Jump + Dodge close in, abilities on an outer arc
   // that only fills as they unlock — so thumbs never hunt for small targets.
-  const abilities = ABILITIES.map((a, i) => ({ id: a.id as SlotId, label: ({ galestep: "Gale", emberburst: "Burst", barkward: "Ward" } as const)[a.id], idx: i })).filter(
-    (a) => unlocked[a.idx],
-  );
+  const abilities = slots.filter((a) => a.unlocked).map((a) => ({ id: a.id as SlotId, label: a.def.name.split(" ").pop()!, idx: a.index }));
   const OUTER = [178, 146, 114];
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
