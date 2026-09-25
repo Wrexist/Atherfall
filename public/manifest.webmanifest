@@ -5,7 +5,7 @@
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#17110d",
   "theme_color": "#17110d",
   "categories": ["games"],

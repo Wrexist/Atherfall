@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QUESTS } from "../data/quests";
 import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
@@ -11,6 +11,8 @@ import {
   useLocalSaves,
 } from "./Account";
 import { useCloudSync } from "../online/cloudSave";
+import { PHONE_SIDEWAYS } from "./layout";
+import { LOADING_TIPS, loadStalled } from "../core/loading";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
@@ -31,7 +33,7 @@ function Panel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * On phones, take over the whole screen and hold landscape (Android/Chrome).
+ * On phones, take over the whole screen and hold portrait (Android/Chrome).
  * iPhone Safari has no element fullscreen; there the home-screen install
  * (manifest, display: fullscreen) gives the same result. Must run in a tap.
  */
@@ -43,10 +45,13 @@ function enterMobileFullscreen() {
   root
     .requestFullscreen({ navigationUI: "hide" })
     .then(() => {
+      // Phones only: tablets play in either orientation (the manifest stays
+      // "any" for the same reason, since it applies to every installed device).
+      if (Math.min(screen.width, screen.height) >= 600) return undefined;
       const orientation = screen.orientation as ScreenOrientation & {
         lock?: (o: string) => Promise<void>;
       };
-      return orientation?.lock?.("landscape");
+      return orientation?.lock?.("portrait");
     })
     .catch(() => undefined);
 }
@@ -54,13 +59,34 @@ function enterMobileFullscreen() {
 const freshSeed = () => (Math.random() * 2 ** 32) >>> 0;
 
 export function LoadingScreen({ progress }: { progress: number }) {
+  const [tip, setTip] = useState(0);
+  const [stalled, setStalled] = useState(false);
+  const lastChange = useRef(Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setTip((t) => (t + 1) % LOADING_TIPS.length), 4500);
+    return () => clearInterval(iv);
+  }, []);
+  // Progress moved: the clock for "stuck" starts again.
+  useEffect(() => {
+    lastChange.current = Date.now();
+    setStalled(false);
+  }, [progress]);
+  useEffect(() => {
+    const iv = setInterval(
+      () => setStalled(loadStalled(progress, lastChange.current, Date.now())),
+      1000,
+    );
+    return () => clearInterval(iv);
+  }, [progress]);
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6">
-      <h1 className="font-display text-4xl tracking-[0.4em] text-[var(--gilt)]">AETHERFALL</h1>
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
+      <h1 className="font-display text-3xl tracking-[0.3em] text-[var(--gilt)] sm:text-4xl sm:tracking-[0.4em]">
+        AETHERFALL
+      </h1>
       <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
         Dawnreach
       </p>
-      <div className="mt-8 h-1.5 w-64 overflow-hidden rounded-full bg-[var(--parchment)]/15">
+      <div className="mt-8 h-1.5 w-64 max-w-full overflow-hidden rounded-full bg-[var(--parchment)]/15">
         <div
           className="h-full rounded-full bg-[var(--gilt)] transition-[width] duration-200"
           style={{ width: `${Math.round(progress * 100)}%` }}
@@ -69,6 +95,28 @@ export function LoadingScreen({ progress }: { progress: number }) {
       <p className="mt-3 text-[11px] text-[var(--parchment)]/45">
         Raising the pines… {Math.round(progress * 100)}%
       </p>
+      {stalled ? (
+        <div className="mt-6 flex max-w-xs flex-col items-center gap-3">
+          <p className="text-sm text-[var(--parchment)]/80">
+            Still loading. Your connection may be slow or have dropped.
+          </p>
+          <button
+            className="min-h-11 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 text-sm font-semibold text-[var(--parchment)]"
+            // Files that already arrived are cached, so a retry picks up where it stopped.
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <p
+          className="mt-6 min-h-10 max-w-xs text-sm leading-snug text-[var(--parchment)]/70"
+          aria-live="polite"
+        >
+          <span className="text-[var(--gilt)]">✦ </span>
+          {LOADING_TIPS[tip]}
+        </p>
+      )}
     </div>
   );
 }
@@ -379,6 +427,40 @@ function Toggle({
   );
 }
 
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  show,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  show: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block py-1.5">
+      <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
+        {label}
+        <span className="text-xs text-[var(--parchment)]/70">{show(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.05}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 h-11 w-full accent-[var(--gilt)]"
+      />
+    </label>
+  );
+}
+
 /** Controls and comfort: stored per device, not in the save. */
 function ComfortSettings() {
   const prefs = useSettings();
@@ -386,28 +468,47 @@ function ComfortSettings() {
   return (
     <div className="mt-5">
       <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Controls</div>
-      <label className="mt-2 block">
-        <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
-          Look sensitivity
-          <span className="text-xs text-[var(--parchment)]/70">
-            {prefs.lookSensitivity.toFixed(1)}×
-          </span>
-        </span>
-        <input
-          type="range"
-          min={0.4}
-          max={2.2}
-          step={0.1}
-          value={prefs.lookSensitivity}
-          onChange={(e) => prefs.update({ lookSensitivity: Number(e.target.value) })}
-          className="mt-1 h-11 w-full accent-[var(--gilt)]"
-        />
-      </label>
+      <Toggle
+        label="Top-down camera"
+        note="High view with north up. Off: the camera follows behind you and you steer the view."
+        on={prefs.camera === "top"}
+        onChange={(v) => {
+          prefs.update({ camera: v ? "top" : "behind" });
+          if (v && document.pointerLockElement) document.exitPointerLock();
+        }}
+      />
+      {prefs.camera === "behind" && (
+        <>
+          <label className="mt-2 block">
+            <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
+              Look sensitivity
+              <span className="text-xs text-[var(--parchment)]/70">
+                {prefs.lookSensitivity.toFixed(1)}×
+              </span>
+            </span>
+            <input
+              type="range"
+              min={0.4}
+              max={2.2}
+              step={0.1}
+              value={prefs.lookSensitivity}
+              onChange={(e) => prefs.update({ lookSensitivity: Number(e.target.value) })}
+              className="mt-1 h-11 w-full accent-[var(--gilt)]"
+            />
+          </label>
+          <Toggle
+            label="Invert camera up/down"
+            on={prefs.invertY}
+            onChange={(v) => prefs.update({ invertY: v })}
+          />
+        </>
+      )}
       <div className="divide-y divide-[var(--gilt)]/10">
         <Toggle
-          label="Invert camera up/down"
-          on={prefs.invertY}
-          onChange={(v) => prefs.update({ invertY: v })}
+          label="Battery saver"
+          note="Caps the game at 30 frames a second: a cooler phone and longer play"
+          on={prefs.batterySaver}
+          onChange={(v) => prefs.update({ batterySaver: v })}
         />
         <Toggle
           label="Hold Attack to keep swinging"
@@ -416,6 +517,28 @@ function ComfortSettings() {
         />
         {touch && (
           <>
+            <Toggle
+              label="Left-handed controls"
+              note="Stick on the right, Attack on the left"
+              on={prefs.leftHanded}
+              onChange={(v) => prefs.update({ leftHanded: v })}
+            />
+            <Slider
+              label="Joystick size"
+              value={prefs.stickSize}
+              min={0.75}
+              max={1.4}
+              show={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => prefs.update({ stickSize: v })}
+            />
+            <Slider
+              label="Joystick opacity"
+              value={prefs.stickOpacity}
+              min={0.25}
+              max={1}
+              show={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => prefs.update({ stickOpacity: v })}
+            />
             <Toggle
               label="Floating joystick"
               note="Appears wherever your left thumb lands"
@@ -503,17 +626,18 @@ export function DialogueBox() {
 }
 
 /**
- * Phones held upright: the controls and HUD are designed for landscape, so ask
- * the player to rotate and pause the fight underneath instead of letting
- * enemies hit an unplayable layout.
+ * Phones held sideways: the controls and HUD are designed for one-handed
+ * upright play, so ask the player to rotate and pause the fight underneath
+ * instead of letting enemies hit an unplayable layout. (Tablets and desktops
+ * play in any orientation.)
  */
 export function RotateHint() {
-  const [portrait, setPortrait] = useState(false);
+  const [sideways, setSideways] = useState(false);
   const loading = useGame((g) => g.screen === "loading");
   useEffect(() => {
-    const mq = window.matchMedia("(orientation: portrait) and (pointer: coarse)");
+    const mq = window.matchMedia(PHONE_SIDEWAYS);
     const update = () => {
-      setPortrait(mq.matches);
+      setSideways(mq.matches);
       if (mq.matches && useGame.getState().screen === "playing") {
         useGame.setState({ screen: "paused" });
       }
@@ -522,7 +646,7 @@ export function RotateHint() {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-  if (!portrait || loading) return null;
+  if (!sideways || loading) return null;
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[var(--ink)] p-8 text-center">
       <svg
@@ -541,7 +665,7 @@ export function RotateHint() {
         ROTATE YOUR DEVICE
       </h2>
       <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">
-        Aetherfall plays in landscape. Turn your phone sideways to continue your journey.
+        Aetherfall plays upright. Turn your phone to portrait to continue your journey.
       </p>
     </div>
   );

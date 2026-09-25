@@ -35,6 +35,8 @@ export interface NpcDef {
   z: number;
   yaw: number;
   scale: number;
+  /** Colour wash over the model's palette, to tell villagers apart. */
+  tint?: string;
 }
 
 export interface SpawnDef {
@@ -62,7 +64,7 @@ export const NPCS: NpcDef[] = [
   {
     id: "sela",
     name: "Warden Sela",
-    model: "/models/mini/npc-sela.glb",
+    model: "/models/kaykit/rogue.glb",
     x: 3.2,
     z: 3.6,
     yaw: -2.3,
@@ -71,7 +73,7 @@ export const NPCS: NpcDef[] = [
   {
     id: "smith",
     name: "Oda the Smith",
-    model: "/models/mini/smith.glb",
+    model: "/models/kaykit/barbarian.glb",
     x: 7.5,
     z: -2.5,
     yaw: -1.2,
@@ -80,11 +82,12 @@ export const NPCS: NpcDef[] = [
   {
     id: "elder",
     name: "Elder Kervan",
-    model: "/models/mini/npc-elder.glb",
+    model: "/models/kaykit/elder.glb",
     x: -7.5,
     z: 1.5,
     yaw: 1.1,
     scale: 2.1,
+    tint: "#b9b2a4",
   },
 ];
 
@@ -122,27 +125,50 @@ export const SPAWNS: SpawnDef[] = [
   { id: "king", type: "lanternking", x: -70, z: 14, yaw: 1.57 },
 ];
 
+/** A KayKit world piece (all live in one file; see scripts/models/build-kaykit-world.mjs). */
+export const K = (piece: string) => `/models/kaykit/world.glb#${piece}`;
+
+/**
+ * KayKit Medieval pieces are built for a hex board (a pine is ~1.2 units tall),
+ * so the scatter's sizes are multiplied per piece to reach world size.
+ */
+const SIZE_FIX: Record<string, number> = {
+  [K("tree_A")]: 1.5,
+  [K("tree_B")]: 1.5,
+  [K("pine_yellow")]: 0.33,
+  [K("pine_orange")]: 0.33,
+  [K("rock_E")]: 2.4,
+  [K("rock_C")]: 3.0,
+  [K("rock_D")]: 3.2,
+  [K("rock_A")]: 2.6,
+  [K("rock_B")]: 2.4,
+  "/models/nature/plant_bushDetailed.glb": 1.25,
+  "/models/nature/stump_old.glb": 0.8,
+};
+
+/** One in four trees is an autumn pine, for colour. */
 const TREES = [
-  "/models/nature/tree_pineTallA.glb",
-  "/models/nature/tree_pineRoundC.glb",
-  "/models/nature/tree_default.glb",
-  "/models/nature/tree_oak.glb",
+  K("tree_A"),
+  K("tree_B"),
+  K("pine_yellow"),
+  K("tree_A"),
+  K("tree_B"),
+  K("tree_A"),
+  K("tree_B"),
+  K("pine_orange"),
 ];
 
+/** Walk-through undergrowth (grass tufts and flowers are drawn separately, see render/Grass.tsx). */
 const SMALL = [
-  "/models/nature/grass.glb",
-  "/models/nature/grass_large.glb",
   "/models/nature/plant_bushDetailed.glb",
-  "/models/nature/flower_yellowA.glb",
-  "/models/nature/flower_purpleB.glb",
+  K("rock_A"),
+  "/models/nature/plant_bushDetailed.glb",
+  K("rock_B"),
+  "/models/nature/stump_old.glb",
   "/models/nature/mushroom_redGroup.glb",
 ];
 
-const ROCKS = [
-  "/models/nature/rock_largeA.glb",
-  "/models/nature/rock_tallB.glb",
-  "/models/nature/rock_smallC.glb",
-];
+const ROCKS = [K("rock_E"), K("rock_C"), K("rock_D")];
 
 function pick<T>(arr: T[], r: number): T {
   return arr[Math.min(arr.length - 1, Math.floor(r * arr.length))] as T;
@@ -163,14 +189,18 @@ function handmade(): PropInstance[] {
 
   // --- Emberhollow village ---
   add("/models/town/fountain-round.glb", 0, 0, 0, 3.2, 2.6);
-  add("/models/town/windmill.glb", -24, -14, 0.6, 4.2, 3.4);
-  add("/models/town/watermill.glb", 20, 16, -1.2, 3.6, 3.2);
-  add("/models/town/stall.glb", -5, 7, 0.3, 2.8, 1.4);
-  add("/models/town/stall-red.glb", 6, 8.5, -0.4, 2.8, 1.4);
-  add("/models/town/cart.glb", 9, -3, 1.9, 2.6, 1.2);
-  add("/models/town/banner-green.glb", -3.4, -2.6, 0, 3, 0.5, true);
-  add("/models/town/banner-green.glb", 3.4, 2.6, 3.14, 3, 0.5, true);
+  add(K("windmill"), -24, -14, 0.6, 7.5, 3.4);
+  add(K("watermill"), 20, 16, -1.2, 6.5, 3.2);
+  add(K("tent"), -5, 7, 0.3, 5, 1.4);
+  add(K("market"), 6, 8.5, -0.4, 2.4, 2.1);
+  add(K("wheelbarrow"), 9, -3, 1.9, 6, 1.2);
+  add(K("flag_red"), -3.4, -2.6, 0, 8, 0.5, true);
+  add(K("flag_red"), 3.4, 2.6, 3.14, 8, 0.5, true);
   add("/models/nature/campfire_stones.glb", 5.5, -6.5, 0, 2.6, 0.9);
+  add(K("barrel"), 7.8, -1.2, 0.4, 5, 0, true);
+  add(K("crate_big"), 10.4, -5, 0.2, 5, 0, true);
+  add(K("sack"), -6.4, 5.4, 1.1, 6, 0, true);
+  add(K("weaponrack"), 9.2, -4.4, -1.2, 6, 0, true);
 
   // Lantern posts along the north road and the village square
   const lanterns: Array<[number, number]> = [
@@ -187,18 +217,18 @@ function handmade(): PropInstance[] {
     [6.2, 22.6],
     [-1, 22],
   ];
-  for (const [x, z] of lanterns) add("/models/town/lantern.glb", x, z, 0, 2.8, 0.4);
+  for (const [x, z] of lanterns) add(K("lantern_post"), x, z, 0, 0.85, 0.4);
 
-  // Fences framing the square
+  // Fences framing the square (the KayKit fence runs along z, so turn it)
   for (let i = 0; i < 7; i++) {
-    add("/models/town/fence.glb", -18 + i * 3, 18, 0, 3, 1.0, true);
+    add(K("fence_wood"), -18 + i * 3, 18, Math.PI / 2, 2.6, 1.0, true);
     // leave a gap where the east road to the ruins passes through
     if (i !== 4 && i !== 5) add("/models/town/hedge.glb", 18, -18 + i * 3, Math.PI / 2, 3, 1.2, true);
   }
 
   // --- Whisperpine Woods gateway ---
-  add("/models/nature/statue_obelisk.glb", -8.5, -30, 0.2, 3, 1.2);
-  add("/models/nature/statue_columnDamaged.glb", 2.5, -30, -0.3, 3, 1.2);
+  add(K("pillar"), -8.5, -30, 0.2, 0.75, 1.2);
+  add(K("pillar"), 2.5, -30, -0.3, 0.75, 1.2);
   add("/models/nature/log.glb", -10, -50, 0.9, 3, 1.1, true);
   add("/models/nature/stump_old.glb", 6, -54, 0, 3, 1.0, true);
 
@@ -212,67 +242,65 @@ function handmade(): PropInstance[] {
   }
   ring.forEach(([x, z], i) => {
     if (pathDistance(x, z) < 2.2) return; // keep the ruins road clear
-    const model =
-      i % 3 === 0
-        ? "/models/gy/pillar-large.glb"
-        : i % 3 === 1
-          ? "/models/gy/column-large.glb"
-          : "/models/gy/pillar-small.glb";
-    add(model, x, z, (i * 1.7) % 6.28, 3.2, 1.1);
+    add(K("pillar"), x, z, (i * 1.7) % 6.28, i % 3 === 0 ? 0.9 : i % 3 === 1 ? 0.78 : 0.62, 1.1);
   });
-  add("/models/gy/altar-stone.glb", rx, rz, 0.4, 3.4, 1.6);
-  add("/models/gy/fire-basket.glb", rx - 5, rz + 5, 0, 3, 0.8);
-  add("/models/gy/fire-basket.glb", rx + 5, rz - 5, 0, 3, 0.8);
-  add("/models/gy/stone-wall.glb", rx - 12, rz + 10, 0.8, 3.4, 1.4, true);
-  add("/models/gy/stone-wall-damaged.glb", rx + 12, rz + 9, -0.7, 3.4, 1.4, true);
-  add("/models/gy/brick-wall.glb", rx + 3, rz - 14, 0.2, 3.4, 1.4, true);
+  add(K("shrine"), rx, rz, 0.4, 1.8, 1.6);
+  add(K("lantern_standing"), rx - 5, rz + 5, 0, 1.6, 0.8);
+  add(K("lantern_standing"), rx + 5, rz - 5, 0, 1.6, 0.8);
+  add(K("wall_stone"), rx - 12, rz + 10, 0.8, 2.4, 2.0, true);
+  add(K("wall_stone"), rx + 12, rz + 9, -0.7, 2.4, 2.0, true);
+  add(K("wall_stone"), rx + 3, rz - 14, 0.2, 2.4, 2.0, true);
   add("/models/gy/debris.glb", rx - 3, rz - 8, 1.1, 3, 0.6, true);
-  add("/models/gy/rocks-tall.glb", rx + 9, rz + 14, 0.5, 3, 1.2);
+  add(K("rock_C"), rx + 9, rz + 14, 0.5, 9, 1.2);
+  add(K("tree_dead"), rx - 10, rz - 4, 1.4, 0.9, 0.8);
 
   // --- Barrow of Lanterns: walled court with an east gate ---
   const W = 3.4;
   const x0 = -74, x1 = -46, z0 = 2, z1 = 26;
+  // A low KayKit wall (2 units long, runs along x) keeps the court readable from above.
   for (let x = x0; x <= x1 + 0.01; x += W) {
-    add("/models/dng/wall.glb", x, z0, 0, W, 1.9);
-    add("/models/dng/wall.glb", x, z1, 0, W, 1.9);
+    add(K("wall_stone"), x, z0, 0, W / 2, 1.9);
+    add(K("wall_stone"), x, z1, 0, W / 2, 1.9);
   }
   for (let z = z0 + W; z < z1 - 0.01; z += W) {
-    add("/models/dng/wall.glb", x0, z, 0, W, 1.9);
+    add(K("wall_stone"), x0, z, Math.PI / 2, W / 2, 1.9);
     // leave a two-segment opening in the east wall for the gate
-    if (Math.abs(z - BARROW_GATE.z) > W) add("/models/dng/wall.glb", x1, z, 0, W, 1.9);
+    if (Math.abs(z - BARROW_GATE.z) > W) add(K("wall_stone"), x1, z, Math.PI / 2, W / 2, 1.9);
   }
   for (const [cx, cz] of [[-54, 10], [-54, 18], [-62, 10], [-62, 18]] as const) {
-    add("/models/dng/column.glb", cx, cz, 0, 3.4, 0.95);
+    add(K("pillar"), cx, cz, 0, 0.8, 0.95);
   }
-  add("/models/gy/fire-basket.glb", -48.5, 10.5, 0, 2.6, 0.6);
-  add("/models/gy/fire-basket.glb", -48.5, 17.5, 0, 2.6, 0.6);
-  add("/models/gy/fire-basket.glb", -72, 9, 0, 2.6, 0.6);
-  add("/models/gy/fire-basket.glb", -72, 19, 0, 2.6, 0.6);
+  add(K("lantern_standing"), -48.5, 10.5, 0, 1.4, 0.6);
+  add(K("lantern_standing"), -48.5, 17.5, 0, 1.4, 0.6);
+  add(K("lantern_standing"), -72, 9, 0, 1.4, 0.6);
+  add(K("lantern_standing"), -72, 19, 0, 1.4, 0.6);
   add("/models/dng/chest.glb", -72, 14, Math.PI / 2, 3, 0.9);
   add("/models/dng/banner.glb", -72.2, 11.5, Math.PI / 2, 3.4, 0, true);
   add("/models/dng/banner.glb", -72.2, 16.5, Math.PI / 2, 3.4, 0, true);
-  add("/models/dng/stones.glb", -60, 24, 0.4, 3, 0, true);
-  add("/models/dng/stones.glb", -50, 4, 1.4, 3, 0, true);
-  add("/models/nature/rock_largeA.glb", -42, 5, 0.7, 3.2, 1.5);
-  add("/models/nature/rock_tallB.glb", -42, 23, 1.9, 3.2, 1.4);
+  add(K("gravestone"), -60, 24, 0.4, 1.2, 0, true);
+  add(K("grave"), -50, 5, 1.4, 1.1, 0, true);
+  add(K("gravestone"), -66, 4.5, 0.1, 1.1, 0, true);
+  add(K("skull"), -57, 21, 2.2, 0.8, 0, true);
+  add(K("rock_E"), -42, 5, 0.7, 8, 1.5);
+  add(K("rock_C"), -42, 23, 1.9, 9, 1.4);
 
   // --- Open-world landmarks ---
-  for (const w of WAYPOINTS) add("/models/gy/pillar-large.glb", w.x, w.z, 0.3, 3.2, 0.7);
-  add("/models/nature/tree_pineTallA.glb", -20, -64, 0.4, 9, 1.8); // the Elder Pine
-  add("/models/gy/column-large.glb", 27, -42, 0.2, 3, 0.8); // Watchstone summit ruin
+  for (const w of WAYPOINTS) add(K("shrine"), w.x, w.z, 0.3, 1.5, 0.7);
+  add(K("pine_yellow"), -20, -64, 0.4, 2.3, 1.8); // the Elder Pine
+  add(K("pillar"), 27, -42, 0.2, 0.8, 0.8); // Watchstone summit ruin
   add("/models/gy/debris.glb", 33, -46, 1.2, 3, 0, true);
   add("/models/town/planks.glb", 20, 83, 0.9, 3.6, 0); // Gull Rock wreck
   add("/models/town/planks.glb", 26, 80, 2.1, 3.6, 0);
-  add("/models/town/cart.glb", 27, 86, 2.6, 2.6, 1.0);
+  add(K("wheelbarrow"), 27, 86, 2.6, 6, 1.0);
   add("/models/dng/stones.glb", 22, 88, 0.3, 3, 0, true);
-  add("/models/nature/rock_tallB.glb", -32, -82, 0.8, 3.6, 1.4); // Hollow Stump grove
-  add("/models/nature/rock_largeA.glb", -24, -84, 2.2, 3.2, 1.4);
+  add(K("rock_C"), -32, -82, 0.8, 10, 1.4); // Hollow Stump grove
+  add(K("rock_E"), -24, -84, 2.2, 8, 1.4);
 
   // --- Tidewrack Shore teaser ---
   add("/models/town/planks.glb", 9, 62, 0.1, 3.4, 0);
   add("/models/town/planks.glb", 10, 66, 0.1, 3.4, 0);
-  add("/models/nature/rock_largeA.glb", 20, 70, 0.7, 3.4, 1.6);
-  add("/models/nature/rock_tallB.glb", -6, 68, 1.9, 3.2, 1.4);
+  add(K("rock_E"), 20, 70, 0.7, 8.5, 1.6);
+  add(K("rock_C"), -6, 68, 1.9, 9, 1.4);
   return p;
 }
 
@@ -300,7 +328,7 @@ function scatter(): PropInstance[] {
     if (Math.hypot(x - GULL_ROCK.x, z - GULL_ROCK.z) < 14) return;
     if (Math.hypot(x + 30, z + 80) < 6) return; // keep the cache clearing open
     if (WAYPOINTS.some((w) => Math.hypot(x - w.x, z - w.z) < 5)) return;
-    out.push({ model, x, z, yaw: rand() * 6.28, scale, collide, detail });
+    out.push({ model, x, z, yaw: rand() * 6.28, scale: scale * (SIZE_FIX[model] ?? 1), collide, detail });
   };
 
   // Forest body
@@ -361,51 +389,45 @@ export const COLLIDERS: Collider[] = [
   ...NPCS.map((n) => ({ x: n.x, z: n.z, r: 0.8 })),
 ];
 
-/** Wall module placements for one cottage (local space, y at base). */
-export function cottageWalls(c: CottageDef) {
-  const walls: Array<{ model: string; x: number; z: number; yaw: number }> = [];
-  const halfW = (c.w * M) / 2;
-  const halfD = (c.d * M) / 2;
-  for (let i = 0; i < c.d; i++) {
-    const z = -halfD + M / 2 + i * M;
-    const door = i === Math.floor(c.d / 2);
-    walls.push({
-      model: door ? "/models/town/wall-door.glb" : "/models/town/wall-window-shutters.glb",
-      x: halfW,
-      z,
-      yaw: 0,
-    });
-    walls.push({ model: "/models/town/wall.glb", x: -halfW, z, yaw: Math.PI });
-  }
-  for (let i = 0; i < c.w; i++) {
-    const x = -halfW + M / 2 + i * M;
-    walls.push({
-      model: i % 2 === 0 ? "/models/town/wall-window-shutters.glb" : "/models/town/wall.glb",
-      x,
-      z: halfD,
-      yaw: Math.PI / 2,
-    });
-    walls.push({ model: "/models/town/wall.glb", x, z: -halfD, yaw: -Math.PI / 2 });
-  }
-  return walls;
+const HOUSES: Array<{ piece: string; footprint: number }> = [
+  { piece: "home_A_red", footprint: 0.85 },
+  { piece: "home_B_blue", footprint: 1.1 },
+  { piece: "home_A_yellow", footprint: 0.85 },
+  { piece: "home_B_green", footprint: 1.1 },
+  { piece: "tavern", footprint: 1.33 },
+];
+
+/**
+ * The KayKit house standing on a cottage plot: sized so its footprint fills
+ * the plot's collider circle (so what blocks you is what you see).
+ */
+export function cottageHouse(c: CottageDef) {
+  const i = COTTAGES.indexOf(c);
+  const h = HOUSES[(i < 0 ? 0 : i) % HOUSES.length]!;
+  const r = (Math.max(c.w, c.d) * M) / 2 + 0.4;
+  return { model: K(h.piece), scale: (r * 2 * 0.86) / h.footprint };
 }
 
-export const MODULE = M;
+
+
+/** The file behind a model reference ("world.glb#tree_A" → "world.glb"). */
+export const modelFile = (model: string) => model.split("#")[0]!;
 
 /** Every unique GLB the world needs, for preloading. */
 export const ALL_MODELS: string[] = Array.from(
   new Set<string>([
-    ...PROPS.map((p) => p.model),
-    ...COTTAGES.flatMap((c) => cottageWalls(c).map((w) => w.model)),
+    ...PROPS.map((p) => modelFile(p.model)),
+    ...COTTAGES.map((c) => modelFile(cottageHouse(c).model)),
     ...NPCS.map((n) => n.model),
-    "/models/mini/hero.glb",
-    "/models/gy/character-zombie.glb",
-    "/models/gy/character-skeleton.glb",
-    "/models/gy/character-vampire.glb",
-    "/models/dng/character-orc.glb",
+    "/models/kaykit/knight.glb",
+    "/models/kaykit/ranger.glb",
+    "/models/kaykit/mage.glb",
+    "/models/kaykit/skeleton-minion.glb",
+    "/models/kaykit/skeleton-warrior.glb",
+    "/models/kaykit/skeleton-rogue.glb",
+    "/models/kaykit/skeleton-mage.glb",
+    "/models/kaykit/animations.glb",
     "/models/dng/gate.glb",
     "/models/dng/chest.glb",
-    "/models/mini/ranger.glb",
-    "/models/mini/arcanist.glb",
   ]),
 );

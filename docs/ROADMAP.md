@@ -85,16 +85,16 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 34 | P2 | Low quality uses Lambert shading for terrain, water, props and characters. | ✅ |
 | 35 | P2 | All GLBs start downloading together (preload). A service worker (`public/sw.js`, production only) caches models, icons and fonts (served instantly, refreshed in the background) and hashed app bundles. The page itself is network-first, so releases are never held back. Verified: the game relaunches and plays with the network off. | ✅ |
 | 36 | P2 | Instanced props are static (`matrixAutoUpdate=false`). Camera occlusion checks only the 42 large colliders instead of 459. Crystal heights are precomputed. | ✅ |
-| 37 | P2 | Dispose cloned materials and terrain geometry. Mostly moot now: a quality change remounts the canvas, which frees the GPU context. | ⬜ |
+| 37 | P2 | Dispose cloned materials and terrain geometry. A quality change remounts the canvas anyway. Each character's own material clones are now freed when it goes (class change, another player leaving), and a new terrain resolution frees the old mesh. | ✅ |
 | 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
-| 39 | P2 | Add a battery-saver option (30fps cap). | ⬜ |
+| 39 | P2 | **Battery saver** (Menu → Controls): caps the game at 30 fps on any screen (60, 90 or 120 Hz). The canvas renders on demand at that pace, and adaptive resolution judges smoothness against 30 fps, so it doesn't blur the picture just because of the cap. Measured in Chromium: 33 → 29.7 fps with it on, the hero moving at the same speed. | ✅ |
 
 ## Phase 3 — Mobile controls & feel ✅ (mostly done)
 
 | # | Pri | Item | Status |
 |---|-----|------|--------|
 | 40 | P1 | Floating joystick: it appears wherever the left thumb lands on the left half. It can be switched back to a fixed stick. | ✅ |
-| 41 | P1 | Settings: look sensitivity, invert Y, hold-to-attack, floating joystick, vibration. Stored per device. Still to do: joystick size and opacity, left-handed layout. | ◐ |
+| 41 | P1 | Settings: look sensitivity, invert Y, hold-to-attack, floating joystick, vibration, **joystick size (75–140%) and opacity, and a left-handed layout** (stick on the right, Attack and its rings mirrored on the left, in portrait and landscape). Stored per device; stored values are cleaned and clamped (`sanitizeSettings`, tested). At 130%+ on a 390px-wide phone the resting stick overlaps the outer ability ring; buttons stay on top, so taps land on them. | ✅ |
 | 42 | P1 | Vibration on hit, damage, perfect evade, kill, burst, boss roar, level-up and death (Android; iPhone browsers have no vibration API). | ✅ |
 | 43 | P1 | 180ms input buffer for attack, dodge and abilities: early presses fire as soon as they're allowed instead of being dropped. | ✅ |
 | 44 | P1 | Hold Attack to keep swinging (touch and mouse). Lock-on: the Target button (Tab/R on keyboard) locks the nearest enemy in view, tap again for the next, then off. The camera tracks the target, attacks aim at it, a gold ring marks it, and the lock drops on death or distance. | ✅ |
@@ -104,8 +104,8 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 48 | P1 | Touch-specific controls list. The climb prompt no longer names keys. | ✅ |
 | 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. A quest marker shows the distance over the current goal (the NPC, the area, or the nearest living target) and slides to the screen edge, pointing the way, when the goal is off-screen. | ✅ |
 | 50 | P2 | Enemy knockback is a quick decaying slide instead of a teleport. Getting hit costs a moment of control so your own knockback reads. Nearby enemies push apart instead of stacking. Camera shake is smooth, frame-rate independent, with a small roll kick. | ✅ |
-| 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
-| 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |
+| 51 | P2 | The world keeps running behind the journal (it's an MMO). While enemies are hunting you, the journal shows an "In combat!" banner, and the Bag and Map buttons show a pulsing red dot (screen readers hear "enemies near"). | ✅ |
+| 52 | P2 | **Loading screen**: gameplay tips rotate while the world downloads. If progress stands still for 15s, a Retry button appears. If a download fails outright, a "Connection lost" screen with Retry replaces the site's generic error page (it used to take the whole game down). Files that already arrived are cached, so a retry resumes. | ✅ |
 
 ## Phase 4 — Remaining gameplay bugs ✅ (tests in `tests/regressions.test.ts` and `tests/world.test.ts`)
 
@@ -114,7 +114,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 53 | P2 | A thorns kill at the end of a boss charge left a zombie boss (double loot). | ✅ |
 | 54 | P2 | `damagePlayer` wrote HP from a stale store read, erasing lifesteal or level-up heals triggered by thorns. | ✅ |
 | 55 | P2 | A boss that resets now returns to its calm first phase. | ✅ |
-| 56 | P2 | Shard nodes reset for a new game. **Still to do:** regrow timers aren't saved, so reloading refills the 6 nodes (small payoff). | ◐ |
+| 56 | P2 | Shard nodes reset for a new game, and their regrow timers are now saved: reloading no longer refills gathered crystals. Time spent away counts toward regrowing, and damaged timers in a save are cleaned (positive, at most one full regrow). | ✅ |
 | 57 | P2 | Each session gets a fresh random seed (tests keep the fixed one), and forging saves at once, so rolls can't be save-scummed. | ✅ |
 | 58 | P2 | Pressing E mid-climb restarted the climb. | ✅ |
 | 59 | P2 | Ward, heal, haste and slow numbers are now read from `combat.ts` data. | ✅ |
@@ -157,10 +157,24 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 
 Verified in Chromium as an iPhone 13 in landscape, against a mocked slow backend: start buttons wait, uploads resume, the save made on hide goes up within 1s, both choice buttons are on screen, and offline mode makes no network calls.
 
+## Phase 7 — Look and feel overhaul (2026-09-25; references: Eternal Hero, Skull Hero)
+
+Decided with the owner: free CC0 art packs first (KayKit, Quaternius), a high 3/4 camera, and **portrait** play.
+
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 84 | P0 | **Portrait play.** Upright phones get their own HUD (vitals, quest and region in the top fifth; Bag/Map/Menu top right) and thumb controls (stick anywhere lower left; Attack with Jump, Dodge, Heal and abilities on rings lower right). Phones held sideways are asked to rotate; tablets and desktops play either way. The manifest and fullscreen lock now ask for portrait. | ✅ |
+| 85 | P0 | **Top-down camera** (default): fixed north-up 3/4 view, the stick moves you in screen directions, lens fitted to the screen shape, hero just below centre on phones. The old orbiting camera is a setting ("Top-down camera" off). Lock-on prefers enemies ahead of the hero; the quest arrow circles the hero instead of hugging the screen edge; the mouse attacks directly without pointer lock. | ✅ |
+| 86 | P0 | **New heroes, villagers and enemies** from KayKit (CC0): Knight, hooded Ranger and Mage for the classes; Rogue, Barbarian and Elder in the village; four skeleton types (with weapons and tints) for the nine enemies. Real clips for attacks, rolls, casts, hits and deaths, fitted to the game's swing and dodge timing. Built by `scripts/models/build-kaykit.mjs` (see `docs/ASSETS.md`): 1 draw call per hero (was ~10 for the raw pack), ~100–160 KB each plus one 370 KB shared animation file. The old Kenney character files are gone. Still to do: plant-like models for the bramble enemies. | ✅ |
+| 87 | P1 | **World art.** The village, woods, ruins, barrow and landmarks now use KayKit Medieval and Halloween pieces: houses, tavern, windmill, watermill, market, pines and autumn pines, rocks, lantern posts, shrines at waypoints, low stone walls, graves. All pieces are in one 700 KB `world.glb` with a shared texture. 38 unused Kenney models are gone. Meadows now have thousands of procedural grass tufts and flowers swaying in the wind (instanced by area, nothing to download), bushes and path-side pebbles, and painted light/dark patches in the ground. The sea is a stylized water shader: turquoise shallows over the sand, deep blue further out, foam at the waterline and lines running up the beach, and a soft shimmer (one draw call). **Still to do:** cliffs, a better fountain. | ◐ |
+| 88 | P1 | **Lighting and colour.** Clear daylight: neutral tone mapping instead of ACES (which turned everything orange-brown), a saturated palette, a blue sky with green bounce light, and a painted ground-detail texture drawn at startup (nothing to download). Dawn, dusk and night kept. Sword swings leave a glowing crescent trail (a full ring on the spinning finisher). Hits burst into glowing stars; damage numbers are chunky, outlined and pop; better-than-common loot has a light beam in its rarity colour; enemy health bars are bigger and outlined. (Their red fill had never shown: an opaque fill was painted over by its transparent backing.) | ✅ |
+
+Verified for #84–85 in Chromium as an iPhone 13 upright (390×844) and a 1280×720 desktop: no sideways scroll, all five journal tabs fit beside Close, the map fits, the Talk button and prompt no longer overlap, stick-up walks north, W walks north, a click attacks.
+
 ## Housekeeping
 
 | # | Item |
 |---|------|
 | 77 | 389 Prettier formatting errors: run `npm run format` once in its own commit. |
-| 78 | `README.md` still says "Exact Screenshot Match". Replace it with a real project description. |
-| 79 | Add CI (typecheck, lint, `bun test`) on every push. |
+| 78 | ✅ `README.md` describes the game, how to run and check it, where the code lives, and the art credits. |
+| 79 | ✅ CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, tests and build on every pull request and push to `main`. |

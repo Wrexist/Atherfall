@@ -147,15 +147,17 @@ export function WorldMap() {
   const fighting = inCombat();
 
   return (
-    <div className="grid gap-4 sm:grid-cols-[auto_1fr]">
-      {/* Never taller than the screen allows: on a landscape phone it sits beside the list. */}
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[auto_1fr]">
+      {/* Never taller than the screen allows: on a landscape phone it sits beside the list.
+          (The one-column track is capped so the canvas's own pixel width can't widen it
+          past an upright phone's screen.) */}
       <div className="mx-auto w-full max-w-[min(420px,calc(100dvh-8.5rem))]">
         <canvas
           ref={canvas}
           width={size}
           height={size}
           data-testid="world-map"
-          className="aspect-square w-full rounded-full border border-[var(--gilt)]/30"
+          className="aspect-square w-full max-w-full rounded-full border border-[var(--gilt)]/30"
         />
         <p className="mt-1 text-center text-[11px] text-[var(--parchment)]/55">North is up · ◆ waypoint · ○ quest goal · ✓ opened cache</p>
       </div>

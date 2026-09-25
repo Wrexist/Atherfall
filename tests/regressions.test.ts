@@ -9,8 +9,9 @@ import {
   stepWorld,
   world,
 } from "../src/game/core/sim";
-import { WATCHSTONE } from "../src/game/data/world";
+import { RESOURCES, RESOURCE_RESPAWN, WATCHSTONE } from "../src/game/data/world";
 import { migrateSave, SAVE_KEY } from "../src/game/core/persistence";
+import { useSettings } from "../src/game/core/settings";
 import { statsFor, useGame } from "../src/game/core/store";
 import { COLLIDERS } from "../src/game/world/layout";
 import { SEA_LEVEL, heightAt, regionAt } from "../src/game/world/terrain";
@@ -354,6 +355,53 @@ describe("combat feel", () => {
   });
 });
 
+describe("shard crystals", () => {
+  const standOn = (x: number, z: number) => {
+    const p = world.player;
+    p.x = x;
+    p.z = z;
+    p.y = heightAt(x, z);
+  };
+  const reload = (awaySeconds = 0) => {
+    const save = migrateSave(JSON.parse(JSON.stringify(snapshot())))!;
+    save.savedAt -= awaySeconds * 1000;
+    initWorld(save);
+  };
+
+  test("a gathered crystal stays gathered through a save and reload", () => {
+    // Regression (#56): regrow timers weren't saved, so reloading refilled every crystal.
+    const r = RESOURCES[0]!;
+    standOn(r.x, r.z);
+    const before = useGame.getState().shards;
+    run(0.2);
+    const gathered = useGame.getState().shards;
+    expect(gathered).toBe(before + r.shards);
+    reload();
+    standOn(r.x, r.z);
+    run(0.2);
+    expect(useGame.getState().shards).toBe(gathered);
+  });
+
+  test("time away counts toward regrowing", () => {
+    const r = RESOURCES[1]!;
+    standOn(r.x, r.z);
+    run(0.2);
+    const gathered = useGame.getState().shards;
+    reload(RESOURCE_RESPAWN + 5); // back after the crystal has grown again
+    standOn(r.x, r.z);
+    run(0.2);
+    expect(useGame.getState().shards).toBe(gathered + r.shards);
+  });
+
+  test("a damaged save's timers are cleaned, not trusted", () => {
+    const save = migrateSave({
+      ...JSON.parse(JSON.stringify(snapshot())),
+      shardRegrow: { "r-w1": 1e9, x: "soon", "r-w2": -5 },
+    })!;
+    expect(save.shardRegrow).toEqual({ "r-w1": RESOURCE_RESPAWN });
+  });
+});
+
 describe("lock-on", () => {
   const place = (id: string, dx: number, dz: number) => {
     const e = world.enemies.find((x) => x.id === id)!;
@@ -375,6 +423,23 @@ describe("lock-on", () => {
     input.lockQueued = true;
     stepWorld(DT);
     expect(world.lockId).toBeNull();
+  });
+
+  test("top view: prefers the enemy ahead of the hero; behind view: ahead of the camera", () => {
+    const east = place("b1", 6, 0); // where the hero faces
+    const north = place("b2", 0, -5.5); // up the screen (where the top camera looks)
+    world.player.yaw = Math.PI / 2;
+    input.yaw = Math.PI; // camera facing north, as the top view holds it
+    useSettings.setState({ camera: "top" });
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(east.id);
+    world.lockId = null;
+    useSettings.setState({ camera: "behind" });
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(north.id);
+    useSettings.setState({ camera: "top" });
   });
 
   test("attacks turn to face the locked target", () => {

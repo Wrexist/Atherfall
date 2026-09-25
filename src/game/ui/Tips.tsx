@@ -36,7 +36,7 @@ interface TipCtx {
 const TIPS: Tip[] = [
   {
     id: "move",
-    touch: "Put your left thumb anywhere on the left side and slide to walk.",
+    touch: "Put your thumb anywhere on the lower left and slide to walk.",
     desk: "Walk with W A S D — hold Shift to sprint.",
     when: () => true,
     done: (c) => c.moved > 4,
@@ -45,7 +45,8 @@ const TIPS: Tip[] = [
     id: "look",
     touch: "Drag on the right side of the screen to look around.",
     desk: "Click the game, then move the mouse to look around.",
-    when: () => true,
+    // The top view has a fixed camera: nothing to learn.
+    when: () => useSettings.getState().camera === "behind",
     done: (c) => c.turned > 0.9,
   },
   {
@@ -168,7 +169,7 @@ export function Tips() {
   return (
     <div
       role="status"
-      className="pointer-events-auto flex max-w-[min(22rem,44vw)] items-start gap-2 rounded-lg border border-[var(--gilt)]/45 bg-[var(--panel)]/90 px-3 py-2 text-sm leading-snug text-[var(--parchment)] shadow-lg"
+      className="pointer-events-auto flex max-w-[min(22rem,44vw)] items-start portrait:max-w-[min(22rem,86vw)] gap-2 rounded-lg border border-[var(--gilt)]/45 bg-[var(--panel)]/90 px-3 py-2 text-sm leading-snug text-[var(--parchment)] shadow-lg"
     >
       <span className="mt-0.5 text-[var(--gilt)]" aria-hidden>
         ✦

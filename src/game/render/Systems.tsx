@@ -1,7 +1,9 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
+import { TOP_PITCH, TOP_YAW, cameraFov, topFraming } from "../core/camera";
 import { input, pollInput } from "../core/input";
+import { useSettings } from "../core/settings";
 import { lockedEnemy, stepWorld, world } from "../core/sim";
 import { heightAt } from "../world/terrain";
 import { COLLIDERS } from "../world/layout";
@@ -24,7 +26,8 @@ const _focus = new THREE.Vector3();
  * Mounted first so every view component reads already-updated state.
  */
 export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalLight | null> }) {
-  const camera = useThree((s) => s.camera);
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
   const current = useRef(new THREE.Vector3(0, 8, 14));
   const lookAt = useRef(new THREE.Vector3());
   const desired = useRef(new THREE.Vector3());
@@ -35,8 +38,21 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     stepWorld(dt);
 
     const p = world.player;
+    const top = useSettings.getState().camera === "top";
+    const aspect = size.width / Math.max(1, size.height);
+    const frame = topFraming(aspect);
+    const fov = cameraFov(top ? "top" : "behind", aspect);
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    if (top) {
+      // Fixed heading: the joystick moves the hero in screen directions.
+      input.yaw = TOP_YAW;
+      input.pitch = TOP_PITCH;
+    }
     // Lock-on: swing the camera round to keep the target in view ahead of the player.
-    const lock = lockedEnemy();
+    const lock = top ? null : lockedEnemy();
     if (lock) {
       const want = Math.atan2(lock.x - p.x, lock.z - p.z);
       if (Math.hypot(lock.x - p.x, lock.z - p.z) > 1.5) {
@@ -47,10 +63,11 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     }
     const targetX = p.x;
     const targetY = p.y + HEAD;
-    const targetZ = p.z;
+    // (TOP_YAW faces north, i.e. -z.)
+    const targetZ = top ? p.z - frame.lookAhead : p.z;
 
     const cosP = Math.cos(input.pitch);
-    let dist = BASE_DISTANCE;
+    let dist = top ? frame.distance : BASE_DISTANCE;
 
     // Pull the camera in when terrain would block the view.
     const dirX = -Math.sin(input.yaw) * cosP;
@@ -58,7 +75,8 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     const dirY = Math.sin(input.pitch);
     // Also pull in for solid props (trees, rocks, cottages) so the view never
     // ends up inside foliage or walls.
-    for (let i = 3; i <= 12; i++) {
+    // (The high top view looks down over props, so it never pulls in.)
+    for (let i = 3; !top && i <= 12; i++) {
       const t = (i / 12) * BASE_DISTANCE;
       const sx = targetX + dirX * t;
       const sz = targetZ + dirZ * t;
@@ -114,7 +132,11 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
       const u = Math.round(_focus.dot(SUN_RIGHT) / texel) * texel;
       const v = Math.round(_focus.dot(SUN_UP) / texel) * texel;
       const w = _focus.dot(SUN_DIR);
-      _focus.copy(SUN_RIGHT).multiplyScalar(u).addScaledVector(SUN_UP, v).addScaledVector(SUN_DIR, w);
+      _focus
+        .copy(SUN_RIGHT)
+        .multiplyScalar(u)
+        .addScaledVector(SUN_UP, v)
+        .addScaledVector(SUN_DIR, w);
       sun.target.position.copy(_focus);
       sun.position.copy(_focus).add(SUN_OFFSET);
       sun.target.updateMatrixWorld();

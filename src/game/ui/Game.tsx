@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { setMuted as setAudioMuted, suspendAudio, unlockAudio } from "../core/audio";
 import { applyLook, input, keys, resetInput } from "../core/input";
 import { loadSaveIntoStore, saveNow } from "../core/sim";
+import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 import { GameCanvas } from "../render/GameCanvas";
@@ -125,7 +126,9 @@ export function Game() {
       if (e.pointerType !== "mouse") return;
       const state = useGame.getState();
       if (state.screen !== "playing" || state.inventoryOpen || state.dialogue) return;
-      if (document.pointerLockElement !== el) {
+      // Top view: the camera is fixed, so the mouse is free — clicks act at once.
+      const top = useSettings.getState().camera === "top";
+      if (!top && document.pointerLockElement !== el) {
         void el.requestPointerLock?.();
         dragging.current = true;
         return;
@@ -162,7 +165,8 @@ export function Game() {
   // Asset cache for instant relaunch / offline play (see public/sw.js). Production
   // only, and never inside an iframe such as the editor preview.
   useEffect(() => {
-    if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self) return;
+    if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self)
+      return;
     navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
 
@@ -210,7 +214,10 @@ export function Game() {
   }, [screen, inventoryOpen]);
 
   const showLoading = screen === "loading";
-  const overlay = useMemo(() => screen === "playing" || screen === "paused" || screen === "dead", [screen]);
+  const overlay = useMemo(
+    () => screen === "playing" || screen === "paused" || screen === "dead",
+    [screen],
+  );
 
   if (webgl === false) return <WebglError />;
 

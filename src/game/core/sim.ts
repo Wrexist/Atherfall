@@ -297,8 +297,11 @@ export function lockedEnemy(): EnemyRuntime | null {
  */
 export function cycleLock() {
   const p = world.player;
-  const fx = Math.sin(input.yaw);
-  const fz = Math.cos(input.yaw);
+  // Prefer targets ahead: of the camera when it orbits behind you, of the hero
+  // in the fixed top view (where the camera always faces north).
+  const ahead = useSettings.getState().camera === "top" ? p.yaw : input.yaw;
+  const fx = Math.sin(ahead);
+  const fz = Math.cos(ahead);
   const candidates = world.enemies
     .filter((e) => e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE)
     .map((e) => {
@@ -404,6 +407,14 @@ export function initWorld(save: SaveFile | null, seed = SEED) {
   world.stats = { swings: 0, hits: 0, evades: 0 };
   world.lockId = null;
   world.resourceRegrow = {};
+  // Gathered crystals stay gathered across a reload; time spent away counts
+  // toward regrowing (like the rest of an always-on world).
+  if (save?.shardRegrow) {
+    const away = Math.max(0, (Date.now() - save.savedAt) / 1000);
+    for (const [id, left] of Object.entries(save.shardRegrow)) {
+      if (left - away > 0) world.resourceRegrow[id] = world.time + (left - away);
+    }
+  }
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
   for (const e of world.enemies) {
@@ -460,6 +471,11 @@ export function snapshot(): SaveFile {
     kills: s.kills,
     elapsed: s.elapsed,
     defeated: Array.from(world.defeated),
+    shardRegrow: Object.fromEntries(
+      Object.entries(world.resourceRegrow)
+        .map(([id, at]) => [id, at - world.time] as const)
+        .filter(([, left]) => left > 0),
+    ),
     quality: s.quality,
     muted: s.muted,
   };

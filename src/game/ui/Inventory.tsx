@@ -2,14 +2,34 @@ import { useMemo, useState } from "react";
 import { ARCHETYPE_LIST, ARCHETYPES, ABILITY_UNLOCK_LEVELS } from "../data/archetypes";
 import { ABILITIES } from "../data/combat";
 import { ENEMIES } from "../data/enemies";
-import { ITEMS, MODIFIERS, RARITY_COLOR, RARITY_LABEL, RARITY_ORDER, SLOTS, SLOT_LABEL, type EquipSlot, type Rarity } from "../data/items";
+import {
+  ITEMS,
+  MODIFIERS,
+  RARITY_COLOR,
+  RARITY_LABEL,
+  RARITY_ORDER,
+  SLOTS,
+  SLOT_LABEL,
+  type EquipSlot,
+  type Rarity,
+} from "../data/items";
 import { QUESTS } from "../data/quests";
 import { REGIONS } from "../world/terrain";
 import { VILLAGE_REGION, statsFor, useGame, type InvEntry, type JournalTab } from "../core/store";
 import { saveNow } from "../core/sim";
-import { FORGE, abilityUnlocked, compareToEquipped, forgePreview, itemStats, salvageValue, sellValue, xpForLevel } from "../core/rules";
+import {
+  FORGE,
+  abilityUnlocked,
+  compareToEquipped,
+  forgePreview,
+  itemStats,
+  salvageValue,
+  sellValue,
+  xpForLevel,
+} from "../core/rules";
 import { SlotIcon } from "./Cooldowns";
 import { WorldMap } from "./WorldMap";
+import { useThreatened } from "./layout";
 
 const TABS: Array<{ id: JournalTab; label: string; key: string }> = [
   { id: "satchel", label: "Satchel", key: "I" },
@@ -24,7 +44,17 @@ function itemName(e: InvEntry) {
   return `${d?.name ?? e.itemId}${e.plus ? ` +${e.plus}` : ""}`;
 }
 
-function StatLine({ label, value, delta, suffix = "" }: { label: string; value: number | string; delta?: number | undefined; suffix?: string }) {
+function StatLine({
+  label,
+  value,
+  delta,
+  suffix = "",
+}: {
+  label: string;
+  value: number | string;
+  delta?: number | undefined;
+  suffix?: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-2 text-xs">
       <span className="text-[var(--parchment)]/65">{label}</span>
@@ -54,7 +84,8 @@ function ItemStatsBlock({ entry }: { entry: InvEntry }) {
       {st.crit > 0 && <StatLine label="Critical" value={`+${st.crit}`} suffix="%" />}
       {def.mod && (
         <p className="pt-1 text-xs text-[var(--gilt)]">
-          {MODIFIERS[def.mod].name}: <span className="text-[var(--parchment)]/85">{MODIFIERS[def.mod].text}</span>
+          {MODIFIERS[def.mod].name}:{" "}
+          <span className="text-[var(--parchment)]/85">{MODIFIERS[def.mod].text}</span>
         </p>
       )}
     </div>
@@ -84,12 +115,24 @@ function ItemTile({
       }`}
       style={{ borderColor: RARITY_COLOR[def.rarity] }}
     >
-      <span className="line-clamp-2 text-[11px] leading-tight text-[var(--parchment)]">{itemName(entry)}</span>
-      <span className="flex w-full justify-between text-[11px] uppercase tracking-wide" style={{ color: RARITY_COLOR[def.rarity] }}>
-        <span>{SLOT_LABEL[def.slot]}</span>
-        <span className={locked ? "text-[#f0a595]" : "text-[var(--parchment)]/50"}>Lv{def.level}</span>
+      <span className="line-clamp-2 text-[11px] leading-tight text-[var(--parchment)]">
+        {itemName(entry)}
       </span>
-      {marked && <span className="absolute right-1 top-1 h-3 w-3 rounded-sm border border-[var(--parchment)] bg-[#e8735a]" aria-label="marked" />}
+      <span
+        className="flex w-full justify-between text-[11px] uppercase tracking-wide"
+        style={{ color: RARITY_COLOR[def.rarity] }}
+      >
+        <span>{SLOT_LABEL[def.slot]}</span>
+        <span className={locked ? "text-[#f0a595]" : "text-[var(--parchment)]/50"}>
+          Lv{def.level}
+        </span>
+      </span>
+      {marked && (
+        <span
+          className="absolute right-1 top-1 h-3 w-3 rounded-sm border border-[var(--parchment)] bg-[#e8735a]"
+          aria-label="marked"
+        />
+      )}
     </button>
   );
 }
@@ -115,7 +158,8 @@ function Satchel() {
       else n.add(uid);
       return n;
     });
-  const markRarity = (r: Rarity) => setMarked(new Set(s.inventory.filter((i) => ITEMS[i.itemId]?.rarity === r).map((i) => i.uid)));
+  const markRarity = (r: Rarity) =>
+    setMarked(new Set(s.inventory.filter((i) => ITEMS[i.itemId]?.rarity === r).map((i) => i.uid)));
   const dispose = (mode: "sell" | "salvage") => {
     s.disposeBatch(Array.from(marked), mode);
     setMarked(new Set());
@@ -132,15 +176,27 @@ function Satchel() {
               const e = s.equipped[slot];
               const def = e ? ITEMS[e.itemId] : null;
               return (
-                <div key={slot} data-testid={`worn-${slot}`} className="flex items-center justify-between gap-2 rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 px-2 py-1.5">
+                <div
+                  key={slot}
+                  data-testid={`worn-${slot}`}
+                  className="flex items-center justify-between gap-2 rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 px-2 py-1.5"
+                >
                   <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-wider text-[var(--parchment)]/50">{SLOT_LABEL[slot]}</div>
-                    <div className="truncate text-xs" style={{ color: def ? RARITY_COLOR[def.rarity] : undefined }}>
+                    <div className="text-[11px] uppercase tracking-wider text-[var(--parchment)]/50">
+                      {SLOT_LABEL[slot]}
+                    </div>
+                    <div
+                      className="truncate text-xs"
+                      style={{ color: def ? RARITY_COLOR[def.rarity] : undefined }}
+                    >
                       {e ? itemName(e) : <span className="text-[var(--parchment)]/35">Empty</span>}
                     </div>
                   </div>
                   {e && (
-                    <button className="shrink-0 text-[11px] text-[var(--parchment)]/60 underline" onClick={() => s.unequip(slot)}>
+                    <button
+                      className="shrink-0 text-[11px] text-[var(--parchment)]/60 underline"
+                      onClick={() => s.unequip(slot)}
+                    >
                       Remove
                     </button>
                   )}
@@ -150,12 +206,22 @@ function Satchel() {
           </div>
         </div>
         <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2">
-          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Standing</h3>
+          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+            Standing
+          </h3>
           <StatLine label="Attack" value={stats.attack} delta={cmp?.delta.attack} />
           <StatLine label="Defense" value={stats.defense} delta={cmp?.delta.defense} />
           <StatLine label="Max health" value={stats.maxHp} delta={cmp?.delta.maxHp} />
-          <StatLine label="Critical" value={Math.round(stats.crit * 100)} suffix="%" delta={cmp?.delta.crit} />
-          <div data-testid="wallet" className="mt-1.5 border-t border-[var(--gilt)]/15 pt-1.5 text-xs text-[var(--gilt)]">
+          <StatLine
+            label="Critical"
+            value={Math.round(stats.crit * 100)}
+            suffix="%"
+            delta={cmp?.delta.crit}
+          />
+          <div
+            data-testid="wallet"
+            className="mt-1.5 border-t border-[var(--gilt)]/15 pt-1.5 text-xs text-[var(--gilt)]"
+          >
             {s.gold} embers · {s.shards} Aether Shards
           </div>
         </div>
@@ -163,21 +229,33 @@ function Satchel() {
 
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Carried ({s.inventory.length})</h3>
+          <h3 className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+            Carried ({s.inventory.length})
+          </h3>
           <span className="text-[11px] text-[var(--parchment)]/50">Mark:</span>
           {RARITY_ORDER.slice(0, 3).map((r) => (
-            <button key={r} onClick={() => markRarity(r)} className="rounded border px-1.5 py-0.5 text-[11px]" style={{ borderColor: RARITY_COLOR[r], color: RARITY_COLOR[r] }}>
+            <button
+              key={r}
+              onClick={() => markRarity(r)}
+              className="rounded border px-1.5 py-0.5 text-[11px]"
+              style={{ borderColor: RARITY_COLOR[r], color: RARITY_COLOR[r] }}
+            >
               all {RARITY_LABEL[r]}
             </button>
           ))}
           {marked.size > 0 && (
-            <button className="text-[11px] text-[var(--parchment)]/60 underline" onClick={() => setMarked(new Set())}>
+            <button
+              className="text-[11px] text-[var(--parchment)]/60 underline"
+              onClick={() => setMarked(new Set())}
+            >
               clear
             </button>
           )}
         </div>
         {s.inventory.length === 0 ? (
-          <p className="text-xs text-[var(--parchment)]/50">Nothing carried. Defeated foes drop gear — walk over it to pick it up.</p>
+          <p className="text-xs text-[var(--parchment)]/50">
+            Nothing carried. Defeated foes drop gear — walk over it to pick it up.
+          </p>
         ) : (
           <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-5">
             {s.inventory.map((e) => (
@@ -196,24 +274,39 @@ function Satchel() {
         {marked.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#e8735a]/40 bg-[#e8735a]/10 p-2 text-xs">
             <span className="text-[var(--parchment)]">{marked.size} marked</span>
-            <button data-testid="sell-batch" onClick={() => dispose("sell")} className="rounded border border-[var(--gilt)]/50 px-2 py-1 text-[var(--parchment)] hover:bg-[var(--gilt)]/20">
+            <button
+              data-testid="sell-batch"
+              onClick={() => dispose("sell")}
+              className="rounded border border-[var(--gilt)]/50 px-2 py-1 text-[var(--parchment)] hover:bg-[var(--gilt)]/20"
+            >
               Sell for {sellTotal} embers
             </button>
-            <button data-testid="salvage-batch" onClick={() => dispose("salvage")} className="rounded border border-[#b9a4ff]/60 px-2 py-1 text-[var(--parchment)] hover:bg-[#b9a4ff]/20">
+            <button
+              data-testid="salvage-batch"
+              onClick={() => dispose("salvage")}
+              className="rounded border border-[#b9a4ff]/60 px-2 py-1 text-[var(--parchment)] hover:bg-[#b9a4ff]/20"
+            >
               Salvage for {salvageTotal} shards
             </button>
           </div>
         )}
 
         {sel && selDef && cmp && (
-          <div className="rounded-md border p-2.5" style={{ borderColor: RARITY_COLOR[selDef.rarity] }}>
+          <div
+            className="rounded-md border p-2.5"
+            style={{ borderColor: RARITY_COLOR[selDef.rarity] }}
+          >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
-                <div className="font-display text-base" style={{ color: RARITY_COLOR[selDef.rarity] }}>
+                <div
+                  className="font-display text-base"
+                  style={{ color: RARITY_COLOR[selDef.rarity] }}
+                >
                   {itemName(sel)}
                 </div>
                 <div className="text-[11px] uppercase tracking-wider text-[var(--parchment)]/55">
-                  {RARITY_LABEL[selDef.rarity]} {SLOT_LABEL[selDef.slot]} · requires level {selDef.level}
+                  {RARITY_LABEL[selDef.rarity]} {SLOT_LABEL[selDef.slot]} · requires level{" "}
+                  {selDef.level}
                   {selDef.boss ? " · boss reward" : ""}
                 </div>
               </div>
@@ -222,12 +315,19 @@ function Satchel() {
               <ItemStatsBlock entry={sel} />
               <div data-testid="compare" className="rounded bg-[var(--ink)]/40 p-2">
                 <div className="mb-1 text-[11px] uppercase tracking-wider text-[var(--parchment)]/55">
-                  {cmp.replaces ? `If it replaces ${itemName(cmp.replaces)}` : "Fills an empty slot"}
+                  {cmp.replaces
+                    ? `If it replaces ${itemName(cmp.replaces)}`
+                    : "Fills an empty slot"}
                 </div>
                 <StatLine label="Attack" value={cmp.after.attack} delta={cmp.delta.attack} />
                 <StatLine label="Defense" value={cmp.after.defense} delta={cmp.delta.defense} />
                 <StatLine label="Max health" value={cmp.after.maxHp} delta={cmp.delta.maxHp} />
-                <StatLine label="Critical" value={Math.round(cmp.after.crit * 100)} suffix="%" delta={cmp.delta.crit} />
+                <StatLine
+                  label="Critical"
+                  value={Math.round(cmp.after.crit * 100)}
+                  suffix="%"
+                  delta={cmp.delta.crit}
+                />
               </div>
             </div>
             <p className="mt-2 text-xs italic text-[var(--parchment)]/55">{selDef.flavor}</p>
@@ -243,7 +343,10 @@ function Satchel() {
               >
                 {selDef.level > s.level ? `Requires level ${selDef.level}` : "Equip"}
               </button>
-              <button onClick={() => toggleMark(sel.uid)} className="rounded-md border border-[var(--parchment)]/30 px-3 py-1.5 text-xs text-[var(--parchment)]">
+              <button
+                onClick={() => toggleMark(sel.uid)}
+                className="rounded-md border border-[var(--parchment)]/30 px-3 py-1.5 text-xs text-[var(--parchment)]"
+              >
                 {marked.has(sel.uid) ? "Unmark" : "Mark to sell / salvage"}
               </button>
             </div>
@@ -275,30 +378,50 @@ function Forge() {
     <div className="grid gap-4 sm:grid-cols-[1fr_18rem]">
       <div className="min-w-0 space-y-2">
         <p className="text-xs text-[var(--parchment)]/70">
-          Oda raises an item one step at a time, up to +{FORGE.maxPlus}. Each step adds {Math.round(FORGE.perPlus * 100)}% of the item's base stats
-          (at least +1 each). Steps to +3 always succeed; +4 is 75%, +5 is 50%. A failed attempt spends the embers, returns half the shards,
-          and never damages the item.
+          Oda raises an item one step at a time, up to +{FORGE.maxPlus}. Each step adds{" "}
+          {Math.round(FORGE.perPlus * 100)}% of the item's base stats (at least +1 each). Steps to
+          +3 always succeed; +4 is 75%, +5 is 50%. A failed attempt spends the embers, returns half
+          the shards, and never damages the item.
         </p>
-        {!inVillage && <p className="rounded border border-[#e8735a]/40 bg-[#e8735a]/10 p-2 text-xs text-[#f0a595]">The forge is in Emberhollow. You can plan here, but upgrading needs Oda.</p>}
+        {!inVillage && (
+          <p className="rounded border border-[#e8735a]/40 bg-[#e8735a]/10 p-2 text-xs text-[#f0a595]">
+            The forge is in Emberhollow. You can plan here, but upgrading needs Oda.
+          </p>
+        )}
         <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
           {all.map(({ e, worn }) => (
             <div key={e.uid} className="relative">
               <ItemTile entry={e} selected={chosen?.uid === e.uid} onClick={() => setPick(e.uid)} />
-              {worn && <span className="absolute -top-1.5 left-1 rounded bg-[var(--gilt)] px-1 text-[8px] font-bold text-[var(--ink)]">WORN</span>}
+              {worn && (
+                <span className="absolute -top-1.5 left-1 rounded bg-[var(--gilt)] px-1 text-[8px] font-bold text-[var(--ink)]">
+                  WORN
+                </span>
+              )}
             </div>
           ))}
         </div>
-        {all.length === 0 && <p className="text-xs text-[var(--parchment)]/50">No gear to upgrade yet.</p>}
+        {all.length === 0 && (
+          <p className="text-xs text-[var(--parchment)]/50">No gear to upgrade yet.</p>
+        )}
       </div>
       {chosen && def && preview && (
-        <div data-testid="forge-preview" className="rounded-md border p-3" style={{ borderColor: RARITY_COLOR[def.rarity] }}>
+        <div
+          data-testid="forge-preview"
+          className="rounded-md border p-3"
+          style={{ borderColor: RARITY_COLOR[def.rarity] }}
+        >
           <div className="font-display text-base" style={{ color: RARITY_COLOR[def.rarity] }}>
             {def.name} +{chosen.plus} → +{Math.min(FORGE.maxPlus, chosen.plus + 1)}
           </div>
           <div className="mt-2 space-y-0.5">
             {(["attack", "defense", "health"] as const).map((k) =>
               preview.from[k] > 0 ? (
-                <StatLine key={k} label={k === "health" ? "Health" : k[0]!.toUpperCase() + k.slice(1)} value={preview.to[k]} delta={preview.to[k] - preview.from[k]} />
+                <StatLine
+                  key={k}
+                  label={k === "health" ? "Health" : k[0]!.toUpperCase() + k.slice(1)}
+                  value={preview.to[k]}
+                  delta={preview.to[k] - preview.from[k]}
+                />
               ) : null,
             )}
           </div>
@@ -306,7 +429,11 @@ function Forge() {
             <div className="mt-3 space-y-0.5 border-t border-[var(--gilt)]/15 pt-2 text-xs">
               <StatLine label="Embers" value={`${preview.cost.gold} (have ${s.gold})`} />
               <StatLine label="Aether Shards" value={`${preview.cost.shards} (have ${s.shards})`} />
-              <StatLine label="Success chance" value={Math.round(preview.cost.chance * 100)} suffix="%" />
+              <StatLine
+                label="Success chance"
+                value={Math.round(preview.cost.chance * 100)}
+                suffix="%"
+              />
             </div>
           )}
           <button
@@ -318,9 +445,15 @@ function Forge() {
             }}
             className="mt-3 w-full rounded-md border border-[var(--gilt)]/60 bg-[var(--gilt)]/20 px-3 py-2 text-sm font-semibold text-[var(--parchment)] disabled:opacity-40"
           >
-            {!inVillage ? "Visit Oda in Emberhollow" : preview.canUpgrade ? `Upgrade for ${preview.cost.gold} embers + ${preview.cost.shards} shards` : preview.reason}
+            {!inVillage
+              ? "Visit Oda in Emberhollow"
+              : preview.canUpgrade
+                ? `Upgrade for ${preview.cost.gold} embers + ${preview.cost.shards} shards`
+                : preview.reason}
           </button>
-          <p className="mt-2 text-[11px] text-[var(--parchment)]/50">Shards come from salvaging gear in the satchel, and from bosses.</p>
+          <p className="mt-2 text-[11px] text-[var(--parchment)]/50">
+            Shards come from salvaging gear in the satchel, and from bosses.
+          </p>
         </div>
       )}
     </div>
@@ -341,9 +474,14 @@ function Build() {
         {ARCHETYPE_LIST.map((a) => {
           const active = a.id === s.archetype;
           return (
-            <div key={a.id} className={`rounded-md border p-2.5 ${active ? "border-[var(--gilt)] bg-[var(--gilt)]/10" : "border-[var(--parchment)]/15 bg-[var(--ink)]/40"}`}>
+            <div
+              key={a.id}
+              className={`rounded-md border p-2.5 ${active ? "border-[var(--gilt)] bg-[var(--gilt)]/10" : "border-[var(--parchment)]/15 bg-[var(--ink)]/40"}`}
+            >
               <div className="font-display text-sm text-[var(--parchment)]">{a.name}</div>
-              <div className="text-[11px] uppercase tracking-wider text-[var(--gilt)]">{a.role}</div>
+              <div className="text-[11px] uppercase tracking-wider text-[var(--gilt)]">
+                {a.role}
+              </div>
               <p className="mt-1 text-xs text-[var(--parchment)]/70">{a.description}</p>
               <p className="mt-1 text-[11px] text-[var(--parchment)]/55">
                 Abilities: {a.abilities.map((id) => ABILITIES[id].name).join(", ")}
@@ -354,7 +492,11 @@ function Build() {
                 onClick={() => s.setArchetype(a.id)}
                 className="mt-2 w-full rounded border border-[var(--gilt)]/50 px-2 py-1 text-xs text-[var(--parchment)] disabled:opacity-40"
               >
-                {active ? "Current path" : inVillage ? `Walk the ${a.name} path` : "Change in Emberhollow"}
+                {active
+                  ? "Current path"
+                  : inVillage
+                    ? `Walk the ${a.name} path`
+                    : "Change in Emberhollow"}
               </button>
             </div>
           );
@@ -374,13 +516,18 @@ function Build() {
           <StatLine label="Critical" value={Math.round(stats.crit * 100)} suffix="%" />
           {Object.entries(stats.mods).map(([id, v]) => (
             <p key={id} className="text-xs text-[var(--gilt)]">
-              {MODIFIERS[id as keyof typeof MODIFIERS].name} ×{Math.round((v ?? 0) / MODIFIERS[id as keyof typeof MODIFIERS].value)} —{" "}
-              <span className="text-[var(--parchment)]/80">{MODIFIERS[id as keyof typeof MODIFIERS].text}</span>
+              {MODIFIERS[id as keyof typeof MODIFIERS].name} ×
+              {Math.round((v ?? 0) / MODIFIERS[id as keyof typeof MODIFIERS].value)} —{" "}
+              <span className="text-[var(--parchment)]/80">
+                {MODIFIERS[id as keyof typeof MODIFIERS].text}
+              </span>
             </p>
           ))}
         </div>
         <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2.5">
-          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Ability path</h3>
+          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+            Ability path
+          </h3>
           {arch.abilities.map((id, i) => {
             const on = abilityUnlocked(s.level, i);
             return (
@@ -390,7 +537,10 @@ function Build() {
                 </span>
                 <div>
                   <div className="text-xs font-semibold text-[var(--parchment)]">
-                    {i + 1}. {ABILITIES[id].name} <span className="font-normal text-[var(--gilt)]">· {on ? "unlocked" : `level ${ABILITY_UNLOCK_LEVELS[i]}`}</span>
+                    {i + 1}. {ABILITIES[id].name}{" "}
+                    <span className="font-normal text-[var(--gilt)]">
+                      · {on ? "unlocked" : `level ${ABILITY_UNLOCK_LEVELS[i]}`}
+                    </span>
                   </div>
                   <div className="text-[11px] text-[var(--parchment)]/65">
                     {ABILITIES[id].description} ({ABILITIES[id].cooldown}s)
@@ -402,7 +552,9 @@ function Build() {
         </div>
       </div>
       <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2.5">
-        <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Road ahead</h3>
+        <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+          Road ahead
+        </h3>
         <ol className="space-y-0.5 text-xs text-[var(--parchment)]/80">
           <li>1. Emberhollow → Whisperpine Woods (Bramblekin, level 1–2)</li>
           <li>2. The Sunken Arch (Hollow Sentinels, Thornmaw — level 3–4)</li>
@@ -411,7 +563,11 @@ function Build() {
         {QUESTS.map((q, i) => (
           <p key={q.id} className="mt-1 text-[11px] text-[var(--parchment)]/60">
             {q.name} (level {q.recommendedLevel}):{" "}
-            {s.questIdx > i || s.questComplete ? "complete" : s.questIdx === i ? `in progress — ${q.steps[s.questStep]?.title ?? ""}` : "locked"}
+            {s.questIdx > i || s.questComplete
+              ? "complete"
+              : s.questIdx === i
+                ? `in progress — ${q.steps[s.questStep]?.title ?? ""}`
+                : "locked"}
           </p>
         ))}
       </div>
@@ -427,7 +583,11 @@ function Codex() {
   const enemies = Object.values(ENEMIES);
   const items = Object.values(ITEMS);
   const places = Object.entries(REGIONS);
-  const count = { enemies: `${c.seen.length}/${enemies.length}`, places: `${c.places.length}/${places.length}`, items: `${c.items.length}/${items.length}` };
+  const count = {
+    enemies: `${c.seen.length}/${enemies.length}`,
+    places: `${c.places.length}/${places.length}`,
+    items: `${c.items.length}/${items.length}`,
+  };
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
@@ -447,11 +607,18 @@ function Codex() {
           {enemies.map((e) => {
             const known = c.seen.includes(e.id);
             return (
-              <div key={e.id} className="rounded-md border border-[var(--parchment)]/15 bg-[var(--ink)]/40 p-2">
+              <div
+                key={e.id}
+                className="rounded-md border border-[var(--parchment)]/15 bg-[var(--ink)]/40 p-2"
+              >
                 <div className="flex justify-between text-xs">
-                  <span className="font-semibold text-[var(--parchment)]">{known ? e.name : "???"}</span>
+                  <span className="font-semibold text-[var(--parchment)]">
+                    {known ? e.name : "???"}
+                  </span>
                   <span className="text-[var(--gilt)]">
-                    {known ? `Lv ${e.level}${e.boss ? " boss" : ""} · defeated ${c.kills[e.id] ?? 0}` : "not yet encountered"}
+                    {known
+                      ? `Lv ${e.level}${e.boss ? " boss" : ""} · defeated ${c.kills[e.id] ?? 0}`
+                      : "not yet encountered"}
                   </span>
                 </div>
                 {known && <p className="mt-1 text-[11px] text-[var(--parchment)]/65">{e.lore}</p>}
@@ -463,8 +630,15 @@ function Codex() {
       {tab === "places" && (
         <div className="grid gap-2 sm:grid-cols-2">
           {places.map(([id, r]) => (
-            <div key={id} className="rounded-md border border-[var(--parchment)]/15 bg-[var(--ink)]/40 p-2 text-xs">
-              <span className={c.places.includes(id) ? "text-[var(--parchment)]" : "text-[var(--parchment)]/35"}>
+            <div
+              key={id}
+              className="rounded-md border border-[var(--parchment)]/15 bg-[var(--ink)]/40 p-2 text-xs"
+            >
+              <span
+                className={
+                  c.places.includes(id) ? "text-[var(--parchment)]" : "text-[var(--parchment)]/35"
+                }
+              >
                 {c.places.includes(id) ? r.label : "Undiscovered"}
               </span>
             </div>
@@ -476,8 +650,15 @@ function Codex() {
           {items.map((d) => {
             const got = c.items.includes(d.id);
             return (
-              <div key={d.id} className="rounded-md border bg-[var(--ink)]/40 p-1.5 text-[11px]" style={{ borderColor: got ? RARITY_COLOR[d.rarity] : "rgba(243,228,200,0.12)" }}>
-                <div style={{ color: got ? RARITY_COLOR[d.rarity] : undefined }} className={got ? "" : "text-[var(--parchment)]/30"}>
+              <div
+                key={d.id}
+                className="rounded-md border bg-[var(--ink)]/40 p-1.5 text-[11px]"
+                style={{ borderColor: got ? RARITY_COLOR[d.rarity] : "rgba(243,228,200,0.12)" }}
+              >
+                <div
+                  style={{ color: got ? RARITY_COLOR[d.rarity] : undefined }}
+                  className={got ? "" : "text-[var(--parchment)]/30"}
+                >
                   {got ? d.name : "Unknown"}
                 </div>
                 <div className="text-[11px] uppercase text-[var(--parchment)]/45">
@@ -499,6 +680,7 @@ export function InventoryPanel() {
   const open = useGame((s) => s.inventoryOpen);
   const tab = useGame((s) => s.journalTab);
   const toggle = useGame((s) => s.toggleInventory);
+  const threat = useThreatened();
   if (!open) return null;
   return (
     <div
@@ -524,22 +706,44 @@ export function InventoryPanel() {
                 key={t.id}
                 data-testid={`tab-${t.id}`}
                 onClick={() => toggle(true, t.id)}
-                className={`min-h-11 whitespace-nowrap rounded-md px-3 font-display text-xs tracking-[0.15em] ${
-                  tab === t.id ? "bg-[var(--gilt)]/25 text-[var(--parchment)]" : "text-[var(--parchment)]/75 hover:text-[var(--parchment)]"
+                // Tighter on an upright phone so all five tabs fit beside Close.
+                className={`min-h-11 whitespace-nowrap rounded-md px-1.5 font-display text-xs tracking-[0.05em] sm:px-3 sm:tracking-[0.15em] ${
+                  tab === t.id
+                    ? "bg-[var(--gilt)]/25 text-[var(--parchment)]"
+                    : "text-[var(--parchment)]/75 hover:text-[var(--parchment)]"
                 }`}
               >
                 {t.label.toUpperCase()}
-                {t.key && <span className="ml-1.5 hidden font-mono text-[11px] text-[var(--gilt)] [@media(pointer:fine)]:inline">{t.key}</span>}
+                {t.key && (
+                  <span className="ml-1.5 hidden font-mono text-[11px] text-[var(--gilt)] [@media(pointer:fine)]:inline">
+                    {t.key}
+                  </span>
+                )}
               </button>
             ))}
           </div>
           <button
             onClick={() => toggle(false)}
-            className="min-h-11 shrink-0 rounded-md border border-[var(--parchment)]/25 px-4 text-sm text-[var(--parchment)]"
+            aria-label="Close"
+            className="min-h-11 min-w-11 shrink-0 rounded-md border border-[var(--parchment)]/25 px-2 text-sm text-[var(--parchment)] sm:px-4"
           >
-            Close
+            {/* Just a cross on an upright phone, so all five tabs fit. */}
+            <span className="sm:hidden" aria-hidden>
+              ✕
+            </span>
+            <span className="hidden sm:inline">Close</span>
           </button>
         </div>
+        {/* The world doesn't pause behind the journal (it's an MMO): warn when it matters. */}
+        {threat && (
+          <div
+            role="alert"
+            className="flex items-center justify-center gap-2 bg-[#8c2f22]/90 px-3 py-1.5 text-center text-xs font-semibold text-[#ffe3d6]"
+          >
+            <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff7a5c]" aria-hidden />
+            In combat! Enemies are attacking you, and the fight goes on while this is open.
+          </div>
+        )}
         <div className="overflow-y-auto overscroll-contain p-3 sm:p-4">
           {tab === "satchel" && <Satchel />}
           {tab === "forge" && <Forge />}

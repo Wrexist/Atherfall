@@ -36,7 +36,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   bramblekin: {
     id: "bramblekin",
     name: "Bramblekin",
-    model: "/models/gy/character-zombie.glb",
+    model: "/models/kaykit/skeleton-minion.glb",
     scale: 2.0,
     level: 1,
     lore: "Root-and-thorn walkers that crawled out of Whisperpine after the sky cracked. Quick swipes in a short cone.",
@@ -57,7 +57,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   sentinel: {
     id: "sentinel",
     name: "Hollow Sentinel",
-    model: "/models/gy/character-skeleton.glb",
+    model: "/models/kaykit/skeleton-warrior.glb",
     scale: 2.5,
     level: 3,
     lore: "Hollow armour animated by old oaths. Slow, but its ground slam lands a few steps ahead of it.",
@@ -78,7 +78,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   thornmaw: {
     id: "thornmaw",
     name: "Thornmaw, the Root-Crowned",
-    model: "/models/gy/character-vampire.glb",
+    model: "/models/kaykit/skeleton-warrior.glb",
     scale: 3.4,
     level: 4,
     lore: "A root-crowned tyrant of the Sunken Arch. Sweeps, charges, and when wounded, makes the ground erupt.",
@@ -100,7 +100,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   shade: {
     id: "shade",
     name: "Barrow Shade",
-    model: "/models/dng/character-orc.glb",
+    model: "/models/kaykit/skeleton-rogue.glb",
     scale: 2.2,
     level: 5,
     lore: "What is left of those buried with the Lantern King. Fast and relentless, with a wide swipe.",
@@ -121,7 +121,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   warden: {
     id: "warden",
     name: "Lantern Warden",
-    model: "/models/gy/character-skeleton.glb",
+    model: "/models/kaykit/skeleton-mage.glb",
     scale: 2.7,
     level: 6,
     lore: "Bone guards that still carry their lanterns. Their slams hit hard and wide — never stand in front.",
@@ -142,7 +142,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   lanternking: {
     id: "lanternking",
     name: "The Lantern King",
-    model: "/models/gy/character-vampire.glb",
+    model: "/models/kaykit/skeleton-mage.glb",
     scale: 3.8,
     level: 7,
     lore: "Buried with his court and his light. Awake again, and furious about it.",
@@ -164,7 +164,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   rootfather: {
     id: "rootfather",
     name: "Old Rootfather",
-    model: "/models/gy/character-zombie.glb",
+    model: "/models/kaykit/skeleton-warrior.glb",
     scale: 3.0,
     level: 3,
     lore: "The first Bramblekin, grown thick as a trunk. It guards something buried under the Hollow Stump.",
@@ -186,7 +186,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   drowned: {
     id: "drowned",
     name: "Tidewrack Drowned",
-    model: "/models/dng/character-orc.glb",
+    model: "/models/kaykit/skeleton-minion.glb",
     scale: 2.1,
     level: 3,
     lore: "Sailors who walked into the sea after the star fell, and walked back out wrong.",
@@ -207,7 +207,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   tidebound: {
     id: "tidebound",
     name: "Tidebound Sentinel",
-    model: "/models/gy/character-skeleton.glb",
+    model: "/models/kaykit/skeleton-warrior.glb",
     scale: 2.8,
     level: 5,
     lore: "A sentinel that stood its post on the wreck while the tide came in. It never left.",

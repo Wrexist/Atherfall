@@ -10,57 +10,76 @@ import { heightAt } from "../world/terrain";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
 import { QUESTS } from "../data/quests";
+import { DODGE, SWINGS } from "../data/combat";
 import { col } from "./colors";
 import { liteMaterial, useLiteMaterials } from "./materials";
+import { KAYKIT_ANIMATIONS, rigFor, type RigInfo } from "./rigs";
 
 type CharMaterial = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
 
-/** Clip name per logical animation state. */
-const CLIP: Record<string, string> = {
-  idle: "idle",
-  walk: "walk",
-  sprint: "sprint",
-  jump: "jump",
-  fall: "fall",
-  attack: "attack-melee-right",
-  attack1: "attack-melee-right",
-  attack2: "attack-melee-left",
-  attack3: "attack-melee-right",
-  dodge: "crouch",
-  burst: "attack-kick-right",
-  ward: "interact-left",
-  hit: "fall",
-  swim: "walk",
-  tread: "idle",
-  climb: "jump",
-  hang: "static",
-  windup: "interact-right",
-  die: "die",
-  talk: "emote-yes",
+/**
+ * How long the game holds these states, in seconds. KayKit clips are stretched
+ * or squeezed to fit, so a swing's visible impact lands on its hit window.
+ */
+const FIT_SECONDS: Record<string, number> = {
+  attack1: SWINGS[0]!.duration,
+  attack2: SWINGS[1]!.duration,
+  attack3: SWINGS[2]!.duration,
+  dodge: DODGE.duration,
 };
 
-const ONCE = new Set(["attack", "attack1", "attack2", "attack3", "dodge", "burst", "ward", "die", "windup", "hit"]);
+const ONCE = new Set([
+  "attack",
+  "attack1",
+  "attack2",
+  "attack3",
+  "dodge",
+  "burst",
+  "ward",
+  "die",
+  "windup",
+  "hit",
+]);
 
 export function useCharacter(url: string, tint?: string) {
   const gltf = useGLTF(url);
+  // KayKit characters share one rig, so their clips ship once for all of them.
+  const shared = useGLTF(KAYKIT_ANIMATIONS);
+  const rig = rigFor(url);
   const lite = useLiteMaterials();
-  return useMemo(() => {
+  const character = useMemo(() => {
     const scene = cloneSkeleton(gltf.scene) as THREE.Group;
     const materials: CharMaterial[] = [];
+    const owned: THREE.Material[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      const src = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+      // Skinned meshes can animate outside their bind-pose bounds (a wide swing,
+      // a death fall); culling them by those bounds made limbs vanish at the
+      // screen edge.
+      mesh.frustumCulled = false;
+      const src = (
+        Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+      ) as THREE.MeshStandardMaterial;
       // Each character gets its own material (hit flashes are per character).
       const mat = (lite ? liteMaterial(src) : src).clone() as CharMaterial;
-      if (tint) mat.color.lerp(new THREE.Color(tint), 0.45);
+      // Glowing eyes keep their colour whatever the creature's tint.
+      const glows = src.name === "Glow" || (src.emissive && src.emissive.getHex() !== 0);
+      if (tint && !glows) mat.color.lerp(new THREE.Color(tint), 0.45);
       mesh.material = mat;
-      materials.push(mat);
+      owned.push(mat);
+      if (!glows) materials.push(mat);
     });
-    return { scene, materials, animations: gltf.animations };
-  }, [gltf.scene, gltf.animations, tint, lite]);
+    const animations = rig.kind === "kaykit" ? shared.animations : gltf.animations;
+    return { scene, materials, animations, rig, owned };
+  }, [gltf.scene, gltf.animations, shared.animations, rig, tint, lite]);
+  // The per-character material clones are this character's alone: free them
+  // when it goes (a class change, another player leaving). Textures and
+  // geometry are shared with the loaded model and stay.
+  useEffect(() => () => character.owned.forEach((m) => m.dispose()), [character]);
+  return character;
 }
 
 /**
@@ -71,8 +90,12 @@ export function useCharacter(url: string, tint?: string) {
 export function useAnimator(
   root: React.RefObject<THREE.Group | null>,
   animations: THREE.AnimationClip[],
+  info: RigInfo,
 ) {
-  const rig = useRef<{ mixer: THREE.AnimationMixer | null; actions: Record<string, THREE.AnimationAction> }>({
+  const rig = useRef<{
+    mixer: THREE.AnimationMixer | null;
+    actions: Record<string, THREE.AnimationAction>;
+  }>({
     mixer: null,
     actions: {},
   });
@@ -103,32 +126,40 @@ export function useAnimator(
 
   const update = useCallback((dt: number) => bind().mixer?.update(dt), [bind]);
 
-  const play = useCallback((state: string, speed = 1, key = 0) => {
-    const { actions } = bind();
-    const restart = key !== lastKey.current && ONCE.has(state);
-    lastKey.current = key;
-    if (current.current === state && !restart) {
-      const a = actions[CLIP[state] ?? ""];
-      if (a) a.timeScale = speed;
-      return;
-    }
-    const next = actions[CLIP[state] ?? "idle"];
-    const prev = actions[CLIP[current.current] ?? ""];
-    if (!next) return;
-    next.reset();
-    next.timeScale = speed;
-    if (ONCE.has(state)) {
-      next.setLoop(THREE.LoopOnce, 1);
-      next.clampWhenFinished = true;
-    } else {
-      next.setLoop(THREE.LoopRepeat, Infinity);
-      next.clampWhenFinished = false;
-    }
-    const fade = state.startsWith("attack") || state === "dodge" ? 0.06 : 0.14;
-    next.fadeIn(fade).play();
-    if (prev && prev !== next) prev.fadeOut(fade);
-    current.current = state;
-  }, [bind]);
+  const play = useCallback(
+    (state: string, speed = 1, key = 0) => {
+      const { actions } = bind();
+      const clips = info.clips;
+      const restart = key !== lastKey.current && ONCE.has(state);
+      lastKey.current = key;
+      const next = actions[clips[state] ?? clips["idle"] ?? ""];
+      // KayKit clips are fitted to how long the game holds the state.
+      const hold = info.kind === "kaykit" ? FIT_SECONDS[state] : undefined;
+      const fit = hold && next ? next.getClip().duration / hold : 0;
+      const rate = fit || speed;
+      if (current.current === state && !restart) {
+        const a = actions[clips[state] ?? ""];
+        if (a) a.timeScale = rate;
+        return;
+      }
+      const prev = actions[clips[current.current] ?? ""];
+      if (!next) return;
+      next.reset();
+      next.timeScale = rate;
+      if (ONCE.has(state)) {
+        next.setLoop(THREE.LoopOnce, 1);
+        next.clampWhenFinished = true;
+      } else {
+        next.setLoop(THREE.LoopRepeat, Infinity);
+        next.clampWhenFinished = false;
+      }
+      const fade = state.startsWith("attack") || state === "dodge" ? 0.06 : 0.14;
+      next.fadeIn(fade).play();
+      if (prev && prev !== next) prev.fadeOut(fade);
+      current.current = state;
+    },
+    [bind, info],
+  );
 
   return { play, update };
 }
@@ -154,7 +185,18 @@ function flashMaterials(
 const ANIM_NEAR = 30;
 const ANIM_FAR = 70;
 
-export const CLIP_SPEED: Record<string, number> = { swim: 0.7, climb: 0.8, attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
+export const CLIP_SPEED: Record<string, number> = {
+  swim: 0.7,
+  climb: 0.8,
+  attack1: 1.9,
+  attack2: 1.9,
+  attack3: 1.3,
+  dodge: 2.2,
+  burst: 1.8,
+  ward: 1.6,
+  hit: 1.6,
+  sprint: 1.15,
+};
 
 /** Remounts the hero model when the archetype changes. */
 export function PlayerView() {
@@ -166,8 +208,8 @@ function PlayerModel({ url }: { url: string }) {
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const ward = useRef<THREE.Mesh>(null);
-  const { scene, materials, animations } = useCharacter(url);
-  const { play, update } = useAnimator(group, animations);
+  const { scene, materials, animations, rig } = useCharacter(url);
+  const { play, update } = useAnimator(group, animations, rig);
   const flash = useRef({ amount: -1, color: "" });
 
   useFrame((_, dt) => {
@@ -181,11 +223,15 @@ function PlayerModel({ url }: { url: string }) {
     const b = body.current;
     if (b) {
       // Procedural layers: finisher spin, dodge roll, hurt recoil, dash lean.
+      // (KayKit has real clips for the spin, roll and flinch.)
       b.rotation.set(0, 0, 0);
-      if (p.action === "attack" && p.comboIdx === 3) b.rotation.y = -Math.min(1, p.actionT / 0.34) * Math.PI * 2;
-      if (p.action === "dodge") b.rotation.x = Math.min(1, p.actionT / 0.34) * Math.PI * 2;
+      if (rig.proceduralMoves) {
+        if (p.action === "attack" && p.comboIdx === 3)
+          b.rotation.y = -Math.min(1, p.actionT / 0.34) * Math.PI * 2;
+        if (p.action === "dodge") b.rotation.x = Math.min(1, p.actionT / 0.34) * Math.PI * 2;
+        if (p.hurtT > 0) b.rotation.x = -p.hurtT * 1.3;
+      }
       if (p.action === "gale") b.rotation.x = 0.45;
-      if (p.hurtT > 0) b.rotation.x = -p.hurtT * 1.3;
       if (p.swimming) b.rotation.x = p.anim === "swim" ? 1.15 : 0.35;
     }
     if (ward.current) {
@@ -206,7 +252,7 @@ function PlayerModel({ url }: { url: string }) {
   return (
     <group ref={group}>
       <group ref={body} position-y={0.85}>
-        <group position-y={-0.85} scale={2.15}>
+        <group position-y={-0.85} scale={2.15 * rig.scale}>
           <primitive object={scene} />
         </group>
       </group>
@@ -225,8 +271,8 @@ function EnemyView({ index }: { index: number }) {
   const inner = useRef<THREE.Group>(null);
   const bar = useRef<THREE.Group>(null);
   const barFill = useRef<THREE.Mesh>(null);
-  const { scene, materials, animations } = useCharacter(def.model, def.tint);
-  const { play, update } = useAnimator(inner, animations);
+  const { scene, materials, animations, rig } = useCharacter(def.model, def.tint);
+  const { play, update } = useAnimator(inner, animations, rig);
   const camera = useThree((s) => s.camera);
   const fog = useThree((s) => s.scene.fog as THREE.Fog | null);
   const flash = useRef({ amount: -1, color: "" });
@@ -249,7 +295,10 @@ function EnemyView({ index }: { index: number }) {
     }
     g.position.set(e.x, e.y, e.z);
     g.rotation.y = e.yaw;
-    play(e.anim === "walk" && e.phase === "chase" ? "sprint" : e.anim, e.anim === "attack" ? 1.6 : e.anim === "windup" ? 1 / Math.max(0.4, e.windupTotal) : 1);
+    play(
+      e.anim === "walk" && e.phase === "chase" ? "sprint" : e.anim,
+      e.anim === "attack" ? 1.6 : e.anim === "windup" ? 1 / Math.max(0.4, e.windupTotal) : 1,
+    );
     // Staggered across enemies so throttled ones don't all tick on the same frame.
     pending.current += dt;
     frame.current = (frame.current + 1) % 3;
@@ -259,7 +308,13 @@ function EnemyView({ index }: { index: number }) {
     }
     flashMaterials(
       materials,
-      e.hitFlash > 0 ? e.hitFlash * 2.5 : e.phase === "windup" ? 0.25 + e.telegraph * 0.6 : e.slowT > 0 ? 0.3 : 0,
+      e.hitFlash > 0
+        ? e.hitFlash * 2.5
+        : e.phase === "windup"
+          ? 0.25 + e.telegraph * 0.6
+          : e.slowT > 0
+            ? 0.3
+            : 0,
       e.hitFlash > 0 ? "#ffb3a0" : e.phase === "windup" ? "#ff4a2a" : "#8fc8ff",
       flash.current,
     );
@@ -283,17 +338,23 @@ function EnemyView({ index }: { index: number }) {
 
   return (
     <group ref={group}>
-      <group ref={inner} scale={def.scale}>
+      <group ref={inner} scale={def.scale * rig.scale}>
         <primitive object={scene} />
       </group>
-      <group ref={bar} position={[0, barY, 0]} visible={false}>
-        <mesh>
-          <planeGeometry args={[1.05, 0.15]} />
-          <meshBasicMaterial color="#1b140f" transparent opacity={0.75} depthTest={false} />
+      <group ref={bar} position={[0, barY, 0]} visible={false} scale={1.3}>
+        <mesh renderOrder={7}>
+          <planeGeometry args={[1.12, 0.24]} />
+          <meshBasicMaterial color="#f3e2bd" transparent opacity={0.9} depthTest={false} />
         </mesh>
-        <mesh ref={barFill} position={[0, 0, 0.01]}>
-          <planeGeometry args={[1, 0.1]} />
-          <meshBasicMaterial color="#d8543f" depthTest={false} />
+        <mesh position={[0, 0, 0.005]} renderOrder={8}>
+          <planeGeometry args={[1.05, 0.17]} />
+          <meshBasicMaterial color="#1b140f" transparent opacity={0.85} depthTest={false} />
+        </mesh>
+        {/* Transparent like its backing, so it's drawn after it: an opaque fill
+            went in the opaque pass and the backing was painted over it. */}
+        <mesh ref={barFill} position={[0, 0, 0.01]} renderOrder={9}>
+          <planeGeometry args={[1, 0.12]} />
+          <meshBasicMaterial color="#e2412f" transparent opacity={1} depthTest={false} />
         </mesh>
       </group>
     </group>
@@ -312,8 +373,8 @@ export function EnemyViews() {
 
 function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useCharacter(npc.model);
-  const { play, update } = useAnimator(group, animations);
+  const { scene, animations, rig } = useCharacter(npc.model, npc.tint);
+  const { play, update } = useAnimator(group, animations, rig);
   const camera = useThree((s) => s.camera);
   const questStep = useGame((s) => s.questStep);
   const complete = useGame((s) => s.questComplete);
@@ -338,7 +399,7 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
 
   return (
     <group position={[npc.x, 0, npc.z]} rotation-y={npc.yaw}>
-      <group ref={group} scale={npc.scale}>
+      <group ref={group} scale={npc.scale * rig.scale}>
         <primitive object={scene} />
       </group>
       <mesh ref={marker} position={[0, 3, 0]} visible={false}>
