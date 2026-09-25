@@ -16,7 +16,7 @@ export const WAYPOINTS: Waypoint[] = [
   { id: "whisperpine", name: "Whisperpine Trail", region: "woods", x: -4, z: -42 },
   { id: "sunken-arch", name: "Sunken Arch Road", region: "ruins", x: 38, z: -26 },
   { id: "tidewrack", name: "Tidewrack Landing", region: "shore", x: 2, z: 49 },
-  { id: "barrow-gate", name: "Barrow Gate", region: "barrow", x: -39, z: 14 },
+  { id: "barrow-gate", name: "Barrow Gate", region: "barrow", x: -39, z: 18 },
 ];
 
 export interface SecretDef {

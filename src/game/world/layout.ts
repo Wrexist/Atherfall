@@ -184,7 +184,7 @@ function handmade(): PropInstance[] {
     [-9, -38],
     [9, 3.6],
     [-8, -1],
-    [5, 22],
+    [6.2, 22.6],
     [-1, 22],
   ];
   for (const [x, z] of lanterns) add("/models/town/lantern.glb", x, z, 0, 2.8, 0.4);
@@ -192,7 +192,8 @@ function handmade(): PropInstance[] {
   // Fences framing the square
   for (let i = 0; i < 7; i++) {
     add("/models/town/fence.glb", -18 + i * 3, 18, 0, 3, 1.0, true);
-    add("/models/town/hedge.glb", 18, -18 + i * 3, Math.PI / 2, 3, 1.2, true);
+    // leave a gap where the east road to the ruins passes through
+    if (i !== 4 && i !== 5) add("/models/town/hedge.glb", 18, -18 + i * 3, Math.PI / 2, 3, 1.2, true);
   }
 
   // --- Whisperpine Woods gateway ---
@@ -210,6 +211,7 @@ function handmade(): PropInstance[] {
     ring.push([rx + Math.cos(a) * 15, rz + Math.sin(a) * 15]);
   }
   ring.forEach(([x, z], i) => {
+    if (pathDistance(x, z) < 2.2) return; // keep the ruins road clear
     const model =
       i % 3 === 0
         ? "/models/gy/pillar-large.glb"
