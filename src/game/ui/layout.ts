@@ -38,7 +38,11 @@ export function useThreatened() {
   return threat;
 }
 
-/** Enemies close enough to fight (or one locked on): the Target button only shows then. */
+/**
+ * Enemies close enough to fight (or one locked on). Target stays on screen at
+ * all times, as in the owner's mockup (docs/art); this only makes it glow
+ * while the Attack tip is teaching a nearby fight.
+ */
 export const NEAR_ENEMY_M = 18;
 export function enemiesNear(px: number, pz: number, enemies: readonly { x: number; z: number; hp: number }[], locked: boolean) {
   return locked || enemies.some((e) => e.hp > 0 && Math.hypot(e.x - px, e.z - pz) < NEAR_ENEMY_M);

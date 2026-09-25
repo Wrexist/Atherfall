@@ -194,8 +194,6 @@ function handmade(): PropInstance[] {
   add(K("tent"), -5, 7, 0.3, 5, 1.4);
   add(K("market"), 6, 8.5, -0.4, 2.4, 2.1);
   add(K("wheelbarrow"), 9, -3, 1.9, 6, 1.2);
-  add(K("flag_red"), -3.4, -2.6, 0, 8, 0.5, true);
-  add(K("flag_red"), 3.4, 2.6, 3.14, 8, 0.5, true);
   add("/models/nature/campfire_stones.glb", 5.5, -6.5, 0, 2.6, 0.9);
   add(K("barrel"), 7.8, -1.2, 0.4, 5, 0, true);
   add(K("crate_big"), 10.4, -5, 0.2, 5, 0, true);

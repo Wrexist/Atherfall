@@ -14,12 +14,13 @@ import {
 import { ARCHETYPES } from "../data/archetypes";
 import { enemyDef } from "../data/enemies";
 import { useGLTF } from "@react-three/drei";
+import { Plaza } from "./Plaza";
 import { assetUrl } from "../core/assets";
 import { heightAt } from "../world/terrain";
 import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
 import { Terrain } from "./Terrain";
-import { EnemyViews, NpcViews, PlayerView } from "./Characters";
+import { EnemyViews, NpcViews, PlayerView, Statue } from "./Characters";
 import {
   DropViews,
   FloaterViews,
@@ -199,6 +200,8 @@ export function Scene() {
       <SlashTrail />
       <EnemyViews />
       <NpcViews />
+      <Plaza shadows={q.shadows} />
+      <Statue x={0} z={0} y={heightAt(0, 0) + 0.1} scale={2.9} />
       <DropViews />
       <SparkViews />
       <RingViews />
