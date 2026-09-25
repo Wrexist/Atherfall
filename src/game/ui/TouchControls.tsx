@@ -234,7 +234,12 @@ function ArcButton({
       ) : (
         <>
           <SlotIcon id={id} className="h-5 w-5" />
-          <span className="text-[9px] font-semibold uppercase tracking-wide">{label}</span>
+          {/* Long names ("Emberburst") shrink to fit the round button. */}
+          <span
+            className={`font-semibold uppercase ${label.length > 7 ? "text-[7.5px] tracking-normal" : "text-[9px] tracking-wide"}`}
+          >
+            {label}
+          </span>
           <CooldownSweep id={id} />
         </>
       )}

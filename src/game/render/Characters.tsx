@@ -334,14 +334,20 @@ function EnemyView({ index }: { index: number }) {
       <group ref={inner} scale={def.scale * rig.scale}>
         <primitive object={scene} />
       </group>
-      <group ref={bar} position={[0, barY, 0]} visible={false}>
-        <mesh>
-          <planeGeometry args={[1.05, 0.15]} />
-          <meshBasicMaterial color="#1b140f" transparent opacity={0.75} depthTest={false} />
+      <group ref={bar} position={[0, barY, 0]} visible={false} scale={1.3}>
+        <mesh renderOrder={7}>
+          <planeGeometry args={[1.12, 0.24]} />
+          <meshBasicMaterial color="#f3e2bd" transparent opacity={0.9} depthTest={false} />
         </mesh>
-        <mesh ref={barFill} position={[0, 0, 0.01]}>
-          <planeGeometry args={[1, 0.1]} />
-          <meshBasicMaterial color="#d8543f" depthTest={false} />
+        <mesh position={[0, 0, 0.005]} renderOrder={8}>
+          <planeGeometry args={[1.05, 0.17]} />
+          <meshBasicMaterial color="#1b140f" transparent opacity={0.85} depthTest={false} />
+        </mesh>
+        {/* Transparent like its backing, so it's drawn after it: an opaque fill
+            went in the opaque pass and the backing was painted over it. */}
+        <mesh ref={barFill} position={[0, 0, 0.01]} renderOrder={9}>
+          <planeGeometry args={[1, 0.12]} />
+          <meshBasicMaterial color="#e2412f" transparent opacity={1} depthTest={false} />
         </mesh>
       </group>
     </group>
