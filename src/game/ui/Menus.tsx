@@ -427,6 +427,12 @@ function ComfortSettings() {
       )}
       <div className="divide-y divide-[var(--gilt)]/10">
         <Toggle
+          label="Battery saver"
+          note="Caps the game at 30 frames a second: a cooler phone and longer play"
+          on={prefs.batterySaver}
+          onChange={(v) => prefs.update({ batterySaver: v })}
+        />
+        <Toggle
           label="Hold Attack to keep swinging"
           on={prefs.holdToAttack}
           onChange={(v) => prefs.update({ holdToAttack: v })}

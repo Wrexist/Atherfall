@@ -87,7 +87,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 36 | P2 | Instanced props are static (`matrixAutoUpdate=false`). Camera occlusion checks only the 42 large colliders instead of 459. Crystal heights are precomputed. | ✅ |
 | 37 | P2 | Dispose cloned materials and terrain geometry. A quality change remounts the canvas anyway. Each character's own material clones are now freed when it goes (class change, another player leaving), and a new terrain resolution frees the old mesh. | ✅ |
 | 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
-| 39 | P2 | Add a battery-saver option (30fps cap). | ⬜ |
+| 39 | P2 | **Battery saver** (Menu → Controls): caps the game at 30 fps on any screen (60, 90 or 120 Hz). The canvas renders on demand at that pace, and adaptive resolution judges smoothness against 30 fps, so it doesn't blur the picture just because of the cap. Measured in Chromium: 33 → 29.7 fps with it on, the hero moving at the same speed. | ✅ |
 
 ## Phase 3 — Mobile controls & feel ✅ (mostly done)
 

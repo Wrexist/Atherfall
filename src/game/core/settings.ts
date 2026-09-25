@@ -14,6 +14,8 @@ export interface Settings {
   holdToAttack: boolean;
   /** High 3/4 view (default) or the orbiting behind-the-back camera. */
   camera: CameraMode;
+  /** Cap the game at 30 fps: a cooler phone and longer play. */
+  batterySaver: boolean;
   /** First-run tips already learned or dismissed. */
   tipsDone: string[];
 }
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   floatingStick: true,
   holdToAttack: true,
   camera: "top",
+  batterySaver: false,
   tipsDone: [],
 };
 

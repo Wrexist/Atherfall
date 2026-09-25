@@ -1,7 +1,9 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { PerformanceMonitor, useGLTF } from "@react-three/drei";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { SAVER_FPS, frameDue } from "../core/frameCap";
+import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { MODEL_URLS, Scene } from "./Scene";
 
@@ -13,11 +15,34 @@ const MAX_DPR: Record<string, number> = {
 };
 const MIN_SCALE = 0.6;
 
+/**
+ * Battery saver: the canvas renders on demand and this asks for a frame at
+ * most SAVER_FPS times a second, whatever the screen's refresh rate.
+ */
+function FrameCap() {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    let raf = 0;
+    let last = -Infinity;
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      if (frameDue(now, last, SAVER_FPS)) {
+        last = now;
+        invalidate();
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [invalidate]);
+  return null;
+}
+
 export function GameCanvas() {
   const quality = useGame((s) => s.quality);
   // Render continuously only while something moves; menus get on-demand frames
   // so a paused phone isn't burning battery redrawing a still scene.
   const live = useGame((s) => s.screen === "playing" || s.screen === "loading");
+  const capped = useSettings((s) => s.batterySaver);
   // Adaptive resolution: drop render scale when frames are missed, recover when there's headroom.
   const [scale, setScale] = useState(1);
   // Remounting the Canvas is the reliable way to recover a lost WebGL context
@@ -54,7 +79,7 @@ export function GameCanvas() {
         key={canvasKey}
         shadows={quality !== "low" ? "percentage" : false}
         dpr={dpr}
-        frameloop={live ? "always" : "demand"}
+        frameloop={live && !capped ? "always" : "demand"}
         camera={{ fov: 58, near: 0.5, far: 400, position: [0, 10, 20] }}
         gl={{ antialias: quality !== "low", powerPreference: "high-performance" }}
         onCreated={({ gl, scene }) => {
@@ -76,7 +101,11 @@ export function GameCanvas() {
           });
         }}
       >
+        {live && capped && <FrameCap />}
         <PerformanceMonitor
+          // Capped at 30 fps, judge smoothness against 30, not the screen's rate.
+          key={capped ? "capped" : "free"}
+          {...(capped ? { bounds: (): [number, number] => [SAVER_FPS - 6, SAVER_FPS - 1] } : {})}
           onDecline={() => setScale((s) => Math.max(MIN_SCALE, +(s - 0.15).toFixed(2)))}
           onIncline={() => setScale((s) => Math.min(1, +(s + 0.1).toFixed(2)))}
           flipflops={4}
