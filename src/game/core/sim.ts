@@ -873,37 +873,145 @@ function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   sfx.dodge();
 }
 
+function abilityCooldown(id: AbilityId) {
+  const focus = statsFor(useGame.getState()).mods.focus ?? 0;
+  return ABILITIES[id].cooldown * (1 - focus);
+}
+
+/** Current archetype's ability in slot `idx` (0..2). */
+export function abilityInSlot(idx: number): AbilityId | null {
+  const a = ARCHETYPES[useGame.getState().archetype];
+  return a?.abilities[idx] ?? null;
+}
+
 function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
-  const def = ABILITIES[idx];
-  if (!def || p.dead) return;
+  const id = abilityInSlot(idx);
+  if (!id || p.dead) return;
+  const def = ABILITIES[id];
   const s = useGame.getState();
-  if (!abilityUnlocked(def, s.questStep, s.questComplete)) {
-    s.toast(`${def.name} is sealed — ${def.unlockHint.toLowerCase()} to awaken it.`, "info");
+  if (!abilityUnlocked(s.level, idx)) {
+    s.toast(`${def.name} unlocks at level ${ABILITY_UNLOCK_LEVELS[idx]}.`, "info");
     return;
   }
-  if (p.cooldowns[def.id] > 0) return;
+  if (p.cooldowns[id] > 0) return;
   if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return;
   p.comboIdx = 0;
   p.comboBuffered = false;
-  p.cooldowns[def.id] = def.cooldown;
+  p.cooldowns[id] = abilityCooldown(id);
   p.animKey += 1;
-  if (def.id === "galestep") {
-    if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
-    p.action = "gale";
-    p.actionT = 0;
-    sfx.gale();
-    spark(p.x, p.y + 0.8, p.z, "#cfe9ff", 0.5);
-  } else if (def.id === "emberburst") {
-    p.action = "burst";
-    p.actionT = 0;
-    p.hitIds = new Set();
-    sfx.burstCharge();
-  } else {
-    p.action = "ward-cast";
-    p.actionT = 0;
-    p.wardT = WARD.duration;
-    sfx.ward();
-    floater(p.x, p.y + 2.8, p.z, "Bark Ward", "#c9e39a");
+  p.abilityId = id;
+  p.actionT = 0;
+  const fx = Math.sin(p.yaw);
+  const fz = Math.cos(p.yaw);
+  const eff = def.effect;
+  const max = statsFor(s).maxHp;
+  switch (eff.kind) {
+    case "dash":
+      if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
+      p.action = "gale";
+      sfx.gale();
+      spark(p.x, p.y + 0.8, p.z, "#cfe9ff", 0.5);
+      break;
+    case "leap":
+      // Leap away from where you face; slow whatever you leave behind.
+      slowAround(p.x, p.z, eff.slowRadius);
+      p.action = "gale";
+      p.vy = 6;
+      p.grounded = false;
+      sfx.gale();
+      break;
+    case "blink": {
+      const sx = p.x;
+      const sz = p.z;
+      if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
+      const bx = Math.sin(p.yaw);
+      const bz = Math.cos(p.yaw);
+      for (let d = 0; d < eff.distance; d += 0.5) {
+        const pos = { x: p.x + bx * 0.5, z: p.z + bz * 0.5 };
+        resolveCollisions(pos, 0.55);
+        if (Math.hypot(pos.x - p.x, pos.z - p.z) < 0.25) break;
+        p.x = pos.x;
+        p.z = pos.z;
+      }
+      p.y = Math.max(p.y, heightAt(p.x, p.z));
+      p.dodgeIframe = 0.3;
+      p.action = "ward-cast";
+      spark(sx, p.y + 1, sz, "#b9a4ff", 0.6);
+      spark(p.x, p.y + 1, p.z, "#b9a4ff", 0.6);
+      sfx.gale();
+      break;
+    }
+    case "burst":
+      p.action = "burst";
+      p.hitIds = new Set();
+      sfx.burstCharge();
+      break;
+    case "rain": {
+      const tx = p.x + fx * eff.reach;
+      const tz = p.z + fz * eff.reach;
+      world.rains.push({ x: tx, z: tz, r: eff.radius, born: world.time, ticks: eff.ticks, next: 0, mult: eff.damageMult });
+      p.action = "ward-cast";
+      sfx.swing(1);
+      break;
+    }
+    case "ward":
+      p.action = "ward-cast";
+      p.wardT = eff.duration;
+      sfx.ward();
+      floater(p.x, p.y + 2.8, p.z, def.name, "#c9e39a");
+      break;
+    case "heal":
+      p.action = "ward-cast";
+      s.setHp(Math.min(max, s.hp + max * eff.fraction));
+      p.hasteT = eff.hasteFor;
+      sfx.heal();
+      floater(p.x, p.y + 2.8, p.z, `+${Math.round(max * eff.fraction)}`, "#9fe39a");
+      break;
+    case "shield":
+      p.action = "ward-cast";
+      p.shieldHp = Math.round(max * eff.fraction);
+      p.shieldT = eff.duration;
+      sfx.ward();
+      floater(p.x, p.y + 2.8, p.z, def.name, "#b9a4ff");
+      break;
+  }
+}
+
+function slowAround(x: number, z: number, radius: number) {
+  let slowed = 0;
+  for (const e of world.enemies) {
+    if (e.phase === "dead") continue;
+    if (Math.hypot(e.x - x, e.z - z) > radius) continue;
+    e.slowT = GALE.slowFor;
+    e.aggro = true;
+    if (e.phase === "idle" || e.phase === "return") e.phase = "chase";
+    if (!enemyDef(e.type).boss && e.phase === "windup") {
+      e.phase = "stagger";
+      e.timer = 0.4;
+      e.zones = [];
+    }
+    slowed += 1;
+  }
+  spark(x, heightAt(x, z) + 0.1, z, "#bfe6ff", radius, true, 0.5);
+  if (slowed) floater(x, heightAt(x, z) + 2.6, z, "Slowed", "#bfe6ff");
+}
+
+function stepRains() {
+  for (let i = world.rains.length - 1; i >= 0; i--) {
+    const r = world.rains[i]!;
+    const age = world.time - r.born;
+    while (r.next < r.ticks.length && age >= r.ticks[r.next]!) {
+      r.next += 1;
+      for (const e of world.enemies) {
+        if (e.phase === "dead") continue;
+        if (Math.hypot(e.x - r.x, e.z - r.z) > r.r + (enemyDef(e.type).boss ? 1 : 0.3)) continue;
+        const hit = playerHit(r.mult);
+        damageEnemy(e, hit.dmg, { knock: 0.2, stagger: false, big: false, crit: hit.crit });
+      }
+      spark(r.x, heightAt(r.x, r.z) + 0.1, r.z, "#f3d38a", r.r, true, 0.3);
+      sfx.hit(0);
+    }
+    if (r.next >= r.ticks.length) world.rains.splice(i, 1);
   }
 }
 
@@ -924,12 +1032,15 @@ function stepPlayer(dt: number, camYaw: number) {
   p.attackCooldown = Math.max(0, p.attackCooldown - dt);
   p.dodgeCd = Math.max(0, p.dodgeCd - dt);
   p.dodgeIframe = Math.max(0, p.dodgeIframe - dt);
-  for (const a of ABILITIES) p.cooldowns[a.id] = Math.max(0, p.cooldowns[a.id] - dt);
+  for (const id of Object.keys(p.cooldowns) as AbilityId[]) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
+  p.hasteT = Math.max(0, p.hasteT - dt);
+  p.shieldT = Math.max(0, p.shieldT - dt);
+  if (p.shieldT <= 0) p.shieldHp = 0;
   if (p.wardT > 0) {
     const before = p.wardT;
     p.wardT = Math.max(0, p.wardT - dt);
     const max = statsFor(store).maxHp;
-    const heal = ((before - p.wardT) / WARD.duration) * max * WARD.healFraction;
+    const heal = ((before - p.wardT) / 4) * max * 0.2;
     if (store.hp < max) store.setHp(Math.min(max, store.hp + heal));
   }
 
@@ -960,7 +1071,9 @@ function stepPlayer(dt: number, camYaw: number) {
   // ---- action timeline
   p.actionT += dt;
   let ctrl = 1; // movement authority this frame
-  let speedCap = input.sprint ? SPRINT : WALK;
+  const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
+  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1.3 : 1);
+  let speedCap = (input.sprint ? SPRINT : WALK) * speedMul;
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
     const melee = basicKind() === "melee";
@@ -991,48 +1104,37 @@ function stepPlayer(dt: number, camYaw: number) {
     if (p.actionT >= DODGE.duration) p.action = "none";
   } else if (p.action === "gale") {
     ctrl = 0;
-    const sp = GALE.distance / GALE.duration;
-    p.vx = Math.sin(p.yaw) * sp;
-    p.vz = Math.cos(p.yaw) * sp;
+    const eff = p.abilityId ? ABILITIES[p.abilityId].effect : null;
+    const leap = eff?.kind === "leap";
+    const distance = eff && (eff.kind === "dash" || eff.kind === "leap") ? eff.distance : 8;
+    const duration = eff && (eff.kind === "dash" || eff.kind === "leap") ? eff.duration : 0.22;
+    const dir = leap ? -1 : 1;
+    const sp = distance / duration;
+    p.vx = Math.sin(p.yaw) * sp * dir;
+    p.vz = Math.cos(p.yaw) * sp * dir;
     if (Math.floor(p.actionT * 40) % 3 === 0) spark(p.x, p.y + 1, p.z, "#d8efff", 0.3, false, 0.3);
-    if (p.actionT >= GALE.duration) {
+    if (p.actionT >= duration) {
       p.action = "none";
       p.vx *= 0.25;
       p.vz *= 0.25;
-      let slowed = 0;
-      for (const e of world.enemies) {
-        if (e.phase === "dead") continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) <= GALE.slowRadius) {
-          e.slowT = GALE.slowFor;
-          e.aggro = true;
-          if (e.phase === "idle" || e.phase === "return") e.phase = "chase";
-          if (!enemyDef(e.type).boss && e.phase === "windup") {
-            e.phase = "stagger";
-            e.timer = 0.4;
-            e.zones = [];
-          }
-          slowed += 1;
-        }
-      }
-      spark(p.x, p.y + 0.1, p.z, "#bfe6ff", GALE.slowRadius, true, 0.5);
-      if (slowed) floater(p.x, p.y + 2.6, p.z, "Slowed", "#bfe6ff");
+      if (!leap && eff?.kind === "dash") slowAround(p.x, p.z, eff.slowRadius);
     }
   } else if (p.action === "burst") {
     ctrl = 0;
     speedCap = 0;
-    if (p.actionT >= BURST.hitAt && p.hitIds.size === 0) {
+    const eff = p.abilityId ? ABILITIES[p.abilityId].effect : null;
+    if (eff?.kind === "burst" && p.actionT >= BURST.hitAt && p.hitIds.size === 0) {
       p.hitIds.add("__cast");
-      const stats = statsFor(store);
       let any = false;
       for (const e of world.enemies) {
         if (e.phase === "dead") continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) > BURST.radius + (enemyDef(e.type).boss ? 1 : 0)) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) > eff.radius + (enemyDef(e.type).boss ? 1 : 0)) continue;
         if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
-        const dmg = Math.round(stats.attack * BURST.damageMult * (0.95 + rand() * 0.1));
-        damageEnemy(e, dmg, { knock: BURST.knockback, stagger: true, big: true });
+        const hit = playerHit(eff.damageMult);
+        damageEnemy(e, hit.dmg, { knock: eff.knockback, stagger: true, big: true, crit: hit.crit, slowFor: eff.slowFor });
         any = true;
       }
-      spark(p.x, p.y + 0.15, p.z, "#ffb45a", BURST.radius, true, 0.55);
+      spark(p.x, p.y + 0.15, p.z, eff.color, eff.radius, true, 0.55);
       world.cameraShake = 0.4;
       if (any) world.hitstop = Math.max(world.hitstop, 0.07);
       sfx.burst();
@@ -1148,7 +1250,7 @@ function stepPlayer(dt: number, camYaw: number) {
                   ? p.vy > 0
                     ? "jump"
                     : "fall"
-                  : planar > 7.2
+                  : planar > 7.2 * speedMul
                     ? "sprint"
                     : planar > 0.6
                       ? "walk"
@@ -1426,11 +1528,13 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
 
 function checkUnlocks() {
   const s = useGame.getState();
-  const n = ABILITIES.filter((a) => abilityUnlocked(a, s.questStep, s.questComplete)).length;
+  const n = [0, 1, 2].filter((i) => abilityUnlocked(s.level, i)).length;
   if (unlockedCount >= 0 && n > unlockedCount) {
-    const def = ABILITIES[n - 1]!;
-    s.toast(`New ability: ${def.name} (${def.key}) — ${def.description}`, "quest");
-    sfx.levelUp();
+    const id = abilityInSlot(n - 1);
+    if (id) {
+      const def = ABILITIES[id];
+      s.toast(`New ability: ${def.name} (${n}) — ${def.description}`, "quest");
+    }
   }
   unlockedCount = n;
 }
