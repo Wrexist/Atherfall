@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { enemyDef } from "../data/enemies";
+import { ARCHETYPES } from "../data/archetypes";
 import { NPCS } from "../world/layout";
 import { heightAt } from "../world/terrain";
 import { world } from "../core/sim";
 import { useGame } from "../core/store";
+import { QUESTS } from "../data/quests";
 
 /** Clip name per logical animation state. */
 const CLIP: Record<string, string> = {
@@ -94,11 +96,17 @@ function flashMaterials(materials: THREE.MeshStandardMaterial[], amount: number,
 
 const CLIP_SPEED: Record<string, number> = { attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
 
+/** Remounts the hero model when the archetype changes. */
 export function PlayerView() {
+  const archetype = useGame((s) => s.archetype);
+  return <PlayerModel key={archetype} url={ARCHETYPES[archetype].model} />;
+}
+
+function PlayerModel({ url }: { url: string }) {
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const ward = useRef<THREE.Mesh>(null);
-  const { scene, materials, animations } = useCharacter("/models/mini/hero.glb");
+  const { scene, materials, animations } = useCharacter(url);
   const play = useAnimator(group, animations);
 
   useFrame(() => {
@@ -118,9 +126,10 @@ export function PlayerView() {
       if (p.hurtT > 0) b.rotation.x = -p.hurtT * 1.3;
     }
     if (ward.current) {
-      ward.current.visible = p.wardT > 0;
+      ward.current.visible = p.wardT > 0 || p.shieldHp > 0;
       const m = ward.current.material as THREE.MeshBasicMaterial;
-      m.opacity = 0.1 + Math.min(1, p.wardT) * 0.12;
+      m.color.set(p.shieldHp > 0 ? "#b9a4ff" : "#b9d98a");
+      m.opacity = 0.1 + Math.min(1, Math.max(p.wardT, p.shieldT)) * 0.12;
     }
     flashMaterials(materials, p.dodgeIframe > 0 ? 0.35 : p.hitFlash * 2.2, p.dodgeIframe > 0 ? "#9fd4ff" : "#ff5a4a");
     g.visible = !(p.dead && p.deathTimer > 4);
@@ -225,10 +234,9 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
     play("idle");
   }, [play]);
 
-  const wants =
-    npc.id === "sela" &&
-    !complete &&
-    (questStep === 0 || questStep === 5);
+  const questIdx = useGame((s) => s.questIdx);
+  const step = QUESTS[questIdx]?.steps[questStep];
+  const wants = npc.id === "sela" && !complete && step?.kind === "talk";
 
   useFrame((state) => {
     if (marker.current) {

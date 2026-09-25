@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { STARTER_QUEST } from "../data/quests";
+import { QUESTS } from "../data/quests";
 import { setMuted as setAudioMuted, sfx } from "../core/audio";
-import { clearSave } from "../core/persistence";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
-import { useGame, type Quality } from "../core/store";
+import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
 const QUALITIES: Array<{ id: Quality; label: string; note: string }> = [
@@ -184,8 +183,9 @@ export function PauseMenu() {
       <Panel>
         <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">PAUSED</h2>
         <p className="mt-1 text-xs text-[var(--parchment)]/60">
-          {STARTER_QUEST.name} · step {Math.min(s.questStep + 1, STARTER_QUEST.steps.length)} of{" "}
-          {STARTER_QUEST.steps.length}
+          {s.questComplete
+            ? "All quests complete"
+            : `${QUESTS[s.questIdx]!.name} · step ${s.questStep + 1} of ${QUESTS[s.questIdx]!.steps.length}`}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button

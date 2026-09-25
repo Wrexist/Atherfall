@@ -1,15 +1,29 @@
 import { create } from "zustand";
-import { ITEMS, type EquipSlot, type ItemDef } from "../data/items";
-import { STARTER_QUEST } from "../data/quests";
+import { ARCHETYPES, type ArchetypeId } from "../data/archetypes";
+import { ITEMS, type EquipSlot } from "../data/items";
+import { QUESTS } from "../data/quests";
 import { sfx } from "./audio";
+import { clearSaveStorage, emptyCodex, type Codex, type Quality } from "./persistence";
+import {
+  EMPTY_EQUIPPED,
+  MAX_LEVEL,
+  applyForge,
+  batchDispose,
+  equipItem,
+  statsFor as rulesStats,
+  unequipItem,
+  xpForLevel,
+  type Bag,
+  type DerivedStats,
+  type Equipped,
+  type InvEntry,
+} from "./rules";
+
+export type { InvEntry, DerivedStats, Quality };
+export { xpForLevel };
 
 export type Screen = "loading" | "title" | "playing" | "paused" | "dead";
-export type Quality = "low" | "medium" | "high";
-
-export interface InvEntry {
-  uid: string;
-  itemId: string;
-}
+export type JournalTab = "satchel" | "forge" | "build" | "codex";
 
 export interface Toast {
   id: number;
@@ -22,12 +36,6 @@ export interface Dialogue {
   lines: string[];
 }
 
-export interface DerivedStats {
-  attack: number;
-  defense: number;
-  maxHp: number;
-}
-
 export interface GameState {
   screen: Screen;
   quality: Quality;
@@ -35,25 +43,32 @@ export interface GameState {
   loadProgress: number;
   hasSave: boolean;
 
+  archetype: ArchetypeId;
   hp: number;
   level: number;
   xp: number;
   gold: number;
+  shards: number;
   potions: number;
 
   inventory: InvEntry[];
-  equipped: Record<EquipSlot, string | null>;
+  equipped: Equipped;
 
+  questIdx: number;
   questStep: number;
   questKills: number;
+  /** Every quest in the line is finished. */
   questComplete: boolean;
-  shoreUnlocked: boolean;
+  barrowUnlocked: boolean;
+  codex: Codex;
 
   region: string | null;
+  regionId: string | null;
   interactPrompt: string | null;
   dialogue: Dialogue | null;
   bossBar: { name: string; hp: number; max: number; phase: number } | null;
   inventoryOpen: boolean;
+  journalTab: JournalTab;
   toasts: Toast[];
   deaths: number;
   kills: number;
@@ -66,38 +81,34 @@ export interface GameActions {
   setMuted: (m: boolean) => void;
   setLoadProgress: (n: number) => void;
   toast: (text: string, tone?: Toast["tone"]) => void;
-  addItem: (itemId: string) => void;
+  addItem: (itemId: string, quiet?: boolean) => void;
   equip: (uid: string) => void;
   unequip: (slot: EquipSlot) => void;
-  dropItem: (uid: string) => void;
+  disposeBatch: (uids: string[], mode: "sell" | "salvage") => void;
+  forge: (uid: string, roll?: number) => void;
+  setArchetype: (id: ArchetypeId) => void;
   usePotion: () => void;
   addXp: (n: number) => void;
   setHp: (hp: number) => void;
   advanceQuest: () => void;
   registerKill: (enemyType: string) => void;
+  seeEnemy: (enemyType: string) => void;
+  discoverPlace: (regionId: string) => void;
   openDialogue: (d: Dialogue | null) => void;
-  toggleInventory: (v?: boolean) => void;
+  toggleInventory: (v?: boolean, tab?: JournalTab) => void;
   hydrate: (partial: Partial<GameState>) => void;
   resetProgress: () => void;
 }
 
-export function xpForLevel(level: number) {
-  return Math.round(120 * Math.pow(level, 1.35));
+/** Village services (forge, archetype change) are only offered here. */
+export const VILLAGE_REGION = "village";
+
+export function statsFor(s: Pick<GameState, "archetype" | "level" | "equipped">): DerivedStats {
+  return rulesStats(s.archetype ?? "vanguard", s.level, s.equipped);
 }
 
-export function statsFor(state: Pick<GameState, "level" | "equipped">): DerivedStats {
-  let attack = 6 + state.level * 2;
-  let defense = 2 + state.level;
-  let maxHp = 100 + (state.level - 1) * 18;
-  (Object.keys(state.equipped) as EquipSlot[]).forEach((slot) => {
-    const id = state.equipped[slot];
-    const def: ItemDef | undefined = id ? ITEMS[id] : undefined;
-    if (!def) return;
-    attack += def.attack ?? 0;
-    defense += def.defense ?? 0;
-    maxHp += def.health ?? 0;
-  });
-  return { attack, defense, maxHp };
+export function currentQuest(s: Pick<GameState, "questIdx">) {
+  return QUESTS[s.questIdx];
 }
 
 let toastId = 0;
@@ -113,168 +124,254 @@ const INITIAL: GameState = {
   muted: false,
   loadProgress: 0,
   hasSave: false,
-  hp: 100,
+  archetype: "vanguard",
+  hp: 110,
   level: 1,
   xp: 0,
   gold: 0,
+  shards: 0,
   potions: 2,
   inventory: [],
-  equipped: { weapon: null, armor: null, trinket: null },
+  equipped: { ...EMPTY_EQUIPPED },
+  questIdx: 0,
   questStep: 0,
   questKills: 0,
   questComplete: false,
-  shoreUnlocked: false,
-  region: "village",
+  barrowUnlocked: false,
+  codex: emptyCodex(),
+  region: "Emberhollow",
+  regionId: "village",
   interactPrompt: null,
   dialogue: null,
   bossBar: null,
   inventoryOpen: false,
+  journalTab: "satchel",
   toasts: [],
   deaths: 0,
   kills: 0,
   elapsed: 0,
 };
 
-export const useGame = create<GameState & GameActions>((set, get) => ({
-  ...INITIAL,
+function bagOf(s: GameState): Bag {
+  return { inventory: s.inventory, equipped: s.equipped, gold: s.gold, shards: s.shards, level: s.level };
+}
 
-  setScreen: (screen) => set({ screen }),
-  setQuality: (quality) => set({ quality }),
-  setMuted: (muted) => set({ muted }),
-  setLoadProgress: (loadProgress) => set({ loadProgress }),
-
-  toast: (text, tone = "info") => {
-    toastId += 1;
-    const id = toastId;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, tone }] }));
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3800);
-  },
-
-  addItem: (itemId) => {
-    const def = ITEMS[itemId];
-    if (!def) return;
-    set((s) => ({ inventory: [...s.inventory, { uid: newUid(), itemId }] }));
-    get().toast(`Looted ${def.name}`, "good");
-  },
-
-  equip: (uid) => {
-    const s = get();
-    const entry = s.inventory.find((i) => i.uid === uid);
-    if (!entry) return;
-    const def = ITEMS[entry.itemId];
-    if (!def) return;
-    const prev = s.equipped[def.slot];
-    const inventory = s.inventory.filter((i) => i.uid !== uid);
-    if (prev) inventory.push({ uid: newUid(), itemId: prev });
-    const equipped = { ...s.equipped, [def.slot]: def.id };
-    const maxHp = statsFor({ level: s.level, equipped }).maxHp;
-    set({ inventory, equipped, hp: Math.min(s.hp + (def.health ?? 0), maxHp) });
-    sfx.pickup();
-    get().toast(`Equipped ${def.name}`, "good");
-  },
-
-  unequip: (slot) => {
-    const s = get();
-    const id = s.equipped[slot];
-    if (!id) return;
-    const equipped = { ...s.equipped, [slot]: null };
-    const maxHp = statsFor({ level: s.level, equipped }).maxHp;
-    set({
-      equipped,
-      inventory: [...s.inventory, { uid: newUid(), itemId: id }],
-      hp: Math.min(s.hp, maxHp),
-    });
-    sfx.ui();
-  },
-
-  dropItem: (uid) => {
-    set((s) => ({ inventory: s.inventory.filter((i) => i.uid !== uid) }));
-    sfx.ui();
-  },
-
-  usePotion: () => {
-    const s = get();
-    if (s.potions <= 0 || s.screen !== "playing") return;
+export const useGame = create<GameState & GameActions>((set, get) => {
+  /** Keep hp within the new max after any equipment/level/archetype change. */
+  const clampHp = (next: Partial<GameState>, gain = 0) => {
+    const s = { ...get(), ...next };
     const max = statsFor(s).maxHp;
-    if (s.hp >= max) {
-      get().toast("Already at full health", "info");
-      return;
-    }
-    set({ potions: s.potions - 1, hp: Math.min(max, s.hp + Math.round(max * 0.45)) });
-    sfx.heal();
-    get().toast("Sunbloom Draught restores your wounds", "good");
-  },
+    return Math.max(1, Math.min(max, s.hp + gain));
+  };
 
-  addXp: (n) => {
-    const s = get();
-    let xp = s.xp + n;
-    let level = s.level;
-    let leveled = false;
-    while (xp >= xpForLevel(level)) {
-      xp -= xpForLevel(level);
-      level += 1;
-      leveled = true;
-    }
-    if (leveled) {
-      const maxHp = statsFor({ level, equipped: s.equipped }).maxHp;
-      set({ xp, level, hp: maxHp });
-      sfx.levelUp();
-      get().toast(`Level ${level} — you feel steadier`, "good");
-    } else {
-      set({ xp });
-    }
-  },
+  return {
+    ...INITIAL,
 
-  setHp: (hp) => set({ hp }),
+    setScreen: (screen) => set({ screen }),
+    setQuality: (quality) => set({ quality }),
+    setMuted: (muted) => set({ muted }),
+    setLoadProgress: (loadProgress) => set({ loadProgress }),
 
-  advanceQuest: () => {
-    const s = get();
-    if (s.questComplete) return;
-    const next = s.questStep + 1;
-    sfx.quest();
-    if (next >= STARTER_QUEST.steps.length) {
-      // One-time reward, guarded by questComplete above.
-      set({ questStep: next, questComplete: true, shoreUnlocked: true, gold: s.gold + 50, potions: s.potions + 2 });
-      get().toast(STARTER_QUEST.completionTitle, "quest");
-      get().toast("Reward: 50 embers, 2 Sunbloom Draughts, Tidewrack Shore unlocked", "good");
-      get().addXp(120);
-    } else {
-      set({ questStep: next, questKills: 0 });
-      get().toast(STARTER_QUEST.steps[next]!.title, "quest");
-    }
-  },
-
-  registerKill: (enemyType) => {
-    const s = get();
-    set({ kills: s.kills + 1 });
-    const step = STARTER_QUEST.steps[s.questStep];
-    if (step && step.kind === "kill" && step.enemy === enemyType) {
-      const questKills = s.questKills + 1;
-      if (questKills >= step.count) {
-        set({ questKills });
-        get().advanceQuest();
-      } else {
-        set({ questKills });
-        get().toast(`${questKills}/${step.count} Bramblekin culled`, "quest");
+    toast: (text, tone = "info") => {
+      toastId += 1;
+      const id = toastId;
+      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, tone }] }));
+      if (typeof window !== "undefined") {
+        setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3800);
       }
-    }
-    if (step && step.kind === "boss" && step.enemy === enemyType) {
-      get().advanceQuest();
-    }
-  },
+    },
 
-  openDialogue: (dialogue) => set({ dialogue }),
-  toggleInventory: (v) => set((s) => ({ inventoryOpen: v ?? !s.inventoryOpen })),
+    addItem: (itemId, quiet = false) => {
+      const def = ITEMS[itemId];
+      if (!def) return;
+      const s = get();
+      const codex = s.codex.items.includes(itemId) ? s.codex : { ...s.codex, items: [...s.codex.items, itemId] };
+      set({ inventory: [...s.inventory, { uid: newUid(), itemId, plus: 0 }], codex });
+      if (!quiet) get().toast(`Looted ${def.name}${def.boss ? " — boss reward!" : ""}`, def.boss ? "quest" : "good");
+    },
 
-  hydrate: (partial) => set(partial as Partial<GameState & GameActions>),
+    equip: (uid) => {
+      const s = get();
+      const r = equipItem(bagOf(s), uid);
+      if (!r.ok) {
+        get().toast(r.message, "bad");
+        return;
+      }
+      const entry = s.inventory.find((i) => i.uid === uid)!;
+      const gain = ITEMS[entry.itemId]?.health ?? 0;
+      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: clampHp({ equipped: r.bag.equipped }, gain) });
+      sfx.pickup();
+      get().toast(r.message, "good");
+    },
 
-  resetProgress: () =>
-    set({
-      ...INITIAL,
-      screen: get().screen,
-      quality: get().quality,
-      muted: get().muted,
-      loadProgress: 1,
-      hasSave: false,
-    }),
-}));
+    unequip: (slot) => {
+      const s = get();
+      const r = unequipItem(bagOf(s), slot);
+      if (!r.ok) return;
+      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: clampHp({ equipped: r.bag.equipped }) });
+      sfx.ui();
+    },
+
+    disposeBatch: (uids, mode) => {
+      const r = batchDispose(bagOf(get()), uids, mode);
+      if (!r.ok) return;
+      set({ inventory: r.bag.inventory, gold: r.bag.gold, shards: r.bag.shards });
+      sfx.pickup();
+      get().toast(r.message, "good");
+    },
+
+    forge: (uid, roll = Math.random()) => {
+      const s = get();
+      if (s.regionId !== VILLAGE_REGION) {
+        get().toast("The forge is in Emberhollow.", "bad");
+        return;
+      }
+      const inBag = s.inventory.find((i) => i.uid === uid);
+      const slot = (Object.keys(s.equipped) as EquipSlot[]).find((k) => s.equipped[k]?.uid === uid);
+      const entry = inBag ?? (slot ? s.equipped[slot] : null);
+      if (!entry) return;
+      const r = applyForge(entry, { gold: s.gold, shards: s.shards }, roll);
+      if (!r.ok) {
+        get().toast(r.message, "bad");
+        return;
+      }
+      const inventory = inBag ? s.inventory.map((i) => (i.uid === uid ? r.entry : i)) : s.inventory;
+      const equipped = slot ? { ...s.equipped, [slot]: r.entry } : s.equipped;
+      set({ gold: r.gold, shards: r.shards, inventory, equipped, hp: clampHp({ equipped }) });
+      if (r.success) sfx.levelUp();
+      else sfx.hurt();
+      get().toast(r.message, r.success ? "good" : "bad");
+    },
+
+    setArchetype: (id) => {
+      const s = get();
+      if (s.archetype === id) return;
+      if (s.regionId !== VILLAGE_REGION) {
+        get().toast("You can change your path only in Emberhollow.", "bad");
+        return;
+      }
+      const next = { archetype: id };
+      set({ archetype: id, hp: statsFor({ ...s, ...next }).maxHp });
+      sfx.quest();
+      get().toast(`You walk the path of the ${ARCHETYPES[id].name}.`, "quest");
+    },
+
+    usePotion: () => {
+      const s = get();
+      if (s.potions <= 0 || s.screen !== "playing") return;
+      const max = statsFor(s).maxHp;
+      if (s.hp >= max) {
+        get().toast("Already at full health", "info");
+        return;
+      }
+      set({ potions: s.potions - 1, hp: Math.min(max, s.hp + Math.round(max * 0.45)) });
+      sfx.heal();
+      get().toast("Sunbloom Draught restores your wounds", "good");
+    },
+
+    addXp: (n) => {
+      const s = get();
+      let xp = s.xp + n;
+      let level = s.level;
+      while (level < MAX_LEVEL && xp >= xpForLevel(level)) {
+        xp -= xpForLevel(level);
+        level += 1;
+      }
+      if (level >= MAX_LEVEL) xp = Math.min(xp, xpForLevel(level) - 1);
+      if (level > s.level) {
+        const maxHp = statsFor({ ...s, level }).maxHp;
+        set({ xp, level, hp: maxHp });
+        sfx.levelUp();
+        get().toast(`Level ${level}`, "good");
+      } else {
+        set({ xp });
+      }
+    },
+
+    setHp: (hp) => set({ hp }),
+
+    advanceQuest: () => {
+      const s = get();
+      const quest = QUESTS[s.questIdx];
+      if (s.questComplete || !quest) return;
+      const next = s.questStep + 1;
+      sfx.quest();
+      if (next < quest.steps.length) {
+        set({ questStep: next, questKills: 0 });
+        get().toast(quest.steps[next]!.title, "quest");
+        return;
+      }
+      // Quest finished: one-time reward, guarded because the step index moves on.
+      const r = quest.reward;
+      const last = s.questIdx >= QUESTS.length - 1;
+      set({
+        questIdx: last ? s.questIdx : s.questIdx + 1,
+        questStep: last ? next : 0,
+        questKills: 0,
+        questComplete: last,
+        barrowUnlocked: true,
+        gold: s.gold + r.gold,
+        potions: s.potions + r.potions,
+        shards: s.shards + r.shards,
+      });
+      get().toast(quest.completionTitle, "quest");
+      get().toast(`Reward: ${r.text}`, "good");
+      get().addXp(r.xp);
+      if (!last) get().toast(`New quest: ${QUESTS[s.questIdx + 1]!.name}`, "quest");
+    },
+
+    registerKill: (enemyType) => {
+      const s = get();
+      const codex = { ...s.codex, kills: { ...s.codex.kills, [enemyType]: (s.codex.kills[enemyType] ?? 0) + 1 } };
+      if (!codex.seen.includes(enemyType)) codex.seen = [...codex.seen, enemyType];
+      set({ kills: s.kills + 1, codex });
+      const step = QUESTS[s.questIdx]?.steps[s.questStep];
+      if (s.questComplete || !step) return;
+      if (step.kind === "kill" && step.enemy === enemyType) {
+        const questKills = s.questKills + 1;
+        set({ questKills });
+        if (questKills >= step.count) get().advanceQuest();
+        else get().toast(`${step.title.replace(/\d+/, `${questKills}/${step.count}`)}`, "quest");
+      }
+      if (step.kind === "boss" && step.enemy === enemyType) get().advanceQuest();
+    },
+
+    seeEnemy: (enemyType) => {
+      const s = get();
+      if (s.codex.seen.includes(enemyType)) return;
+      set({ codex: { ...s.codex, seen: [...s.codex.seen, enemyType] } });
+    },
+
+    discoverPlace: (regionId) => {
+      const s = get();
+      if (s.codex.places.includes(regionId)) return;
+      set({ codex: { ...s.codex, places: [...s.codex.places, regionId] } });
+    },
+
+    openDialogue: (dialogue) => set({ dialogue }),
+    toggleInventory: (v, tab) =>
+      set((s) => {
+        const open = v ?? (tab && tab !== s.journalTab ? true : !s.inventoryOpen);
+        return { inventoryOpen: open, journalTab: tab ?? s.journalTab };
+      }),
+
+    hydrate: (partial) => set(partial as Partial<GameState & GameActions>),
+
+    resetProgress: () =>
+      set({
+        ...INITIAL,
+        codex: emptyCodex(),
+        equipped: { ...EMPTY_EQUIPPED },
+        screen: get().screen,
+        quality: get().quality,
+        muted: get().muted,
+        loadProgress: 1,
+        hasSave: false,
+      }),
+  };
+});
+
+export function clearSave() {
+  clearSaveStorage();
+  useGame.setState({ hasSave: false });
+}

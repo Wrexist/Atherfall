@@ -1,5 +1,6 @@
 import { ITEMS } from "../data/items";
-import { STARTER_QUEST } from "../data/quests";
+import { QUESTS } from "../data/quests";
+import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar } from "./Cooldowns";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
@@ -25,8 +26,9 @@ function Bar({
 export function Hud() {
   const s = useGame();
   const stats = statsFor(s);
-  const step = STARTER_QUEST.steps[s.questStep];
-  const weapon = s.equipped.weapon ? ITEMS[s.equipped.weapon] : null;
+  const quest = QUESTS[s.questIdx]!;
+  const step = quest.steps[s.questStep];
+  const weapon = s.equipped.weapon ? ITEMS[s.equipped.weapon.itemId] : null;
 
   return (
     <div
@@ -42,7 +44,7 @@ export function Hud() {
       {/* Vitals */}
       <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm sm:w-72 sm:p-3">
         <div className="flex items-baseline justify-between font-display text-sm text-[var(--parchment)]">
-          <span className="tracking-[0.18em]">WARDEN</span>
+          <span className="tracking-[0.18em]">{ARCHETYPES[s.archetype].name.toUpperCase()}</span>
           <span className="text-[var(--gilt)]">Lv {s.level}</span>
         </div>
         <Bar value={s.hp} max={stats.maxHp} className="bg-gradient-to-r from-[#c2412f] to-[#e8735a]" height="h-4" />
@@ -63,15 +65,15 @@ export function Hud() {
           <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow sm:text-base">
             {s.region ?? "Dawnreach"}
           </div>
-          <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.kills} slain</div>
+          <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.shards} shards</div>
         </div>
         <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm sm:p-3">
           <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
-            {STARTER_QUEST.name}
+            {quest.name}
           </div>
           {s.questComplete ? (
             <p className="mt-1.5 text-xs leading-snug text-[var(--parchment)]/90">
-              Complete. Tidewrack Shore is marked to the south.
+              All quests complete. Keep forging — Dawnreach will need you again.
             </p>
           ) : step ? (
             <>
@@ -148,7 +150,7 @@ export function Hud() {
           <span><b className="text-[var(--gilt)]">Space</b> jump</span>
           <span><b className="text-[var(--gilt)]">E</b> talk</span>
           <span><b className="text-[var(--gilt)]">Q</b> draught ({s.potions})</span>
-          <span><b className="text-[var(--gilt)]">I</b> satchel</span>
+          <span><b className="text-[var(--gilt)]">I / B / K</b> satchel · build · codex</span>
           <span><b className="text-[var(--gilt)]">F / RMB</b> dodge</span>
           <span><b className="text-[var(--gilt)]">1 2 3</b> abilities</span>
           <span><b className="text-[var(--gilt)]">Esc</b> pause</span>

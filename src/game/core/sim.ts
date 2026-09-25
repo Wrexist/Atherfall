@@ -10,16 +10,17 @@ import {
   COMBO_GRACE,
   DODGE,
   GALE,
+  SHOTS,
   SWINGS,
-  WARD,
-  abilityUnlocked,
   type AbilityId,
 } from "../data/combat";
+import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
+import { QUESTS } from "../data/quests";
+import { abilityUnlocked } from "./rules";
 import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
-import { STARTER_QUEST } from "../data/quests";
 import { ITEMS } from "../data/items";
-import { COLLIDERS, NPCS, SPAWNS } from "../world/layout";
+import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
 import { REGIONS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
 import { sfx } from "./audio";
 import { input } from "./input";
@@ -85,6 +86,7 @@ export interface DropRuntime {
   itemId?: string | undefined;
   potion: boolean;
   gold: number;
+  shards: number;
   born: number;
   taken: boolean;
 }
@@ -113,6 +115,34 @@ export interface FloaterRuntime {
 }
 
 export type PlayerAction = "none" | "attack" | "dodge" | "gale" | "burst" | "ward-cast";
+
+export interface ProjectileRuntime {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vz: number;
+  travelled: number;
+  range: number;
+  damage: number;
+  crit: boolean;
+  pierce: boolean;
+  radius: number;
+  color: string;
+  hit: Set<string>;
+  big: boolean;
+}
+
+export interface RainRuntime {
+  x: number;
+  z: number;
+  r: number;
+  born: number;
+  ticks: number[];
+  next: number;
+  mult: number;
+}
 
 export interface PlayerRuntime {
   x: number;
@@ -143,6 +173,11 @@ export interface PlayerRuntime {
   dodgeDirZ: number;
   cooldowns: Record<AbilityId, number>;
   wardT: number;
+  shieldHp: number;
+  shieldT: number;
+  hasteT: number;
+  /** Ability driving the current dash/leap/burst action. */
+  abilityId: AbilityId | null;
   hurtT: number;
   invuln: number;
   hitFlash: number;
@@ -180,8 +215,12 @@ function freshPlayer(): PlayerRuntime {
     dodgeIframe: 0,
     dodgeDirX: 0,
     dodgeDirZ: 1,
-    cooldowns: { galestep: 0, emberburst: 0, barkward: 0 },
+    cooldowns: { galestep: 0, emberburst: 0, barkward: 0, vault: 0, arrowrain: 0, secondwind: 0, blink: 0, frostnova: 0, aegis: 0 },
     wardT: 0,
+    shieldHp: 0,
+    shieldT: 0,
+    hasteT: 0,
+    abilityId: null,
     hurtT: 0,
     invuln: 0,
     hitFlash: 0,
@@ -198,6 +237,8 @@ export const world = {
   drops: [] as DropRuntime[],
   sparks: [] as SparkRuntime[],
   floaters: [] as FloaterRuntime[],
+  projectiles: [] as ProjectileRuntime[],
+  rains: [] as RainRuntime[],
   defeated: new Set<string>(),
   cameraShake: 0,
   /** Remaining hit-pause; the simulation freezes while > 0. */
@@ -209,6 +250,7 @@ export const world = {
 let dropId = 0;
 let sparkId = 0;
 let floaterId = 0;
+let projectileId = 0;
 export const SEED = 20260925;
 let rand: () => number = mulberry32(SEED);
 let saveTimer = 0;
@@ -265,6 +307,8 @@ export function initWorld(save: SaveFile | null) {
   world.drops.length = 0;
   world.sparks.length = 0;
   world.floaters.length = 0;
+  world.projectiles.length = 0;
+  world.rains.length = 0;
   world.stats = { swings: 0, hits: 0, evades: 0 };
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
@@ -299,17 +343,21 @@ export function snapshot(): SaveFile {
     v: SAVE_VERSION,
     savedAt: Date.now(),
     player: { x: world.player.x, y: world.player.y, z: world.player.z, yaw: world.player.yaw },
+    archetype: s.archetype,
     hp: s.hp,
     level: s.level,
     xp: s.xp,
     gold: s.gold,
+    shards: s.shards,
     potions: s.potions,
     inventory: s.inventory,
     equipped: s.equipped,
+    questIdx: s.questIdx,
     questStep: s.questStep,
     questKills: s.questKills,
     questComplete: s.questComplete,
-    shoreUnlocked: s.shoreUnlocked,
+    barrowUnlocked: s.barrowUnlocked,
+    codex: s.codex,
     deaths: s.deaths,
     kills: s.kills,
     elapsed: s.elapsed,
@@ -328,17 +376,21 @@ export function loadSaveIntoStore(): SaveFile | null {
   const save = readSave();
   if (!save) return null;
   useGame.getState().hydrate({
+    archetype: save.archetype,
     hp: save.hp,
     level: save.level,
     xp: save.xp,
     gold: save.gold,
+    shards: save.shards,
     potions: save.potions,
     inventory: save.inventory,
     equipped: save.equipped,
+    questIdx: save.questIdx,
     questStep: save.questStep,
     questKills: save.questKills,
     questComplete: save.questComplete,
-    shoreUnlocked: save.shoreUnlocked,
+    barrowUnlocked: save.barrowUnlocked,
+    codex: save.codex,
     deaths: save.deaths,
     kills: save.kills,
     elapsed: save.elapsed,
@@ -350,8 +402,9 @@ export function loadSaveIntoStore(): SaveFile | null {
 function resolveCollisions(pos: { x: number; z: number }, radius: number) {
   // Two passes so being wedged between neighbouring colliders (fence posts,
   // cottage corners) resolves instead of jittering in place.
+  const gateShut = !useGame.getState().barrowUnlocked;
   for (let pass = 0; pass < 2; pass++) {
-    for (const c of COLLIDERS) {
+    for (const c of gateShut ? [...COLLIDERS, BARROW_GATE] : COLLIDERS) {
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
       const min = c.r + radius;
@@ -428,24 +481,22 @@ function playerHasWeapon() {
   return world.drops.some((d) => !d.taken && d.itemId && ITEMS[d.itemId]?.slot === "weapon");
 }
 
+function pushDrop(x: number, z: number, part: Partial<DropRuntime>) {
+  dropId += 1;
+  world.drops.push({ id: dropId, x, y: heightAt(x, z), z, potion: false, gold: 0, shards: 0, born: world.time, taken: false, ...part });
+}
+
 function dropLoot(enemy: EnemyRuntime) {
   const def = enemyDef(enemy.type);
-  const loot = rollLoot(def.lootTable, rand);
-  // The starter quest requires equipping a weapon: guarantee the first one
-  // so the tutorial can never stall on bad luck.
-  if (!def.boss && !playerHasWeapon()) loot.itemId = "wayfarer-blade";
-  if (!loot.itemId && !loot.potion && loot.gold <= 0) return;
-  dropId += 1;
-  world.drops.push({
-    id: dropId,
-    x: enemy.x,
-    y: heightAt(enemy.x, enemy.z),
-    z: enemy.z,
-    itemId: loot.itemId,
-    potion: loot.potion,
-    gold: loot.gold,
-    born: world.time,
-    taken: false,
+  const loot = rollLoot(def.lootTable, regionAt(enemy.x, enemy.z), rand);
+  // The starter quest requires equipping a weapon: guarantee the first one.
+  if (!def.boss && !playerHasWeapon() && !loot.items.some((id) => ITEMS[id]?.slot === "weapon")) loot.items.unshift("wayfarer-blade");
+  const bounty = statsFor(useGame.getState()).mods.bounty ?? 0;
+  const gold = Math.round(loot.gold * (1 + bounty));
+  pushDrop(enemy.x, enemy.z, { potion: loot.potion, gold, shards: loot.shards, itemId: loot.items[0] });
+  loot.items.slice(1).forEach((itemId, i) => {
+    const a = (i + 1) * 2.1;
+    pushDrop(enemy.x + Math.cos(a) * 1.4, enemy.z + Math.sin(a) * 1.4, { itemId });
   });
 }
 
@@ -464,7 +515,8 @@ function killEnemy(enemy: EnemyRuntime) {
   store.registerKill(enemy.type);
   if (def.boss) {
     useGame.setState({ bossBar: null });
-    store.toast(`${def.name} falls. The arch goes quiet.`, "quest");
+    store.toast(`${def.name} falls! Boss reward dropped.`, "quest");
+    spark(enemy.x, enemy.y + 0.2, enemy.z, "#ffd27a", 7, true, 1.1);
   }
   saveNow();
 }
@@ -502,7 +554,7 @@ export function pointInZone(zone: Zone, px: number, pz: number, pad = 0.35) {
   return along >= -0.5 && along <= zone.len + pad && side <= zone.w / 2 + pad;
 }
 
-function damagePlayer(amount: number, fromX: number, fromZ: number) {
+function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: EnemyRuntime) {
   const store = useGame.getState();
   const p = world.player;
   if (p.dead) return;
@@ -515,7 +567,22 @@ function damagePlayer(amount: number, fromX: number, fromZ: number) {
   if (p.invuln > 0) return;
   const stats = statsFor(store);
   let dealt = Math.max(2, Math.round(amount - stats.defense * 0.45));
-  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * WARD.damageTaken));
+  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * 0.4));
+  if (p.shieldHp > 0) {
+    const absorbed = Math.min(p.shieldHp, dealt);
+    p.shieldHp -= absorbed;
+    dealt -= absorbed;
+    if (p.shieldHp <= 0) p.shieldT = 0;
+    if (dealt <= 0) {
+      floater(p.x, p.y + 2.5, p.z, "Absorbed", "#b9a4ff");
+      sfx.evade();
+      return;
+    }
+  }
+  if (attacker && stats.mods.thorns) {
+    const reflect = Math.max(1, Math.round(dealt * stats.mods.thorns));
+    damageEnemy(attacker, reflect, { knock: 0, stagger: false, big: false });
+  }
   const hp = Math.max(0, store.hp - dealt);
   store.setHp(hp);
   p.invuln = 0.45;
@@ -540,15 +607,41 @@ function damagePlayer(amount: number, fromX: number, fromZ: number) {
   if (hp <= 0) killPlayer();
 }
 
-function damageEnemy(e: EnemyRuntime, amount: number, opts: { knock: number; stagger: boolean; big: boolean }) {
+/** Roll a player hit: attack × multiplier, small variance, crit chance from stats. */
+function playerHit(mult: number) {
+  const stats = statsFor(useGame.getState());
+  const crit = rand() < stats.crit;
+  const dmg = Math.round(stats.attack * mult * (0.92 + rand() * 0.16) * (crit ? 1.6 : 1));
+  return { dmg, crit };
+}
+
+function damageEnemy(
+  e: EnemyRuntime,
+  amount: number,
+  opts: { knock: number; stagger: boolean; big: boolean; crit?: boolean; slowFor?: number },
+) {
   const def = enemyDef(e.type);
   if (e.phase === "dead" || e.phase === "roar") return false;
   const p = world.player;
   e.hp -= amount;
   e.hitFlash = 0.22;
   e.aggro = true;
+  if (opts.slowFor) e.slowT = Math.max(e.slowT, opts.slowFor);
   world.stats.hits += 1;
-  floater(e.x, e.y + def.scale * 1.15 + 0.4, e.z, String(amount), opts.big ? "#ffcf5c" : "#fff2d6", opts.big);
+  const store = useGame.getState();
+  const steal = statsFor(store).mods.lifesteal ?? 0;
+  if (steal > 0 && !p.dead) {
+    const max = statsFor(store).maxHp;
+    store.setHp(Math.min(max, store.hp + amount * steal));
+  }
+  floater(
+    e.x,
+    e.y + def.scale * 1.15 + 0.4,
+    e.z,
+    opts.crit ? `${amount}!` : String(amount),
+    opts.crit ? "#ff9d5c" : opts.big ? "#ffcf5c" : "#fff2d6",
+    opts.big || !!opts.crit,
+  );
   spark(e.x, e.y + def.scale * 0.55, e.z, opts.big ? "#ffc35a" : "#ffe2a8", opts.big ? 0.6 : 0.38);
   if (e.hp <= 0) {
     killEnemy(e);
@@ -615,10 +708,99 @@ function autoFace(p: PlayerRuntime, range: number) {
   if (best) p.yaw = Math.atan2(best.x - p.x, best.z - p.z);
 }
 
+function basicKind() {
+  return ARCHETYPES[useGame.getState().archetype]?.basic ?? "melee";
+}
+
+/** Duration of chain step `idx` for the current archetype. */
+function swingDuration(idx: number) {
+  const kind = basicKind();
+  return kind === "melee" ? SWINGS[idx]!.duration : SHOTS[kind].duration[idx]!;
+}
+
+function fireShot(p: PlayerRuntime, idx: number) {
+  const kind = basicKind();
+  if (kind === "melee") return;
+  const cfg = SHOTS[kind];
+  const hit = playerHit(cfg.mult[idx]!);
+  projectileId += 1;
+  world.projectiles.push({
+    id: projectileId,
+    x: p.x + Math.sin(p.yaw) * 0.8,
+    y: p.y + 1.25,
+    z: p.z + Math.cos(p.yaw) * 0.8,
+    vx: Math.sin(p.yaw) * cfg.speed,
+    vz: Math.cos(p.yaw) * cfg.speed,
+    travelled: 0,
+    range: cfg.range,
+    damage: hit.dmg,
+    crit: hit.crit,
+    pierce: cfg.pierce[idx]!,
+    radius: kind === "bolt" ? cfg.radius * (idx === 2 ? 1.5 : 1) : 0,
+    color: cfg.color,
+    hit: new Set(),
+    big: idx === 2,
+  });
+  if (world.projectiles.length > 24) world.projectiles.shift();
+}
+
+function explode(pr: ProjectileRuntime) {
+  for (const e of world.enemies) {
+    if (e.phase === "dead" || pr.hit.has(e.id)) continue;
+    if (Math.hypot(e.x - pr.x, e.z - pr.z) > pr.radius + (enemyDef(e.type).boss ? 1 : 0.3)) continue;
+    pr.hit.add(e.id);
+    damageEnemy(e, pr.damage, { knock: pr.big ? 1.2 : 0.4, stagger: pr.big, big: pr.big, crit: pr.crit });
+  }
+  spark(pr.x, heightAt(pr.x, pr.z) + 0.1, pr.z, pr.color, pr.radius, true, 0.4);
+  sfx.hit(pr.big ? 2 : 0);
+}
+
+function stepProjectiles(dt: number) {
+  for (let i = world.projectiles.length - 1; i >= 0; i--) {
+    const pr = world.projectiles[i]!;
+    const step = Math.hypot(pr.vx, pr.vz) * dt;
+    pr.x += pr.vx * dt;
+    pr.z += pr.vz * dt;
+    pr.travelled += step;
+    let done = pr.travelled >= pr.range;
+    // Solid obstacles stop shots.
+    for (const c of COLLIDERS) {
+      if (c.r >= 0.9 && Math.hypot(pr.x - c.x, pr.z - c.z) < c.r * 0.85) {
+        done = true;
+        break;
+      }
+    }
+    if (!done) {
+      for (const e of world.enemies) {
+        if (e.phase === "dead" || pr.hit.has(e.id)) continue;
+        const reach = enemyDef(e.type).boss ? 1.8 : 1.0;
+        if (Math.hypot(e.x - pr.x, e.z - pr.z) > reach) continue;
+        if (pr.radius > 0) {
+          done = true;
+          break;
+        }
+        pr.hit.add(e.id);
+        damageEnemy(e, pr.damage, { knock: pr.big ? 1.0 : 0.3, stagger: pr.big, big: pr.big, crit: pr.crit });
+        world.hitstop = Math.max(world.hitstop, pr.big ? 0.05 : 0.03);
+        sfx.hit(pr.big ? 2 : 0);
+        if (!pr.pierce) {
+          done = true;
+          break;
+        }
+      }
+    }
+    if (done) {
+      if (pr.radius > 0) explode(pr);
+      world.projectiles.splice(i, 1);
+    }
+  }
+}
+
 function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
   const swing = SWINGS[idx]!;
+  const kind = basicKind();
   if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
-  autoFace(p, swing.range + 1.6);
+  autoFace(p, kind === "melee" ? swing.range + 1.6 : kind === "arrow" ? 20 : 15);
   p.action = "attack";
   p.actionT = 0;
   p.comboIdx = idx + 1;
@@ -626,16 +808,16 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   p.hitIds = new Set();
   p.swingSerial += 1;
   p.animKey += 1;
-  p.vx = Math.sin(p.yaw) * swing.lunge;
-  p.vz = Math.cos(p.yaw) * swing.lunge;
+  const lunge = kind === "melee" ? swing.lunge : 0;
+  p.vx = Math.sin(p.yaw) * lunge;
+  p.vz = Math.cos(p.yaw) * lunge;
   world.stats.swings += 1;
   sfx.swing(idx);
 }
 
 function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   if (p.action === "attack") {
-    const swing = SWINGS[p.comboIdx - 1]!;
-    if (p.actionT >= swing.duration * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
+    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
     return;
   }
   if (p.action !== "none" || p.attackCooldown > 0) return;
@@ -644,7 +826,6 @@ function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
 }
 
 function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
-  const stats = statsFor(useGame.getState());
   const fx = Math.sin(p.yaw);
   const fz = Math.cos(p.yaw);
   let confirmed = false;
@@ -661,8 +842,8 @@ function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
     if (dot < swing.minDot) continue;
     if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
     p.hitIds.add(e.id);
-    const dmg = Math.round(stats.attack * swing.damageMult * (0.92 + rand() * 0.16));
-    damageEnemy(e, dmg, { knock: swing.knockback, stagger: swing.staggers, big: finisher });
+    const hit = playerHit(swing.damageMult);
+    damageEnemy(e, hit.dmg, { knock: swing.knockback, stagger: swing.staggers, big: finisher, crit: hit.crit });
     confirmed = true;
   }
   if (confirmed) {
@@ -692,37 +873,145 @@ function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   sfx.dodge();
 }
 
+function abilityCooldown(id: AbilityId) {
+  const focus = statsFor(useGame.getState()).mods.focus ?? 0;
+  return ABILITIES[id].cooldown * (1 - focus);
+}
+
+/** Current archetype's ability in slot `idx` (0..2). */
+export function abilityInSlot(idx: number): AbilityId | null {
+  const a = ARCHETYPES[useGame.getState().archetype];
+  return a?.abilities[idx] ?? null;
+}
+
 function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
-  const def = ABILITIES[idx];
-  if (!def || p.dead) return;
+  const id = abilityInSlot(idx);
+  if (!id || p.dead) return;
+  const def = ABILITIES[id];
   const s = useGame.getState();
-  if (!abilityUnlocked(def, s.questStep, s.questComplete)) {
-    s.toast(`${def.name} is sealed — ${def.unlockHint.toLowerCase()} to awaken it.`, "info");
+  if (!abilityUnlocked(s.level, idx)) {
+    s.toast(`${def.name} unlocks at level ${ABILITY_UNLOCK_LEVELS[idx]}.`, "info");
     return;
   }
-  if (p.cooldowns[def.id] > 0) return;
+  if (p.cooldowns[id] > 0) return;
   if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return;
   p.comboIdx = 0;
   p.comboBuffered = false;
-  p.cooldowns[def.id] = def.cooldown;
+  p.cooldowns[id] = abilityCooldown(id);
   p.animKey += 1;
-  if (def.id === "galestep") {
-    if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
-    p.action = "gale";
-    p.actionT = 0;
-    sfx.gale();
-    spark(p.x, p.y + 0.8, p.z, "#cfe9ff", 0.5);
-  } else if (def.id === "emberburst") {
-    p.action = "burst";
-    p.actionT = 0;
-    p.hitIds = new Set();
-    sfx.burstCharge();
-  } else {
-    p.action = "ward-cast";
-    p.actionT = 0;
-    p.wardT = WARD.duration;
-    sfx.ward();
-    floater(p.x, p.y + 2.8, p.z, "Bark Ward", "#c9e39a");
+  p.abilityId = id;
+  p.actionT = 0;
+  const fx = Math.sin(p.yaw);
+  const fz = Math.cos(p.yaw);
+  const eff = def.effect;
+  const max = statsFor(s).maxHp;
+  switch (eff.kind) {
+    case "dash":
+      if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
+      p.action = "gale";
+      sfx.gale();
+      spark(p.x, p.y + 0.8, p.z, "#cfe9ff", 0.5);
+      break;
+    case "leap":
+      // Leap away from where you face; slow whatever you leave behind.
+      slowAround(p.x, p.z, eff.slowRadius);
+      p.action = "gale";
+      p.vy = 6;
+      p.grounded = false;
+      sfx.gale();
+      break;
+    case "blink": {
+      const sx = p.x;
+      const sz = p.z;
+      if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
+      const bx = Math.sin(p.yaw);
+      const bz = Math.cos(p.yaw);
+      for (let d = 0; d < eff.distance; d += 0.5) {
+        const pos = { x: p.x + bx * 0.5, z: p.z + bz * 0.5 };
+        resolveCollisions(pos, 0.55);
+        if (Math.hypot(pos.x - p.x, pos.z - p.z) < 0.25) break;
+        p.x = pos.x;
+        p.z = pos.z;
+      }
+      p.y = Math.max(p.y, heightAt(p.x, p.z));
+      p.dodgeIframe = 0.3;
+      p.action = "ward-cast";
+      spark(sx, p.y + 1, sz, "#b9a4ff", 0.6);
+      spark(p.x, p.y + 1, p.z, "#b9a4ff", 0.6);
+      sfx.gale();
+      break;
+    }
+    case "burst":
+      p.action = "burst";
+      p.hitIds = new Set();
+      sfx.burstCharge();
+      break;
+    case "rain": {
+      const tx = p.x + fx * eff.reach;
+      const tz = p.z + fz * eff.reach;
+      world.rains.push({ x: tx, z: tz, r: eff.radius, born: world.time, ticks: eff.ticks, next: 0, mult: eff.damageMult });
+      p.action = "ward-cast";
+      sfx.swing(1);
+      break;
+    }
+    case "ward":
+      p.action = "ward-cast";
+      p.wardT = eff.duration;
+      sfx.ward();
+      floater(p.x, p.y + 2.8, p.z, def.name, "#c9e39a");
+      break;
+    case "heal":
+      p.action = "ward-cast";
+      s.setHp(Math.min(max, s.hp + max * eff.fraction));
+      p.hasteT = eff.hasteFor;
+      sfx.heal();
+      floater(p.x, p.y + 2.8, p.z, `+${Math.round(max * eff.fraction)}`, "#9fe39a");
+      break;
+    case "shield":
+      p.action = "ward-cast";
+      p.shieldHp = Math.round(max * eff.fraction);
+      p.shieldT = eff.duration;
+      sfx.ward();
+      floater(p.x, p.y + 2.8, p.z, def.name, "#b9a4ff");
+      break;
+  }
+}
+
+function slowAround(x: number, z: number, radius: number) {
+  let slowed = 0;
+  for (const e of world.enemies) {
+    if (e.phase === "dead") continue;
+    if (Math.hypot(e.x - x, e.z - z) > radius) continue;
+    e.slowT = GALE.slowFor;
+    e.aggro = true;
+    if (e.phase === "idle" || e.phase === "return") e.phase = "chase";
+    if (!enemyDef(e.type).boss && e.phase === "windup") {
+      e.phase = "stagger";
+      e.timer = 0.4;
+      e.zones = [];
+    }
+    slowed += 1;
+  }
+  spark(x, heightAt(x, z) + 0.1, z, "#bfe6ff", radius, true, 0.5);
+  if (slowed) floater(x, heightAt(x, z) + 2.6, z, "Slowed", "#bfe6ff");
+}
+
+function stepRains() {
+  for (let i = world.rains.length - 1; i >= 0; i--) {
+    const r = world.rains[i]!;
+    const age = world.time - r.born;
+    while (r.next < r.ticks.length && age >= r.ticks[r.next]!) {
+      r.next += 1;
+      for (const e of world.enemies) {
+        if (e.phase === "dead") continue;
+        if (Math.hypot(e.x - r.x, e.z - r.z) > r.r + (enemyDef(e.type).boss ? 1 : 0.3)) continue;
+        const hit = playerHit(r.mult);
+        damageEnemy(e, hit.dmg, { knock: 0.2, stagger: false, big: false, crit: hit.crit });
+      }
+      spark(r.x, heightAt(r.x, r.z) + 0.1, r.z, "#f3d38a", r.r, true, 0.3);
+      sfx.hit(0);
+    }
+    if (r.next >= r.ticks.length) world.rains.splice(i, 1);
   }
 }
 
@@ -743,12 +1032,15 @@ function stepPlayer(dt: number, camYaw: number) {
   p.attackCooldown = Math.max(0, p.attackCooldown - dt);
   p.dodgeCd = Math.max(0, p.dodgeCd - dt);
   p.dodgeIframe = Math.max(0, p.dodgeIframe - dt);
-  for (const a of ABILITIES) p.cooldowns[a.id] = Math.max(0, p.cooldowns[a.id] - dt);
+  for (const id of Object.keys(p.cooldowns) as AbilityId[]) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
+  p.hasteT = Math.max(0, p.hasteT - dt);
+  p.shieldT = Math.max(0, p.shieldT - dt);
+  if (p.shieldT <= 0) p.shieldHp = 0;
   if (p.wardT > 0) {
     const before = p.wardT;
     p.wardT = Math.max(0, p.wardT - dt);
     const max = statsFor(store).maxHp;
-    const heal = ((before - p.wardT) / WARD.duration) * max * WARD.healFraction;
+    const heal = ((before - p.wardT) / 4) * max * 0.2;
     if (store.hp < max) store.setHp(Math.min(max, store.hp + heal));
   }
 
@@ -779,13 +1071,21 @@ function stepPlayer(dt: number, camYaw: number) {
   // ---- action timeline
   p.actionT += dt;
   let ctrl = 1; // movement authority this frame
-  let speedCap = input.sprint ? SPRINT : WALK;
+  const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
+  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1.3 : 1);
+  let speedCap = (input.sprint ? SPRINT : WALK) * speedMul;
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
-    ctrl = 0.15;
-    speedCap = 1.4;
-    if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow) applySwingHits(p, swing);
-    if (p.actionT >= swing.duration) {
+    const melee = basicKind() === "melee";
+    ctrl = melee ? 0.15 : 0.5;
+    speedCap = melee ? 1.4 : 2.6;
+    if (melee) {
+      if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow) applySwingHits(p, swing);
+    } else if (p.actionT >= 0.09 && !p.hitIds.has("__fired")) {
+      p.hitIds.add("__fired");
+      fireShot(p, p.comboIdx - 1);
+    }
+    if (p.actionT >= swingDuration(p.comboIdx - 1)) {
       p.action = "none";
       p.lastSwingEnd = world.time;
       if (p.comboIdx >= SWINGS.length) {
@@ -804,48 +1104,37 @@ function stepPlayer(dt: number, camYaw: number) {
     if (p.actionT >= DODGE.duration) p.action = "none";
   } else if (p.action === "gale") {
     ctrl = 0;
-    const sp = GALE.distance / GALE.duration;
-    p.vx = Math.sin(p.yaw) * sp;
-    p.vz = Math.cos(p.yaw) * sp;
+    const eff = p.abilityId ? ABILITIES[p.abilityId].effect : null;
+    const leap = eff?.kind === "leap";
+    const distance = eff && (eff.kind === "dash" || eff.kind === "leap") ? eff.distance : 8;
+    const duration = eff && (eff.kind === "dash" || eff.kind === "leap") ? eff.duration : 0.22;
+    const dir = leap ? -1 : 1;
+    const sp = distance / duration;
+    p.vx = Math.sin(p.yaw) * sp * dir;
+    p.vz = Math.cos(p.yaw) * sp * dir;
     if (Math.floor(p.actionT * 40) % 3 === 0) spark(p.x, p.y + 1, p.z, "#d8efff", 0.3, false, 0.3);
-    if (p.actionT >= GALE.duration) {
+    if (p.actionT >= duration) {
       p.action = "none";
       p.vx *= 0.25;
       p.vz *= 0.25;
-      let slowed = 0;
-      for (const e of world.enemies) {
-        if (e.phase === "dead") continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) <= GALE.slowRadius) {
-          e.slowT = GALE.slowFor;
-          e.aggro = true;
-          if (e.phase === "idle" || e.phase === "return") e.phase = "chase";
-          if (!enemyDef(e.type).boss && e.phase === "windup") {
-            e.phase = "stagger";
-            e.timer = 0.4;
-            e.zones = [];
-          }
-          slowed += 1;
-        }
-      }
-      spark(p.x, p.y + 0.1, p.z, "#bfe6ff", GALE.slowRadius, true, 0.5);
-      if (slowed) floater(p.x, p.y + 2.6, p.z, "Slowed", "#bfe6ff");
+      if (!leap && eff?.kind === "dash") slowAround(p.x, p.z, eff.slowRadius);
     }
   } else if (p.action === "burst") {
     ctrl = 0;
     speedCap = 0;
-    if (p.actionT >= BURST.hitAt && p.hitIds.size === 0) {
+    const eff = p.abilityId ? ABILITIES[p.abilityId].effect : null;
+    if (eff?.kind === "burst" && p.actionT >= BURST.hitAt && p.hitIds.size === 0) {
       p.hitIds.add("__cast");
-      const stats = statsFor(store);
       let any = false;
       for (const e of world.enemies) {
         if (e.phase === "dead") continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) > BURST.radius + (enemyDef(e.type).boss ? 1 : 0)) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) > eff.radius + (enemyDef(e.type).boss ? 1 : 0)) continue;
         if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
-        const dmg = Math.round(stats.attack * BURST.damageMult * (0.95 + rand() * 0.1));
-        damageEnemy(e, dmg, { knock: BURST.knockback, stagger: true, big: true });
+        const hit = playerHit(eff.damageMult);
+        damageEnemy(e, hit.dmg, { knock: eff.knockback, stagger: true, big: true, crit: hit.crit, slowFor: eff.slowFor });
         any = true;
       }
-      spark(p.x, p.y + 0.15, p.z, "#ffb45a", BURST.radius, true, 0.55);
+      spark(p.x, p.y + 0.15, p.z, eff.color, eff.radius, true, 0.55);
       world.cameraShake = 0.4;
       if (any) world.hitstop = Math.max(world.hitstop, 0.07);
       sfx.burst();
@@ -961,7 +1250,7 @@ function stepPlayer(dt: number, camYaw: number) {
                   ? p.vy > 0
                     ? "jump"
                     : "fall"
-                  : planar > 7.2
+                  : planar > 7.2 * speedMul
                     ? "sprint"
                     : planar > 0.6
                       ? "walk"
@@ -1016,7 +1305,7 @@ function startRoar(e: EnemyRuntime) {
   spark(e.x, e.y + 0.2, e.z, "#c96b3a", 6.5, true, 0.8);
   world.cameraShake = 0.8;
   sfx.roar();
-  useGame.getState().toast("Thornmaw tears free of its roots — the ground itself answers!", "bad");
+  useGame.getState().toast(`${enemyDef(e.type).name} is enraged — the ground itself answers!`, "bad");
 }
 
 const BOSS_P1: BossMove[] = ["cleave", "cleave", "charge"];
@@ -1086,6 +1375,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (playerAlive && dist < def.aggroRange) {
         e.phase = "chase";
         e.aggro = true;
+        useGame.getState().seeEnemy(e.type);
       }
       break;
     }
@@ -1145,7 +1435,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
           sfx.slam();
           world.cameraShake = Math.max(world.cameraShake, 0.3);
         }
-        if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z);
+        if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z, e);
       }
       if (e.timer <= 0) {
         e.phase = "recover";
@@ -1166,7 +1456,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       e.chargeLeft -= step;
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
         e.struck = true;
-        damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2);
+        damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2, e);
       }
       if (Math.floor(world.time * 30) % 3 === 0) spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
       if (e.chargeLeft <= 0.01 || moved < step * 0.4) {
@@ -1239,11 +1529,13 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
 
 function checkUnlocks() {
   const s = useGame.getState();
-  const n = ABILITIES.filter((a) => abilityUnlocked(a, s.questStep, s.questComplete)).length;
+  const n = [0, 1, 2].filter((i) => abilityUnlocked(s.level, i)).length;
   if (unlockedCount >= 0 && n > unlockedCount) {
-    const def = ABILITIES[n - 1]!;
-    s.toast(`New ability: ${def.name} (${def.key}) — ${def.description}`, "quest");
-    sfx.levelUp();
+    const id = abilityInSlot(n - 1);
+    if (id) {
+      const def = ABILITIES[id];
+      s.toast(`New ability: ${def.name} (${n}) — ${def.description}`, "quest");
+    }
   }
   unlockedCount = n;
 }
@@ -1263,6 +1555,10 @@ function stepDrops(dt: number) {
         store.toast("Picked up a Sunbloom Draught", "good");
       }
       if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
+      if (d.shards > 0) {
+        useGame.setState({ shards: useGame.getState().shards + d.shards });
+        store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
+      }
       sfx.pickup();
     }
   }
@@ -1288,46 +1584,54 @@ function nearestNpc() {
   return best;
 }
 
-function selaLines(step: number, complete: boolean): string[] {
-  if (complete) {
+function selaLines(): string[] {
+  const s = useGame.getState();
+  if (s.questComplete) {
     return [
-      "Tidewrack is yours to walk now, Warden-in-training.",
-      "Whatever fell out of that sky is still burning on the sand. Go carefully.",
+      "The barrow is dark and the road is quiet. You have done more than anyone asked.",
+      "Keep your blade sharp at the forge. Whatever fell from the sky is not finished with us.",
     ];
   }
-  if (step === STARTER_QUEST.steps.length - 1) {
-    return [
-      "Thornmaw's fang, still warm. You did not run. Good.",
-      STARTER_QUEST.completionText,
-    ];
+  const quest = QUESTS[s.questIdx];
+  if (s.questIdx === 0) {
+    switch (s.questStep) {
+      case 0:
+        return [
+          "You woke on the meadow road, then. Half of Emberhollow thought you were another falling star.",
+          "Bramblekin have crawled out of Whisperpine since the sky cracked. Walk north past the windmill and cull three of them.",
+          "Strike, then step back. They telegraph every swing — so do you.",
+        ];
+      case 1:
+        return ["North, past the lantern path. The woods start where the pines close in."];
+      case 2:
+        return ["Three Bramblekin. Keep count, and keep your distance between swings."];
+      case 3:
+        return ["Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence."];
+      case 4:
+        return ["Thornmaw nests in the Sunken Arch, east along the old road.", "It charges. Let it commit, then answer."];
+      default:
+        return ["Thornmaw's fang, still warm. You did not run. Good.", quest?.completionText ?? ""];
+    }
   }
-  switch (step) {
+  switch (s.questStep) {
     case 0:
       return [
-        "You woke on the meadow road, then. Half of Emberhollow thought you were another falling star.",
-        "Bramblekin have crawled out of Whisperpine since the sky cracked. Walk north past the windmill and cull three of them.",
-        "Strike, then step back. They telegraph every swing — so do you.",
+        "The Barrow of Lanterns lies west, past the windmill. The gate answers to that key now.",
+        `Go when you are ready — level ${quest?.recommendedLevel ?? "4–7"} is my advice. Oda at the forge can sharpen what you carry.`,
       ];
     case 1:
-      return ["North, past the lantern path. The woods start where the pines close in."];
+      return ["Shades move faster than anything in the woods. Let them swing into nothing, then answer."];
     case 2:
-      return ["Three Bramblekin. Keep count, and keep your distance between swings."];
-    case 3:
-      return ["Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence."];
-    case 4:
-      return [
-        "Thornmaw nests in the Sunken Arch, east along the old road.",
-        "It charges. Let it commit, then answer.",
-      ];
+      return ["The Lantern King sits at the back of the barrow. Break his light."];
     default:
-      return ["Return to me when Thornmaw is down."];
+      return ["You brought back his crown. Emberhollow owes you.", quest?.completionText ?? ""];
   }
 }
 
 function elderLines(): string[] {
   return [
-    "Emberhollow has stood here nine generations. The bay has never glowed like that before.",
-    "Sela will send you somewhere unwise. Drink your draughts — press Q, not pride.",
+    "I keep the Hall of Paths. Vanguard, Ranger, Arcanist — the village has trained all three.",
+    "Change your path here whenever you like. Your level, gear and deeds come with you.",
   ];
 }
 
@@ -1341,19 +1645,21 @@ function tryInteract() {
   if (!npc) return;
   sfx.ui();
   if (npc.id === "sela") {
-    const step = STARTER_QUEST.steps[store.questStep];
-    store.openDialogue({ name: npc.name, lines: selaLines(store.questStep, store.questComplete) });
-    if (step && step.kind === "talk" && step.npc === "sela") {
-      store.advanceQuest();
-    }
-  } else {
+    const step = QUESTS[store.questIdx]?.steps[store.questStep];
+    store.openDialogue({ name: npc.name, lines: selaLines() });
+    if (!store.questComplete && step && step.kind === "talk" && step.npc === "sela") store.advanceQuest();
+  } else if (npc.id === "elder") {
     store.openDialogue({ name: npc.name, lines: elderLines() });
+    store.toggleInventory(true, "build");
+  } else if (npc.id === "smith") {
+    store.openDialogue(null);
+    store.toggleInventory(true, "forge");
   }
 }
 
 function stepQuest() {
   const store = useGame.getState();
-  const step = STARTER_QUEST.steps[store.questStep];
+  const step = QUESTS[store.questIdx]?.steps[store.questStep];
   if (!step || store.questComplete) return;
   if (step.kind === "reach") {
     const region = regionAt(world.player.x, world.player.z);
@@ -1368,7 +1674,7 @@ function stepQuest() {
 }
 
 if (import.meta.env.DEV && typeof window !== "undefined") {
-  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone };
+  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone, initWorld, saveNow };
   (window as unknown as Record<string, unknown>)["__aetherInput"] = input;
 }
 
@@ -1397,6 +1703,8 @@ export function stepWorld(dtRaw: number) {
 
   stepPlayer(dt, input.yaw);
   for (const e of world.enemies) stepEnemy(e, dt);
+  stepProjectiles(dt);
+  stepRains();
   stepDrops(dt);
   stepQuest();
 
@@ -1413,7 +1721,8 @@ export function stepWorld(dtRaw: number) {
   const region = regionAt(world.player.x, world.player.z);
   if (region !== lastRegion) {
     lastRegion = region;
-    useGame.setState({ region: region ? REGIONS[region].label : null });
+    useGame.setState({ region: region ? REGIONS[region].label : null, regionId: region });
+    if (region) store.discoverPlace(region);
   }
   const npc = nearestNpc();
   const prompt = npc

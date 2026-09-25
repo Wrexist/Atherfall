@@ -176,7 +176,10 @@ export function ZoneViews() {
   const plane = useMemo(() => new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0).rotateX(Math.PI / 2), []);
 
   useFrame(() => {
-    const active: Array<{ z: Zone; t: number; striking: boolean }> = [];
+    const active: Array<{ z: Zone; t: number; striking: boolean; friendly?: boolean }> = [];
+    for (const r of world.rains) {
+      active.push({ z: { kind: "circle", x: r.x, z: r.z, r: r.r }, t: 1, striking: false, friendly: true });
+    }
     for (const e of world.enemies) {
       if (!e.zones.length) continue;
       if (e.phase !== "windup" && e.phase !== "strike" && e.phase !== "charge") continue;
@@ -195,6 +198,8 @@ export function ZoneViews() {
       slot.g.position.set(z.x, heightAt(z.x, z.z) + 0.12, z.z);
       const om = slot.outline.material as THREE.MeshBasicMaterial;
       const fm = slot.fill.material as THREE.MeshBasicMaterial;
+      om.color.set(a.friendly ? "#f3d38a" : "#ff5a36");
+      fm.color.set(a.friendly ? "#f3d38a" : "#ff3d1f");
       om.opacity = a.striking ? 0.3 : 0.12 + t * 0.08;
       fm.opacity = a.striking ? 0.38 : 0.14 + t * 0.24;
       if (z.kind === "circle") {
@@ -282,6 +287,41 @@ export function FloaterViews() {
             />
           </Html>
         </group>
+      ))}
+    </>
+  );
+}
+
+const PROJ_SLOTS = 16;
+
+/** Arrows (thin streaks) and arcane bolts (glowing orbs). */
+export function ProjectileViews() {
+  const meshes = useRef<Array<THREE.Mesh | null>>([]);
+  const arrow = useMemo(() => new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6).rotateX(Math.PI / 2), []);
+  const orb = useMemo(() => new THREE.IcosahedronGeometry(0.32, 1), []);
+  useFrame(() => {
+    for (let i = 0; i < PROJ_SLOTS; i++) {
+      const m = meshes.current[i];
+      if (!m) continue;
+      const pr = world.projectiles[i];
+      if (!pr) {
+        m.visible = false;
+        continue;
+      }
+      m.visible = true;
+      m.geometry = pr.radius > 0 ? orb : arrow;
+      m.position.set(pr.x, pr.y, pr.z);
+      m.rotation.set(0, Math.atan2(pr.vx, pr.vz), 0);
+      m.scale.setScalar(pr.big ? 1.4 : 1);
+      (m.material as THREE.MeshBasicMaterial).color.set(pr.color);
+    }
+  });
+  return (
+    <>
+      {Array.from({ length: PROJ_SLOTS }).map((_, i) => (
+        <mesh key={i} visible={false} ref={(el) => { meshes.current[i] = el; }}>
+          <meshBasicMaterial />
+        </mesh>
       ))}
     </>
   );

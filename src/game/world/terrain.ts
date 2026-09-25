@@ -11,6 +11,7 @@ export const REGIONS = {
   woods: { x: -6, z: -56, radius: 34, label: "Whisperpine Woods" },
   ruins: { x: 58, z: -30, radius: 22, label: "The Sunken Arch" },
   shore: { x: 8, z: 72, radius: 34, label: "Tidewrack Shore" },
+  barrow: { x: -60, z: 14, radius: 16, label: "Barrow of Lanterns" },
 } as const;
 
 export type RegionId = keyof typeof REGIONS;
@@ -29,6 +30,12 @@ export const PATHS: Array<Array<[number, number]>> = [
     [22, -6],
     [38, -16],
     [50, -26],
+  ],
+  [
+    [-4, 4],
+    [-20, 8],
+    [-34, 12],
+    [-45, 14],
   ],
   [
     [2, 10],
@@ -62,6 +69,10 @@ export function heightAt(x: number, z: number): number {
   // Ruins plateau
   const ruinT = gauss(x - REGIONS.ruins.x, z - REGIONS.ruins.z, 20);
   h = h * (1 - ruinT) + 7.2 * ruinT;
+
+  // Barrow floor: a flat sunken court west of the village
+  const barrowT = gauss(x - REGIONS.barrow.x, z - REGIONS.barrow.z, 19);
+  h = h * (1 - barrowT) + 4 * barrowT;
 
   // Village bowl, kept flat and readable
   const villageT = gauss(x - REGIONS.village.x, z - REGIONS.village.z, 17);
