@@ -83,7 +83,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 32 | P1 | Per-frame `filter()` allocations removed. Colours use a shared parsed cache. Material flashes are skipped when unchanged. | ✅ |
 | 33 | P1 | The desktop ability bar is no longer mounted on phones. All HUD readouts share one animation-frame loop and skip unchanged DOM writes. | ✅ |
 | 34 | P2 | Low quality uses Lambert shading for terrain, water, props and characters. | ✅ |
-| 35 | P2 | All GLBs start downloading together (preload). **Still to do:** a service worker to cache models for the next launch and offline. | ◐ |
+| 35 | P2 | All GLBs start downloading together (preload). A service worker (`public/sw.js`, production only) caches models, icons and fonts (served instantly, refreshed in the background) and hashed app bundles. The page itself is network-first, so releases are never held back. Verified: the game relaunches and plays with the network off. | ✅ |
 | 36 | P2 | Instanced props are static (`matrixAutoUpdate=false`). Camera occlusion checks only the 42 large colliders instead of 459. Crystal heights are precomputed. | ✅ |
 | 37 | P2 | Dispose cloned materials and terrain geometry. Mostly moot now: a quality change remounts the canvas, which frees the GPU context. | ⬜ |
 | 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
@@ -128,7 +128,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | # | Item |
 |---|------|
 | 64 | Wrap with **Capacitor** for App Store and Google Play builds. This adds native haptics, a status bar, orientation lock and splash screen. |
-| 65 | Offline and asset caching with a service worker (see #35). Show the download size up front. |
+| 65 | ✅ Offline and asset caching (see #35). Still to do: show the download size up front. |
 | 66 | Crash and performance telemetry (e.g. Sentry) with device model and FPS buckets. |
 | 67 | Real-device test matrix: iPhone SE/12/15, a mid-range Android (e.g. Galaxy A-series), a low-end Android. |
 | 68 | Store assets: screenshots, privacy policy, age rating. |

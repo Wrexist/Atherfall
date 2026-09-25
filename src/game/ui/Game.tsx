@@ -150,6 +150,13 @@ export function Game() {
     };
   }, []);
 
+  // Asset cache for instant relaunch / offline play (see public/sw.js). Production
+  // only, and never inside an iframe such as the editor preview.
+  useEffect(() => {
+    if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+
   // Mobile browsers only allow audio after a user gesture, and suspend it again
   // after interruptions — so every tap (touch, pen or mouse) re-unlocks it.
   useEffect(() => {
