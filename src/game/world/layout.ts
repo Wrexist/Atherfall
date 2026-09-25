@@ -368,7 +368,53 @@ function scatter(): PropInstance[] {
   return out;
 }
 
-export const PROPS: PropInstance[] = [...handmade(), ...scatter()];
+/**
+ * Composed clusters framing Emberhollow (tree + bushes + rock + flowers, never
+ * lone props), in the ring the scatter leaves clear; kept off roads, houses
+ * and the hand-placed props.
+ */
+function villageFrame(taken: PropInstance[]): PropInstance[] {
+  const rand = mulberry32(20260925);
+  const out: PropInstance[] = [];
+  const clear = (x: number, z: number, room: number) =>
+    pathDistance(x, z) > 3.6 &&
+    slopeAt(x, z) < 0.4 &&
+    COTTAGES.every((c) => Math.hypot(c.x - x, c.z - z) > Math.max(c.w, c.d) * 1.8 + room) &&
+    [...taken, ...out].every((t) => Math.hypot(t.x - x, t.z - z) > (t.collide > 0 ? t.collide + room : 0.8));
+  const put = (model: string, x: number, z: number, scale: number, collide: number, detail: boolean) => {
+    if (!clear(x, z, collide > 0 ? 1.2 : 0.4)) return false;
+    out.push({ model, x, z, yaw: rand() * 6.28, scale: scale * (SIZE_FIX[model] ?? 1), collide, detail });
+    return true;
+  };
+  const n = 16;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rand() * 0.25;
+    const r = 14.5 + rand() * 5;
+    const cx = Math.cos(a) * r;
+    const cz = Math.sin(a) * r;
+    if (!put(pick(TREES, rand()), cx, cz, 2.3 + rand() * 0.9, 1.0, false)) continue;
+    const around = (d: number) => {
+      const b = rand() * 6.28;
+      return [cx + Math.cos(b) * d, cz + Math.sin(b) * d] as const;
+    };
+    for (let k = 0; k < 3; k++) {
+      const [x, z] = around(1.8 + rand() * 1.4);
+      put("/models/nature/plant_bushDetailed.glb", x, z, 1.6 + rand() * 0.8, 0, true);
+    }
+    if (rand() < 0.6) {
+      const [x, z] = around(2.2 + rand());
+      put(pick(ROCKS, rand()), x, z, 1.2 + rand() * 0.7, 0.7, false);
+    }
+    for (let k = 0; k < 3; k++) {
+      const [x, z] = around(2.6 + rand() * 1.8);
+      put(pick(SMALL, rand()), x, z, 1.6 + rand() * 0.8, 0, true);
+    }
+  }
+  return out;
+}
+
+const HANDMADE = handmade();
+export const PROPS: PropInstance[] = [...HANDMADE, ...villageFrame(HANDMADE), ...scatter()];
 
 export interface Collider {
   x: number;

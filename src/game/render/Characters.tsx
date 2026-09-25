@@ -389,6 +389,25 @@ function plateTexture(name: string, quest: boolean) {
   g.fill();
   g.fillStyle = "#f4f1ea";
   g.fillText(name, 256, 159);
+  if (!quest) {
+    // A little "…" speech bubble: this villager has something to say.
+    g.fillStyle = "rgba(255,255,255,0.95)";
+    g.strokeStyle = "rgba(11,19,32,0.8)";
+    g.lineWidth = 5;
+    g.beginPath();
+    g.roundRect(206, 36, 100, 62, 30);
+    g.moveTo(240, 96);
+    g.lineTo(232, 116);
+    g.lineTo(258, 97);
+    g.fill();
+    g.stroke();
+    g.fillStyle = "#3b4658";
+    for (const dx of [-24, 0, 24]) {
+      g.beginPath();
+      g.arc(256 + dx, 67, 7, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
   if (quest) {
     // Gold diamond with a "!" above the name.
     g.save();

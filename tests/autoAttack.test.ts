@@ -98,3 +98,49 @@ describe("in the game", () => {
     expect(world.stats.swings).toBe(0);
   });
 });
+
+describe("loot", () => {
+  beforeEach(() => {
+    useGame.getState().resetProgress();
+    useGame.setState({ screen: "playing", questStep: 1 });
+    initWorld(null);
+    for (const e of world.enemies) {
+      e.x = e.homeX = 900;
+      e.z = e.homeZ = 900;
+    }
+    const p = world.player;
+    p.x = OPEN.x;
+    p.z = OPEN.z;
+    p.y = heightAt(OPEN.x, OPEN.z);
+    input.moveX = input.moveZ = 0;
+  });
+
+  const coins = (dx: number) =>
+    world.drops.push({
+      id: 9001,
+      x: OPEN.x + dx,
+      y: heightAt(OPEN.x + dx, OPEN.z),
+      z: OPEN.z,
+      potion: false,
+      gold: 25,
+      shards: 0,
+      born: world.time,
+      taken: false,
+    });
+
+  test("nearby loot flies to the hero after its pop, no walking over it", () => {
+    const before = useGame.getState().gold;
+    coins(4.5);
+    run(0.2);
+    expect(useGame.getState().gold).toBe(before); // still popping out
+    run(1.5);
+    expect(useGame.getState().gold).toBe(before + 25);
+  });
+
+  test("loot further away waits for you", () => {
+    const before = useGame.getState().gold;
+    coins(9);
+    run(2);
+    expect(useGame.getState().gold).toBe(before);
+  });
+});

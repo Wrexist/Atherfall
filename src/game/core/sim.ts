@@ -865,7 +865,18 @@ function damageEnemy(
     opts.crit ? "#ff9d5c" : opts.big ? "#ffcf5c" : "#fff2d6",
     opts.big || !!opts.crit,
   );
-  spark(e.x, e.y + def.scale * 0.55, e.z, opts.big ? "#ffc35a" : "#ffe2a8", opts.big ? 0.6 : 0.38);
+  spark(
+    e.x,
+    e.y + def.scale * 0.55,
+    e.z,
+    opts.crit ? "#ff8a3d" : opts.big ? "#ffc35a" : "#ffe2a8",
+    opts.crit ? 0.85 : opts.big ? 0.6 : 0.38,
+  );
+  if (opts.crit) {
+    // Crits land harder: a touch more hit-stop and a tiny camera kick.
+    world.hitstop = Math.max(world.hitstop, 0.06);
+    world.cameraShake = Math.max(world.cameraShake, 0.14);
+  }
   if (e.hp <= 0) {
     killEnemy(e);
     e.zones = [];
@@ -2271,14 +2282,28 @@ function collectDrop(d: DropRuntime) {
   sfx.pickup();
 }
 
+/** Loot within this many metres flies to the hero, once it has popped out. */
+export const LOOT_MAGNET = 5.5;
+const MAGNET_DELAY = 0.35;
+
 function stepDrops(dt: number) {
-  void dt;
   const p = world.player;
-  const store = useGame.getState();
   for (const d of world.drops) {
     if (d.taken) continue;
     const dist = Math.hypot(d.x - p.x, d.z - p.z);
-    if (dist < 2.0 && !p.dead) collectDrop(d);
+    if (dist < 2.0 && !p.dead) {
+      collectDrop(d);
+      continue;
+    }
+    // Pickup magnet: after the loot burst has been seen, nearby drops fly in,
+    // faster as they close (no walking over every coin).
+    if (!p.dead && dist < LOOT_MAGNET && world.time - d.born > MAGNET_DELAY) {
+      const speed = 4 + (LOOT_MAGNET - dist) * 3;
+      const step = Math.min(dist, speed * dt);
+      d.x += ((p.x - d.x) / dist) * step;
+      d.z += ((p.z - d.z) / dist) * step;
+      d.y = heightAt(d.x, d.z);
+    }
   }
   // Unclaimed loot fades after a while (gear lasts longer than coin); if the cap
   // is still hit, the oldest *collected* entries go first, never fresh loot.
