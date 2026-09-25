@@ -32,7 +32,9 @@ jobs:
         run: npx tsc --noEmit -p .
       - name: Lint
         # Prettier and react-refresh warnings are known and handled separately.
-        run: npx eslint src tests --rule 'prettier/prettier: off' --rule 'react-refresh/only-export-components: off'
+        # (Block scalar: the rule names contain ": ", which YAML would read as a key.)
+        run: |
+          npx eslint src tests --rule 'prettier/prettier: off' --rule 'react-refresh/only-export-components: off'
       - name: Test
         run: bun test ./tests
       - name: Build
