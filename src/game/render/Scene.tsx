@@ -33,6 +33,7 @@ import { WorldObjects } from "./WorldObjects";
 import { QuestMarker } from "./QuestMarker";
 import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
+import { BlobShadows, HeroRing } from "./Blobs";
 import { Meadow } from "./Grass";
 import { SlashTrail } from "./Slash";
 
@@ -191,6 +192,8 @@ export function Scene() {
 
       <Meadow quality={quality} shadows={q.shadows} />
       <PlayerView />
+      <HeroRing />
+      {!q.shadows && <BlobShadows />}
       <SlashTrail />
       <EnemyViews />
       <NpcViews />
