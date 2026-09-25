@@ -7,7 +7,7 @@ describe("coaching tips", () => {
     expect(mirrorAnchor("left-3 bottom-[12.75rem] !max-w-[10rem]")).toBe(
       "right-3 bottom-[12.75rem] !max-w-[10rem]",
     );
-    expect(mirrorAnchor("right-4 bottom-[8.25rem]")).toBe("left-4 bottom-[8.25rem]");
+    expect(mirrorAnchor("left-3 top-[10.5rem]")).toBe("right-3 top-[10.5rem]");
     // Centred tips stay centred.
     expect(mirrorAnchor("left-1/2 top-[28%] -translate-x-1/2")).toBe(
       "left-1/2 top-[28%] -translate-x-1/2",

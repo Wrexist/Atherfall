@@ -39,6 +39,7 @@ import {
   ItemTile,
   StatChip,
   classIconUrl,
+  portraitUrl,
   type GlyphId,
 } from "./kit";
 
@@ -618,7 +619,7 @@ function Build() {
           className="grid h-16 w-16 shrink-0 place-items-center rounded-full border-4 bg-[var(--ink)]"
           style={{ borderColor: tone }}
         >
-          <img src={classIconUrl(s.archetype)} alt="" className="h-12 w-12 object-contain" />
+          <img src={portraitUrl(s.archetype)} alt="" className="h-12 w-12 object-contain" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-display text-xl leading-none text-outline">{arch.name}</div>

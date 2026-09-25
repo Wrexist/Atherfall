@@ -278,13 +278,8 @@ function ArcButton({
         </>
       ) : (
         <>
-          <SlotIcon id={id} className="h-5 w-5" />
-          {/* Long names ("Emberburst") shrink to fit the round button. */}
-          <span
-            className={`font-black uppercase text-outline ${label.length > 7 ? "text-[7.5px] tracking-normal" : "text-[9px] tracking-wide"}`}
-          >
-            {label}
-          </span>
+          {/* Skills are icon-only, like the reference games; the name is the label for screen readers. */}
+          <SlotIcon id={id} className="h-7 w-7" />
           <CooldownSweep id={id} />
         </>
       )}
@@ -351,7 +346,8 @@ export function TouchControls() {
     // Upright phone, one thumb each: the stick anywhere in the lower left, and
     // every combat action on rings around Attack in the lower right. Bag, Map
     // and Menu live in the HUD's top-right corner.
-    const OUTER = [182, 160, 138];
+    // Unlocked abilities on an outer arc above the cluster, clear of the stick.
+    const OUTER = [150, 127, 104];
     return (
       <div className="pointer-events-none fixed inset-0 z-20">
         {/* One combat cluster: a soft shade gathers the buttons around Attack. */}
@@ -410,7 +406,7 @@ export function TouchControls() {
               label={a.label}
               small
               angle={ang(OUTER[i]!)}
-              radius={160}
+              radius={165}
               onPress={() => (input.abilityQueued = a.idx)}
             />
           ))}

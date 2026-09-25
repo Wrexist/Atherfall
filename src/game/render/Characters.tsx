@@ -399,7 +399,8 @@ function EnemyView({ index }: { index: number }) {
     inner.current!.rotation.x = e.phase === "stagger" ? -0.35 : 0;
   });
 
-  const barY = def.boss ? 3.9 : def.scale * 1.2;
+  // Just above the head (KayKit models stand about 0.95 x their scale).
+  const barY = def.boss ? 3.9 : def.scale * 0.82 + 0.15;
 
   return (
     <group ref={group}>
@@ -408,18 +409,18 @@ function EnemyView({ index }: { index: number }) {
       </group>
       <group ref={bar} position={[0, barY, 0]} visible={false} scale={1.3}>
         <mesh renderOrder={7}>
-          <planeGeometry args={[1.12, 0.24]} />
-          <meshBasicMaterial color="#f3e2bd" transparent opacity={0.9} depthTest={false} />
+          <planeGeometry args={[1.14, 0.26]} />
+          <meshBasicMaterial color="#0b1320" transparent opacity={0.92} depthTest={false} />
         </mesh>
         <mesh position={[0, 0, 0.005]} renderOrder={8}>
           <planeGeometry args={[1.05, 0.17]} />
-          <meshBasicMaterial color="#1b140f" transparent opacity={0.85} depthTest={false} />
+          <meshBasicMaterial color="#3a1216" transparent opacity={0.95} depthTest={false} />
         </mesh>
         {/* Transparent like its backing, so it's drawn after it: an opaque fill
             went in the opaque pass and the backing was painted over it. */}
         <mesh ref={barFill} position={[0, 0, 0.01]} renderOrder={9}>
           <planeGeometry args={[1, 0.12]} />
-          <meshBasicMaterial color="#e2412f" transparent opacity={1} depthTest={false} />
+          <meshBasicMaterial color="#ff4a3d" transparent opacity={1} depthTest={false} />
         </mesh>
       </group>
     </group>

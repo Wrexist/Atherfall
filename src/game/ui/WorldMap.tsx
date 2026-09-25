@@ -7,7 +7,7 @@ import { questTarget } from "../core/questTarget";
 import { useGame } from "../core/store";
 
 const SPAN = MAP_SPAN;
-const RES = 150;
+const RES = 256; // same painted terrain as the minimap: sharp on phones
 
 function toMap(x: number, z: number, size: number) {
   return { mx: ((x + SPAN) / (SPAN * 2)) * size, my: ((z + SPAN) / (SPAN * 2)) * size };

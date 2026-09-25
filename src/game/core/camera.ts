@@ -51,7 +51,7 @@ export interface TopFraming {
 export function topFraming(aspect: number): TopFraming {
   const fov = Math.min(TOP_VFOV_MAX, Math.max(TOP_VFOV_MIN, verticalFov(TOP_HFOV, aspect)));
   const upright = aspect < 1;
-  return { fov, distance: upright ? 11.5 : 15.5, lookAhead: upright ? 2.0 : 0.6 };
+  return { fov, distance: upright ? 11.5 : 15.5, lookAhead: upright ? 0.4 : 0.3 };
 }
 
 /** Field of view for a camera mode on a screen of this aspect (width / height). */
