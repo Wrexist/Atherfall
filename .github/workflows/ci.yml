@@ -1,0 +1,39 @@
+# Every pull request and every push to main: install, typecheck, lint, test, build.
+# (Same commands as the "Baseline checks" in docs/NEXT_SESSION_PROMPT.md.)
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+      - name: Lint
+        # Prettier and react-refresh warnings are known and handled separately.
+        run: npx eslint src tests --rule 'prettier/prettier: off' --rule 'react-refresh/only-export-components: off'
+      - name: Test
+        run: bun test ./tests
+      - name: Build
+        run: npx vite build
