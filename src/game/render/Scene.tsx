@@ -14,6 +14,7 @@ import {
 import { ARCHETYPES } from "../data/archetypes";
 import { enemyDef } from "../data/enemies";
 import { useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import { heightAt } from "../world/terrain";
 import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
@@ -34,6 +35,7 @@ import { QuestMarker } from "./QuestMarker";
 import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
 import { BlobShadows, HeroRing } from "./Blobs";
+import { EmoteBubbles } from "./EmoteBubbles";
 import { Meadow } from "./Grass";
 import { SlashTrail } from "./Slash";
 
@@ -107,7 +109,7 @@ function Cottages({ shadows }: { shadows: boolean }) {
 function BarrowGate() {
   const unlocked = useGame((s) => s.barrowUnlocked);
   const done = useGame((s) => s.questComplete);
-  const gate = useGLTF("/models/dng/gate.glb");
+  const gate = useGLTF(assetUrl("/models/dng/gate.glb"));
   const leaves = useMemo(() => [gate.scene.clone(), gate.scene.clone()], [gate.scene]);
   const ref = useRef<THREE.Mesh>(null);
   useFrame((state) => {
@@ -208,6 +210,7 @@ export function Scene() {
       <WorldObjects />
       <QuestMarker />
       <RemotePlayers />
+      <EmoteBubbles />
     </>
   );
 }

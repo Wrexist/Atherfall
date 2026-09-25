@@ -137,10 +137,10 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 
 | # | Item | Status |
 |---|------|--------|
-| 69 | **Accounts plus cloud saves.** Optional email sign-in and a unique player name. Cloud saves reconcile with the device save on sign-in and never silently overwrite progress. Tested against a real local Supabase. **To switch on:** enable Lovable Cloud and apply the migrations (2 steps in `docs/ONLINE.md`). Still to do: Google sign-in, password reset. | ◐ |
+| 69 | **Accounts plus cloud saves.** Optional email sign-in and a unique player name. Cloud saves reconcile with the device save on sign-in and never silently overwrite progress. Tested against a real local Supabase. **To switch on:** enable Lovable Cloud and apply the migrations (2 steps in `docs/ONLINE.md`). "Forgot password?" sends a reset link that opens the game on a choose-a-new-password screen. Still to do: Google sign-in. | ◐ |
 | 70 | **Server-authoritative economy.** Loot, gold, forging and trades validated on the server (edge functions), so saves can't be edited for items. Needed before anything is tradeable. | ⬜ |
 | 71 | **Presence.** Other signed-in players are shown live, with name tags and an "N online" count, over a private channel for signed-in players only. Shard into instances when busy; move to Cloudflare Durable Objects at scale. | ✅ |
-| 72 | **Social.** Chat with moderation and filters, friends, parties (shared quest credit, shared loot rules), emotes. | ⬜ |
+| 72 | **Social.** **Emotes done**: Wave, Cheer and Sit, from the Emote button on touch or V / C / X on desktop, with a bubble above the head so they read from the high camera. Other players see them over the live channel. Still to do: parties (design first), friends, and chat with moderation (ask first). | ◐ |
 | 73 | **Co-op content.** World bosses on a timer, a party-scaled dungeon (the Barrow), daily and weekly quests. | ⬜ |
 | 74 | **Progression depth.** Talent trees, more regions past the Tidewrack gate, crafting from shards, cosmetics. | ⬜ |
 | 75 | **Live ops.** Events, season pass, leaderboards. | ⬜ |
@@ -178,3 +178,4 @@ Verified for #84–85 in Chromium as an iPhone 13 upright (390×844) and a 1280�
 | 77 | 389 Prettier formatting errors: run `npm run format` once in its own commit. |
 | 78 | ✅ `README.md` describes the game, how to run and check it, where the code lives, and the art credits. |
 | 79 | ✅ CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, tests and build on every pull request and push to `main`. |
+| 89 | ✅ Playable build at https://wrexist.github.io/aetherfall-play/ (single-player, offline). Every push to `main` republishes it through a public build-only repo, because this repo is private (see `docs/DEPLOY.md`). |

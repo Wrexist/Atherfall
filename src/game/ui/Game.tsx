@@ -1,9 +1,11 @@
 import { useProgress } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { assetUrl } from "../core/assets";
 import { setMuted as setAudioMuted, suspendAudio, unlockAudio } from "../core/audio";
 import { applyLook, input, keys, resetInput } from "../core/input";
 import { loadSaveIntoStore, saveNow } from "../core/sim";
 import { useSettings } from "../core/settings";
+import { EMOTES } from "../data/emotes";
 import { useGame } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 import { GameCanvas } from "../render/GameCanvas";
@@ -94,6 +96,8 @@ export function Game() {
           input.lockQueued = true;
         }
         if (e.code === "KeyP" && useAccount.getState().status === "signed-in") togglePartyPanel();
+        const emote = EMOTES.find((em) => em.key === e.code);
+        if (emote) input.emoteQueued = emote.id;
         if (e.code === "Digit1") input.abilityQueued = 0;
         if (e.code === "Digit2") input.abilityQueued = 1;
         if (e.code === "Digit3") input.abilityQueued = 2;
@@ -171,7 +175,7 @@ export function Game() {
   useEffect(() => {
     if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self)
       return;
-    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    navigator.serviceWorker.register(assetUrl("/sw.js")).catch(() => undefined);
   }, []);
 
   // Mobile browsers only allow audio after a user gesture, and suspend it again

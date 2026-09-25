@@ -1,5 +1,6 @@
 import { Canvas, useThree } from "@react-three/fiber";
 import { PerformanceMonitor, useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import {
   Component,
   Suspense,
@@ -110,7 +111,7 @@ function GameCanvasInner() {
   // and suspend (a slow chain on mobile data). After mount, so loader progress
   // events never land in the middle of React's first render.
   useEffect(() => {
-    for (const url of MODEL_URLS) useGLTF.preload(url);
+    for (const url of MODEL_URLS) useGLTF.preload(assetUrl(url));
   }, []);
 
   const deviceDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;

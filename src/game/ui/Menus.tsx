@@ -8,6 +8,7 @@ import {
   AccountLine,
   CloudSaveChoice,
   CloudSaveSync,
+  NewPasswordDialog,
   useLocalSaves,
 } from "./Account";
 import { useCloudSync } from "../online/cloudSave";
@@ -231,6 +232,7 @@ export function TitleScreen({
         </div>
       </Panel>
       {accountOpen && <AccountDialog onClose={closeAccount} />}
+      <NewPasswordDialog />
     </div>
   );
 }

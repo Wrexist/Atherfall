@@ -29,6 +29,9 @@ export const KENNEY_CLIPS: Record<string, string> = {
   windup: "interact-right",
   die: "die",
   talk: "emote-yes",
+  "emote-wave": "emote-yes",
+  "emote-cheer": "emote-yes",
+  "emote-sit": "static",
 };
 
 /** KayKit defaults: a sword-and-board fighter. */
@@ -53,6 +56,10 @@ const KAYKIT_CLIPS: Record<string, string> = {
   windup: "Block",
   die: "Death_A",
   talk: "Interact",
+  // Emotes (other players see these too, via presence).
+  "emote-wave": "Spellcast_Raise",
+  "emote-cheer": "Cheer",
+  "emote-sit": "Sit_Floor_Idle",
 };
 
 export interface RigInfo {

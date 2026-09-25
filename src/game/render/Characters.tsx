@@ -1,4 +1,5 @@
 import { useGLTF } from "@react-three/drei";
+import { assetUrl } from "../core/assets";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -42,9 +43,9 @@ const ONCE = new Set([
 ]);
 
 export function useCharacter(url: string, tint?: string) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(assetUrl(url));
   // KayKit characters share one rig, so their clips ship once for all of them.
-  const shared = useGLTF(KAYKIT_ANIMATIONS);
+  const shared = useGLTF(assetUrl(KAYKIT_ANIMATIONS));
   const rig = rigFor(url);
   const lite = useLiteMaterials();
   const character = useMemo(() => {

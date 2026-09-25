@@ -1,5 +1,6 @@
 // Shared input state. Written by DOM listeners / touch UI, read inside useFrame.
 
+import type { EmoteId } from "../data/emotes";
 import { useSettings } from "./settings";
 
 export interface InputState {
@@ -19,6 +20,8 @@ export interface InputState {
   abilityQueued: number | null;
   /** Lock onto / cycle / release a target. */
   lockQueued: boolean;
+  /** Emote to start (or, if already playing, stop). */
+  emoteQueued: EmoteId | null;
   /** Camera orbit, radians. */
   yaw: number;
   pitch: number;
@@ -38,6 +41,7 @@ export const input: InputState = {
   dodgeQueued: false,
   abilityQueued: null,
   lockQueued: false,
+  emoteQueued: null,
   yaw: Math.PI,
   pitch: 0.34,
   touchLook: false,
@@ -75,6 +79,7 @@ export function resetInput() {
   input.dodgeQueued = false;
   input.abilityQueued = null;
   input.lockQueued = false;
+  input.emoteQueued = null;
 }
 
 /** Fold keyboard + touch into the movement axes. Called once per frame. */

@@ -2,6 +2,7 @@ import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar, CombatStates } from "./Cooldowns";
+import { EmotePicker } from "./Emotes";
 import { Tips } from "./Tips";
 import { usePresence } from "../online/presence";
 import { useAccount } from "../online/account";
@@ -278,6 +279,7 @@ function PortraitMenuButtons() {
       >
         Menu
       </button>
+      <EmotePicker buttonClass={btn} openTo="left" />
     </div>
   );
 }
@@ -423,6 +425,9 @@ export function Hud() {
             </span>
             <span>
               <b className="text-[var(--gilt)]">Esc</b> pause
+            </span>
+            <span>
+              <b className="text-[var(--gilt)]">V C X</b> wave · cheer · sit
             </span>
             <span>
               <b className="text-[var(--gilt)]">P</b> party (signed in)
