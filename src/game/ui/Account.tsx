@@ -251,9 +251,17 @@ export function NewPasswordDialog() {
   if (!recovering) return null;
   const mismatch = again.length > 0 && again !== password;
   return (
-    <div className="fixed inset-0 z-[56] flex items-center justify-center bg-[var(--ink)]/85 p-4">
+    <div
+      className="fixed inset-0 z-[56] flex items-center justify-center bg-[var(--ink)]/85 p-4"
+      style={{
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+      }}
+    >
+      {/* Capped and scrollable like the account form: with the keyboard up on a
+          small phone, Save must stay reachable. */}
       <form
-        className="w-full max-w-md rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
         onSubmit={async (e) => {
           e.preventDefault();
           if (mismatch) return;
