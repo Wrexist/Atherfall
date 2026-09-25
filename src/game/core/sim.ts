@@ -10,16 +10,17 @@ import {
   COMBO_GRACE,
   DODGE,
   GALE,
+  SHOTS,
   SWINGS,
-  WARD,
-  abilityUnlocked,
   type AbilityId,
 } from "../data/combat";
+import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
+import { QUESTS } from "../data/quests";
+import { abilityUnlocked } from "./rules";
 import { enemyDef } from "../data/enemies";
 import { rollLoot } from "../data/loot";
-import { STARTER_QUEST } from "../data/quests";
 import { ITEMS } from "../data/items";
-import { COLLIDERS, NPCS, SPAWNS } from "../world/layout";
+import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
 import { REGIONS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
 import { sfx } from "./audio";
 import { input } from "./input";
@@ -85,6 +86,7 @@ export interface DropRuntime {
   itemId?: string | undefined;
   potion: boolean;
   gold: number;
+  shards: number;
   born: number;
   taken: boolean;
 }
@@ -113,6 +115,34 @@ export interface FloaterRuntime {
 }
 
 export type PlayerAction = "none" | "attack" | "dodge" | "gale" | "burst" | "ward-cast";
+
+export interface ProjectileRuntime {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vz: number;
+  travelled: number;
+  range: number;
+  damage: number;
+  crit: boolean;
+  pierce: boolean;
+  radius: number;
+  color: string;
+  hit: Set<string>;
+  big: boolean;
+}
+
+export interface RainRuntime {
+  x: number;
+  z: number;
+  r: number;
+  born: number;
+  ticks: number[];
+  next: number;
+  mult: number;
+}
 
 export interface PlayerRuntime {
   x: number;
@@ -143,6 +173,11 @@ export interface PlayerRuntime {
   dodgeDirZ: number;
   cooldowns: Record<AbilityId, number>;
   wardT: number;
+  shieldHp: number;
+  shieldT: number;
+  hasteT: number;
+  /** Ability driving the current dash/leap/burst action. */
+  abilityId: AbilityId | null;
   hurtT: number;
   invuln: number;
   hitFlash: number;
@@ -180,8 +215,12 @@ function freshPlayer(): PlayerRuntime {
     dodgeIframe: 0,
     dodgeDirX: 0,
     dodgeDirZ: 1,
-    cooldowns: { galestep: 0, emberburst: 0, barkward: 0 },
+    cooldowns: { galestep: 0, emberburst: 0, barkward: 0, vault: 0, arrowrain: 0, secondwind: 0, blink: 0, frostnova: 0, aegis: 0 },
     wardT: 0,
+    shieldHp: 0,
+    shieldT: 0,
+    hasteT: 0,
+    abilityId: null,
     hurtT: 0,
     invuln: 0,
     hitFlash: 0,
@@ -198,6 +237,8 @@ export const world = {
   drops: [] as DropRuntime[],
   sparks: [] as SparkRuntime[],
   floaters: [] as FloaterRuntime[],
+  projectiles: [] as ProjectileRuntime[],
+  rains: [] as RainRuntime[],
   defeated: new Set<string>(),
   cameraShake: 0,
   /** Remaining hit-pause; the simulation freezes while > 0. */
@@ -209,6 +250,7 @@ export const world = {
 let dropId = 0;
 let sparkId = 0;
 let floaterId = 0;
+let projectileId = 0;
 export const SEED = 20260925;
 let rand: () => number = mulberry32(SEED);
 let saveTimer = 0;
@@ -265,6 +307,8 @@ export function initWorld(save: SaveFile | null) {
   world.drops.length = 0;
   world.sparks.length = 0;
   world.floaters.length = 0;
+  world.projectiles.length = 0;
+  world.rains.length = 0;
   world.stats = { swings: 0, hits: 0, evades: 0 };
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
@@ -299,17 +343,21 @@ export function snapshot(): SaveFile {
     v: SAVE_VERSION,
     savedAt: Date.now(),
     player: { x: world.player.x, y: world.player.y, z: world.player.z, yaw: world.player.yaw },
+    archetype: s.archetype,
     hp: s.hp,
     level: s.level,
     xp: s.xp,
     gold: s.gold,
+    shards: s.shards,
     potions: s.potions,
     inventory: s.inventory,
     equipped: s.equipped,
+    questIdx: s.questIdx,
     questStep: s.questStep,
     questKills: s.questKills,
     questComplete: s.questComplete,
-    shoreUnlocked: s.shoreUnlocked,
+    barrowUnlocked: s.barrowUnlocked,
+    codex: s.codex,
     deaths: s.deaths,
     kills: s.kills,
     elapsed: s.elapsed,
@@ -328,17 +376,21 @@ export function loadSaveIntoStore(): SaveFile | null {
   const save = readSave();
   if (!save) return null;
   useGame.getState().hydrate({
+    archetype: save.archetype,
     hp: save.hp,
     level: save.level,
     xp: save.xp,
     gold: save.gold,
+    shards: save.shards,
     potions: save.potions,
     inventory: save.inventory,
     equipped: save.equipped,
+    questIdx: save.questIdx,
     questStep: save.questStep,
     questKills: save.questKills,
     questComplete: save.questComplete,
-    shoreUnlocked: save.shoreUnlocked,
+    barrowUnlocked: save.barrowUnlocked,
+    codex: save.codex,
     deaths: save.deaths,
     kills: save.kills,
     elapsed: save.elapsed,
@@ -350,8 +402,9 @@ export function loadSaveIntoStore(): SaveFile | null {
 function resolveCollisions(pos: { x: number; z: number }, radius: number) {
   // Two passes so being wedged between neighbouring colliders (fence posts,
   // cottage corners) resolves instead of jittering in place.
+  const gateShut = !useGame.getState().barrowUnlocked;
   for (let pass = 0; pass < 2; pass++) {
-    for (const c of COLLIDERS) {
+    for (const c of gateShut ? [...COLLIDERS, BARROW_GATE] : COLLIDERS) {
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
       const min = c.r + radius;
@@ -428,24 +481,22 @@ function playerHasWeapon() {
   return world.drops.some((d) => !d.taken && d.itemId && ITEMS[d.itemId]?.slot === "weapon");
 }
 
+function pushDrop(x: number, z: number, part: Partial<DropRuntime>) {
+  dropId += 1;
+  world.drops.push({ id: dropId, x, y: heightAt(x, z), z, potion: false, gold: 0, shards: 0, born: world.time, taken: false, ...part });
+}
+
 function dropLoot(enemy: EnemyRuntime) {
   const def = enemyDef(enemy.type);
-  const loot = rollLoot(def.lootTable, rand);
-  // The starter quest requires equipping a weapon: guarantee the first one
-  // so the tutorial can never stall on bad luck.
-  if (!def.boss && !playerHasWeapon()) loot.itemId = "wayfarer-blade";
-  if (!loot.itemId && !loot.potion && loot.gold <= 0) return;
-  dropId += 1;
-  world.drops.push({
-    id: dropId,
-    x: enemy.x,
-    y: heightAt(enemy.x, enemy.z),
-    z: enemy.z,
-    itemId: loot.itemId,
-    potion: loot.potion,
-    gold: loot.gold,
-    born: world.time,
-    taken: false,
+  const loot = rollLoot(def.lootTable, regionAt(enemy.x, enemy.z), rand);
+  // The starter quest requires equipping a weapon: guarantee the first one.
+  if (!def.boss && !playerHasWeapon() && !loot.items.some((id) => ITEMS[id]?.slot === "weapon")) loot.items.unshift("wayfarer-blade");
+  const bounty = statsFor(useGame.getState()).mods.bounty ?? 0;
+  const gold = Math.round(loot.gold * (1 + bounty));
+  pushDrop(enemy.x, enemy.z, { potion: loot.potion, gold, shards: loot.shards, itemId: loot.items[0] });
+  loot.items.slice(1).forEach((itemId, i) => {
+    const a = (i + 1) * 2.1;
+    pushDrop(enemy.x + Math.cos(a) * 1.4, enemy.z + Math.sin(a) * 1.4, { itemId });
   });
 }
 
@@ -464,7 +515,8 @@ function killEnemy(enemy: EnemyRuntime) {
   store.registerKill(enemy.type);
   if (def.boss) {
     useGame.setState({ bossBar: null });
-    store.toast(`${def.name} falls. The arch goes quiet.`, "quest");
+    store.toast(`${def.name} falls! Boss reward dropped.`, "quest");
+    spark(enemy.x, enemy.y + 0.2, enemy.z, "#ffd27a", 7, true, 1.1);
   }
   saveNow();
 }
