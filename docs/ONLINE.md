@@ -9,7 +9,9 @@ Aetherfall plays fully offline. When a backend is configured, three things switc
 
 1. **Enable Lovable Cloud.** In the Lovable editor, open the **Cloud** tab and enable it. Lovable creates the backend and fills in `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env`. The game picks these up automatically.
 2. **Create the tables and permissions.** Ask the Lovable agent:
-   > Apply the SQL migration in `supabase/migrations/20260925120000_online_foundation.sql` to the Cloud database.
+   > Apply the SQL migrations in `supabase/migrations/` to the Cloud database, in filename order.
+
+   (If you already applied `…_online_foundation.sql`, only the newer files are needed.)
 3. **Check sign-in settings.** In **Cloud → Users → Auth settings**, keep **Email** sign-in on. Email confirmation can stay on: the game tells new players to confirm, then sign in.
 
 That's it. The title screen now shows **Sign in · play online**.
@@ -38,7 +40,7 @@ Everything below was run against a real local Supabase stack, the same software 
 | Accounts | `src/game/online/account.ts`, `src/game/ui/Account.tsx` | Sign-in is offered on the title screen only (that's where cloud and device saves are reconciled). |
 | Cloud saves | `src/game/online/cloudSave.ts` | See the rules below. |
 | Presence | `src/game/online/presence.ts`, `src/game/render/RemotePlayers.tsx` | Private Realtime channel `world:dawnreach`. See the rules below. |
-| Database | `supabase/migrations/…_online_foundation.sql` | See the rules below. |
+| Database | `supabase/migrations/*.sql` | See the rules below. |
 | Glue | `src/game/online/useOnline.ts` | Wires it all to the game lifecycle, and does nothing without a backend. |
 
 **Cloud save rules**
@@ -49,6 +51,9 @@ Everything below was run against a real local Supabase stack, the same software 
   - A newer cloud save is offered as a choice, never forced.
   - A cloud-only save is loaded.
 - Uploads only start after that comparison, so an old device can never overwrite newer progress made elsewhere.
+- The title screen waits for the comparison (at most 8s; if the server doesn't answer, play continues from the device with uploads off).
+- Every cloud save has a revision number that only the server sets (+1 on every change). A device uploads "on top of" the revision it last saw, so it can never overwrite a save another device made in the meantime, however wrong either device's clock is. If that happens, the game keeps playing from the device, stops syncing and tells the player to restart to choose.
+- One device's uploads go one at a time, in order, the title screen's included, so a slow request can't land after a newer one or be mistaken for another device.
 
 **Presence rules**
 - Each player sends 5 updates per second while moving, and a heartbeat every 3s while still.
@@ -58,7 +63,7 @@ Everything below was run against a real local Supabase stack, the same software 
 
 **Database rules**
 - `profiles` are public to read; each player can edit only their own.
-- `saves` are private to their owner, capped at 256KB.
+- `saves` are private to their owner and capped at 256KB. Players can read and delete their own save, but can only write it through `upload_save()`, which refuses an upload based on an old revision. Direct inserts and updates are blocked, so an old game version or a hand-made request can't skip that check.
 - A sign-up trigger creates the profile.
 - Only signed-in players may use `world:*` channels.
 

@@ -1,8 +1,19 @@
 // Online layer logic that doesn't need a server. Run with: bun test ./tests
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import type { SaveFile } from "../src/game/core/persistence";
-import { nameProblem } from "../src/game/online/account";
-import { compareSaves } from "../src/game/online/cloudSave";
+import { nameProblem, useAccount } from "../src/game/online/account";
+import {
+  CHECK_TIMEOUT,
+  cloud,
+  compareSaves,
+  dropPendingUpload,
+  flushUpload,
+  queueUpload,
+  resolveCloudChoice,
+  setBackgrounded,
+  startCloudSync,
+  useCloudSync,
+} from "../src/game/online/cloudSave";
 import {
   HEARTBEAT_MS,
   MAX_SHOWN,
@@ -27,6 +38,201 @@ describe("cloud save reconciliation", () => {
     expect(compareSaves(save(1000), save(1500))).toBe("same"); // within 2s
     expect(compareSaves(save(1000), save(90_000))).toBe("cloud-newer");
     expect(compareSaves(save(90_000), save(1000))).toBe("local-newer");
+  });
+});
+
+describe("cloud save syncing", () => {
+  const realCloud = { ...cloud };
+  /** A pretend server: one save per account, with the revision the real one keeps. */
+  let server: { save: SaveFile | null; revision: number };
+  let uploads: { save: SaveFile; base: number }[] = [];
+  let adopted: SaveFile[] = [];
+  let localSave: SaveFile | null = null;
+  const local = { read: () => localSave, adopt: (s: SaveFile) => void adopted.push(s) };
+  const acceptUpload = async (save: SaveFile, base: number) => {
+    uploads.push({ save, base });
+    if (base !== server.revision) return { ok: false as const, conflict: true };
+    server = { save, revision: server.revision + 1 };
+    return { ok: true as const, revision: server.revision };
+  };
+  /** A server reply we release by hand, like a slow network. */
+  const deferred = <T>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const onServer = (save: SaveFile, revision: number) => {
+    server = { save, revision };
+    cloud.fetch = async () => ({ save, revision });
+  };
+
+  beforeEach(() => {
+    server = { save: null, revision: 0 };
+    uploads = [];
+    adopted = [];
+    localSave = null;
+    cloud.fetch = async () =>
+      server.save ? { save: server.save, revision: server.revision } : null;
+    cloud.upload = acceptUpload;
+    useAccount.setState({ status: "signed-in", userId: "u1" });
+    dropPendingUpload();
+    setBackgrounded(false);
+  });
+  afterEach(() => {
+    Object.assign(cloud, realCloud);
+    dropPendingUpload();
+    useAccount.setState({ status: "unavailable", userId: null });
+  });
+
+  test("the check finishes even after the title screen is gone, then uploads resume", async () => {
+    // Regression: pressing Continue while the check was pending used to drop
+    // its result, leaving cloud uploads off for the whole session.
+    server = { save: save(1000, 2), revision: 4 };
+    const reply = deferred<{ save: SaveFile; revision: number } | null>();
+    cloud.fetch = () => reply.promise;
+    localSave = save(90_000, 3);
+    const done = startCloudSync("u1", local);
+    expect(useCloudSync.getState().phase).toBe("checking"); // title screen waits on this
+    reply.resolve({ save: save(1000, 2), revision: 4 }); // the title screen is long gone by now
+    await done;
+    expect(useCloudSync.getState().phase).toBe("done");
+    expect(uploads).toEqual([{ save: localSave, base: 4 }]); // newer device progress went up
+    queueUpload(save(95_000, 3));
+    await flushUpload();
+    expect(uploads.map((u) => u.base)).toEqual([4, 5]); // each on top of the last
+  });
+
+  test("a save made after the hide handler already ran is uploaded at once", async () => {
+    // Regression: the game's save-on-hide ran after our flush-on-hide, so the
+    // final save waited on a timer that a backgrounded phone may never fire.
+    await startCloudSync("u1", local);
+    setBackgrounded(true); // our listener first: nothing pending yet
+    queueUpload(save(50_000, 4)); // then the game's save-on-hide
+    expect(uploads.map((u) => u.save.savedAt)).toEqual([50_000]);
+    setBackgrounded(false);
+    queueUpload(save(60_000, 4)); // back in the foreground: batched again
+    expect(uploads.length).toBe(1);
+  });
+
+  test("uploads go one at a time, so a slow one can't land after a newer one", async () => {
+    await startCloudSync("u1", local);
+    const slow = deferred<void>();
+    cloud.upload = async (s, base) => {
+      if (!uploads.length) await slow.promise; // the first request is stuck on a bad network
+      return acceptUpload(s, base);
+    };
+    queueUpload(save(1000, 2));
+    const first = flushUpload();
+    queueUpload(save(2000, 3));
+    const second = flushUpload(); // must wait for the first
+    await Promise.resolve();
+    expect(uploads).toEqual([]);
+    slow.resolve();
+    await Promise.all([first, second]);
+    expect(uploads.map((u) => [u.save.level, u.base])).toEqual([
+      [2, 0],
+      [3, 1],
+    ]);
+    expect(server.save!.level).toBe(3);
+  });
+
+  test("starting to play while the title screen's upload is still sending doesn't fake a conflict", async () => {
+    // Regression (review of #3): the reconciliation upload bypassed the queue,
+    // so the first in-game save raced it on the same revision and one of them
+    // was taken for another device's save.
+    server = { save: save(1000, 2), revision: 4 };
+    localSave = save(90_000, 3);
+    const slow = deferred<void>();
+    cloud.upload = async (s, base) => {
+      if (!uploads.length) await slow.promise; // the title screen's upload is slow
+      return acceptUpload(s, base);
+    };
+    const sync = startCloudSync("u1", local);
+    await new Promise((r) => setTimeout(r, 0));
+    queueUpload(save(95_000, 3)); // the player pressed Continue and the game saved
+    const game = flushUpload();
+    slow.resolve();
+    await Promise.all([sync, game]);
+    expect(useCloudSync.getState().phase).toBe("done");
+    expect(uploads.map((u) => [u.save.savedAt, u.base])).toEqual([
+      [90_000, 4],
+      [95_000, 5],
+    ]);
+    expect(server.save!.savedAt).toBe(95_000);
+  });
+
+  test("another device's save is never overwritten: syncing stops and the player is told", async () => {
+    onServer(save(1000, 2), 7);
+    localSave = save(1000, 2);
+    await startCloudSync("u1", local); // same save, synced at revision 7
+    server = { save: save(5000, 9), revision: 8 }; // a phone elsewhere saves
+    queueUpload(save(6000, 3));
+    await flushUpload();
+    expect(server.save!.level).toBe(9); // untouched
+    expect(useCloudSync.getState().phase).toBe("conflict");
+    expect(useCloudSync.getState().message).toMatch(/another device/i);
+    queueUpload(save(7000, 3));
+    await flushUpload();
+    expect(uploads.length).toBe(1); // no more attempts this session
+  });
+
+  test("a newer cloud save waits for the player's choice before any upload", async () => {
+    onServer(save(90_000, 7), 3);
+    localSave = save(1000, 2);
+    await startCloudSync("u1", local);
+    expect(useCloudSync.getState().phase).toBe("choice");
+    queueUpload(save(2000, 2));
+    await flushUpload();
+    expect(uploads).toEqual([]); // never overwrite newer progress made elsewhere
+    resolveCloudChoice(true, local);
+    expect(adopted.map((s) => s.level)).toEqual([7]);
+    expect(useCloudSync.getState().phase).toBe("done");
+    queueUpload(save(95_000, 7));
+    await flushUpload();
+    expect(uploads.map((u) => u.base)).toEqual([3]); // builds on the save it loaded
+  });
+
+  test("keeping this device's save uploads it as it is, whatever the clocks say", async () => {
+    // Regression: it used to be re-stamped into the future, and then the next
+    // real saves looked older and were dropped.
+    onServer(save(90_000, 7), 3);
+    localSave = save(1000, 2);
+    await startCloudSync("u1", local);
+    resolveCloudChoice(false, local);
+    await Promise.resolve();
+    expect(uploads).toEqual([{ save: localSave, base: 3 }]);
+    expect(adopted).toEqual([]); // the device already has it
+    queueUpload(save(1500, 2)); // a later save from a device whose clock is behind
+    await flushUpload();
+    expect(server.save!.savedAt).toBe(1500);
+  });
+
+  test("signing out abandons a check still waiting on the server", async () => {
+    const reply = deferred<{ save: SaveFile; revision: number } | null>();
+    cloud.fetch = () => reply.promise;
+    const done = startCloudSync("u1", local);
+    dropPendingUpload(); // sign-out
+    useAccount.setState({ status: "signed-out", userId: null });
+    reply.resolve({ save: save(90_000, 7), revision: 1 });
+    await done;
+    expect(useCloudSync.getState().phase).toBe("idle");
+    expect(adopted).toEqual([]);
+  });
+
+  test("a server that never answers doesn't hold the title screen", async () => {
+    jest.useFakeTimers();
+    try {
+      cloud.fetch = () => new Promise(() => {});
+      const done = startCloudSync("u1", local);
+      jest.advanceTimersByTime(CHECK_TIMEOUT + 1);
+      await done;
+      expect(useCloudSync.getState().phase).toBe("failed");
+      queueUpload(save(5000));
+      await flushUpload();
+      expect(uploads).toEqual([]); // unreconciled: play from the device only
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

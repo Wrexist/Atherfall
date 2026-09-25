@@ -6,11 +6,11 @@ import { ARCHETYPES, type ArchetypeId } from "../data/archetypes";
 import { nameProblem, signIn, signOut, signUp, useAccount } from "../online/account";
 import { onlineConfigured } from "../online/client";
 import {
-  compareSaves,
-  fetchCloudSave,
   flushUpload,
-  markSynced,
-  uploadSave,
+  resolveCloudChoice,
+  startCloudSync,
+  useCloudSync,
+  type LocalSaves,
 } from "../online/cloudSave";
 import { usePresence } from "../online/presence";
 
@@ -204,91 +204,51 @@ function describe(save: SaveFile) {
   return `${arche}, level ${save.level} — saved ${when}`;
 }
 
+/** How the cloud-save check reads and replaces this device's save. */
+export function useLocalSaves(onSaveChanged: (save: SaveFile | null) => void): LocalSaves {
+  const [local] = useState<LocalSaves>(() => ({
+    read: readSave,
+    adopt: (save) => {
+      writeSave(save);
+      onSaveChanged(loadSaveIntoStore());
+    },
+  }));
+  return local;
+}
+
 /**
  * On the title screen, once signed in: reconcile this device's save with the
- * cloud. Newer device progress is uploaded; a newer cloud save is offered (never
- * silently replaces progress on this device).
+ * cloud, and say how it went. The check itself lives in the cloud-save module,
+ * so it finishes even if this screen goes away; the title screen waits for it.
  */
-export function CloudSaveSync({
-  onSaveChanged,
-}: {
-  onSaveChanged: (save: SaveFile | null) => void;
-}) {
+export function CloudSaveSync({ local }: { local: LocalSaves }) {
   const userId = useAccount((a) => a.userId);
-  const [choice, setChoice] = useState<{ local: SaveFile; cloud: SaveFile } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
+  const message = useCloudSync((c) => c.message);
   useEffect(() => {
-    if (!onlineConfigured || !userId) return undefined;
-    let cancelled = false;
-    setMessage("Checking your cloud save…");
-    fetchCloudSave()
-      .then(async (cloud) => {
-        if (cancelled) return;
-        const local = readSave();
-        const cmp = compareSaves(local, cloud);
-        if (cmp === "only-cloud") {
-          writeSave(cloud!);
-          onSaveChanged(loadSaveIntoStore());
-          markSynced(userId);
-          setMessage("Cloud save loaded.");
-        } else if (cmp === "cloud-newer") {
-          setChoice({ local: local!, cloud: cloud! }); // synced once the player chooses
-          setMessage(null);
-        } else if (cmp === "only-local" || cmp === "local-newer") {
-          markSynced(userId);
-          setMessage(
-            (await uploadSave(local!)) ? "This device's journey is now saved in the cloud." : null,
-          );
-        } else {
-          markSynced(userId);
-          setMessage(cmp === "same" ? "Cloud save is up to date." : null);
-        }
-      })
-      .catch(
-        () =>
-          !cancelled && setMessage("Couldn't reach your cloud save — playing from this device."),
-      );
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, onSaveChanged]);
-
-  if (choice) {
-    return (
-      <div className="mt-4 rounded-lg border border-[var(--gilt)]/40 bg-[var(--ink)]/50 p-3">
-        <p className="text-sm font-semibold text-[var(--parchment)]">
-          Your cloud save is newer than this device's.
-        </p>
-        <p className="mt-1 text-xs text-[var(--parchment)]/75">Cloud: {describe(choice.cloud)}</p>
-        <p className="text-xs text-[var(--parchment)]/75">This device: {describe(choice.local)}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            className={primary}
-            onClick={() => {
-              writeSave(choice.cloud);
-              onSaveChanged(loadSaveIntoStore());
-              markSynced(userId);
-              setChoice(null);
-              setMessage("Cloud save loaded.");
-            }}
-          >
-            Use cloud save
-          </button>
-          <button
-            className={secondary}
-            onClick={() => {
-              void uploadSave(choice.local);
-              markSynced(userId);
-              setChoice(null);
-              setMessage("Kept this device's journey (and saved it to the cloud).");
-            }}
-          >
-            Keep this device's
-          </button>
-        </div>
-      </div>
-    );
-  }
+    if (onlineConfigured && userId) void startCloudSync(userId, local);
+  }, [userId, local]);
   return message ? <p className="mt-2 text-xs text-[var(--parchment)]/70">{message}</p> : null;
+}
+
+/** "Your cloud save is newer": shown in place of the start buttons until answered. */
+export function CloudSaveChoice({ local }: { local: LocalSaves }) {
+  const choice = useCloudSync((c) => c.choice);
+  if (!choice) return null;
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--gilt)]/40 bg-[var(--ink)]/50 p-3">
+      <p className="text-sm font-semibold text-[var(--parchment)]">
+        Your cloud save is newer than this device's.
+      </p>
+      <p className="mt-1 text-xs text-[var(--parchment)]/75">Cloud: {describe(choice.cloud)}</p>
+      <p className="text-xs text-[var(--parchment)]/75">This device: {describe(choice.local)}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className={primary} onClick={() => resolveCloudChoice(true, local)}>
+          Use cloud save
+        </button>
+        <button className={secondary} onClick={() => resolveCloudChoice(false, local)}>
+          Keep this device's
+        </button>
+      </div>
+    </div>
+  );
 }

@@ -124,6 +124,25 @@ describe("saves", () => {
     expect(s.gold).toBe(0);
   });
 
+  test("damaged equipped entries are rebuilt: usable uid, numeric plus, right slot", () => {
+    const broken = JSON.parse(JSON.stringify(snapshot()));
+    broken.inventory = [{ uid: "r0", itemId: "thorn-cleaver", plus: 0 }];
+    broken.equipped = {
+      weapon: { itemId: "wayfarer-blade", plus: "sharp" }, // no uid, bad plus
+      armor: { uid: "", itemId: "wayfarer-blade", plus: 2 }, // a weapon in the armor slot
+      accessory: null,
+      relic: null,
+    };
+    const s = migrateSave(broken)!;
+    const w = s.equipped.weapon!;
+    expect(w.itemId).toBe("wayfarer-blade");
+    expect(typeof w.uid).toBe("string");
+    expect(w.uid.length).toBeGreaterThan(0);
+    expect(w.uid).not.toBe("r0"); // never collides with a repaired satchel uid
+    expect(w.plus).toBe(0);
+    expect(s.equipped.armor).toBeNull();
+  });
+
   describe("with storage", () => {
     const mem = new Map<string, string>();
     const g = globalThis as unknown as { window?: unknown };

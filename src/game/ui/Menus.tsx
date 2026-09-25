@@ -3,7 +3,14 @@ import { QUESTS } from "../data/quests";
 import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
 import { haptic, useSettings } from "../core/settings";
-import { AccountDialog, AccountLine, CloudSaveSync } from "./Account";
+import {
+  AccountDialog,
+  AccountLine,
+  CloudSaveChoice,
+  CloudSaveSync,
+  useLocalSaves,
+} from "./Account";
+import { useCloudSync } from "../online/cloudSave";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
@@ -50,7 +57,9 @@ export function LoadingScreen({ progress }: { progress: number }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6">
       <h1 className="font-display text-4xl tracking-[0.4em] text-[var(--gilt)]">AETHERFALL</h1>
-      <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">Dawnreach</p>
+      <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
+        Dawnreach
+      </p>
       <div className="mt-8 h-1.5 w-64 overflow-hidden rounded-full bg-[var(--parchment)]/15">
         <div
           className="h-full rounded-full bg-[var(--gilt)] transition-[width] duration-200"
@@ -96,6 +105,11 @@ export function TitleScreen({
   const quality = useGame((s) => s.quality);
   const setQuality = useGame((s) => s.setQuality);
   const [showControls, setShowControls] = useState(false);
+  // Wait for the cloud save check (and the player's pick, if the cloud copy is
+  // newer) so a cloud save can't arrive mid-game or be skipped for the session.
+  const cloudBusy = useCloudSync((c) => c.phase === "checking" || c.phase === "choice");
+  const cloudChoice = useCloudSync((c) => c.choice !== null);
+  const local = useLocalSaves(onSaveChanged);
   if (screen !== "title") return null;
 
   const start = (useSave: boolean) => {
@@ -119,41 +133,49 @@ export function TitleScreen({
           Chapter one · Dawnreach
         </p>
         <p className="mt-4 text-sm leading-relaxed text-[var(--parchment)]/85">
-          Something fell out of the sky over Tidewrack Bay, and the woods around Emberhollow have not
-          been quiet since. Warden Sela is waiting by the fountain.
+          Something fell out of the sky over Tidewrack Bay, and the woods around Emberhollow have
+          not been quiet since. Warden Sela is waiting by the fountain.
         </p>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {save && (
+        {/* A pending cloud-save question replaces the start buttons, so it's never
+            below the fold on a landscape phone while they're disabled. */}
+        {cloudChoice ? (
+          <CloudSaveChoice local={local} />
+        ) : (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {save && (
+              <button
+                className="rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 py-2.5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35 disabled:opacity-50"
+                disabled={cloudBusy}
+                onClick={() => start(true)}
+              >
+                Continue — level {save.level}
+              </button>
+            )}
             <button
-              className="rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 py-2.5 text-sm font-semibold text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
-              onClick={() => start(true)}
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
+                save
+                  ? "border border-[var(--gilt)]/25 text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
+                  : "border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
+              } disabled:opacity-50`}
+              disabled={cloudBusy}
+              onClick={() => start(false)}
             >
-              Continue — level {save.level}
+              {save ? "New journey" : "Begin"}
             </button>
-          )}
-          <button
-            className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${
-              save
-                ? "border border-[var(--gilt)]/25 text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
-                : "border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 text-[var(--parchment)] hover:bg-[var(--gilt)]/35"
-            }`}
-            onClick={() => start(false)}
-          >
-            {save ? "New journey" : "Begin"}
-          </button>
-          <button
-            className="rounded-lg border border-[var(--gilt)]/25 px-4 py-2.5 text-sm text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
-            onClick={() => setShowControls((v) => !v)}
-          >
-            Controls
-          </button>
-        </div>
+            <button
+              className="rounded-lg border border-[var(--gilt)]/25 px-4 py-2.5 text-sm text-[var(--parchment)]/80 hover:bg-[var(--ink)]/40"
+              onClick={() => setShowControls((v) => !v)}
+            >
+              Controls
+            </button>
+          </div>
+        )}
+        <CloudSaveSync local={local} />
 
         {showControls && <ControlsList />}
 
         <AccountLine onOpen={() => setAccountOpen(true)} />
-        <CloudSaveSync onSaveChanged={onSaveChanged} />
 
         <div className="mt-5">
           <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
@@ -342,7 +364,9 @@ function Toggle({
       </span>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
-          on ? "border-[var(--gilt)]/70 bg-[var(--gilt)]/45" : "border-[var(--parchment)]/25 bg-[var(--ink)]/60"
+          on
+            ? "border-[var(--gilt)]/70 bg-[var(--gilt)]/45"
+            : "border-[var(--parchment)]/25 bg-[var(--ink)]/60"
         }`}
       >
         <span
@@ -365,7 +389,9 @@ function ComfortSettings() {
       <label className="mt-2 block">
         <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
           Look sensitivity
-          <span className="text-xs text-[var(--parchment)]/70">{prefs.lookSensitivity.toFixed(1)}×</span>
+          <span className="text-xs text-[var(--parchment)]/70">
+            {prefs.lookSensitivity.toFixed(1)}×
+          </span>
         </span>
         <input
           type="range"
@@ -378,7 +404,11 @@ function ComfortSettings() {
         />
       </label>
       <div className="divide-y divide-[var(--gilt)]/10">
-        <Toggle label="Invert camera up/down" on={prefs.invertY} onChange={(v) => prefs.update({ invertY: v })} />
+        <Toggle
+          label="Invert camera up/down"
+          on={prefs.invertY}
+          onChange={(v) => prefs.update({ invertY: v })}
+        />
         <Toggle
           label="Hold Attack to keep swinging"
           on={prefs.holdToAttack}
@@ -495,12 +525,21 @@ export function RotateHint() {
   if (!portrait || loading) return null;
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[var(--ink)] p-8 text-center">
-      <svg viewBox="0 0 64 64" className="h-16 w-16 animate-pulse text-[var(--gilt)]" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden>
+      <svg
+        viewBox="0 0 64 64"
+        className="h-16 w-16 animate-pulse text-[var(--gilt)]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        aria-hidden
+      >
         <rect x="20" y="6" width="24" height="44" rx="4" />
         <path d="M10 44a22 22 0 0 0 18 14M54 20A22 22 0 0 0 36 6" strokeLinecap="round" />
         <path d="M24 55l4 3-3 4M40 3l-4 3 3 4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">ROTATE YOUR DEVICE</h2>
+      <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">
+        ROTATE YOUR DEVICE
+      </h2>
       <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">
         Aetherfall plays in landscape. Turn your phone sideways to continue your journey.
       </p>
