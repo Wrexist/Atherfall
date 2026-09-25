@@ -282,7 +282,8 @@ function PlayerModel({ url }: { url: string }) {
     const p = world.player;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.yaw;
-    if (p.legs && rig.kind === "kaykit") playSplit(p.anim, p.legs, p.animKey);
+    if (p.legs && p.anim.startsWith("attack") && rig.kind === "kaykit")
+      playSplit(p.anim, p.legs, p.animKey);
     else play(p.anim, CLIP_SPEED[p.anim] ?? 1, p.animKey);
     update(dt);
     const b = body.current;

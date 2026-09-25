@@ -7,7 +7,7 @@ import { useSettings } from "../src/game/core/settings";
 import { initWorld, stepWorld, world } from "../src/game/core/sim";
 import { useGame } from "../src/game/core/store";
 import { COLLIDERS } from "../src/game/world/layout";
-import { heightAt, regionAt } from "../src/game/world/terrain";
+import { SEA_LEVEL, heightAt, regionAt } from "../src/game/world/terrain";
 
 const foe = (id: string, x: number, z: number, hp = 10, phase = "idle") => ({
   id,
@@ -111,6 +111,30 @@ describe("in the game", () => {
     run(0.6);
     const free = walk(0.5);
     expect(fighting).toBeGreaterThan(free * 0.9);
+  });
+
+  test("split walking legs never outlive the swing (swimming)", () => {
+    const p = world.player;
+    for (const e of world.enemies) e.x = e.homeX = 900;
+    // Deep water: the swim step returns early, before the animation choice.
+    let sea = { x: 0, z: 0 };
+    outer: for (let r = 60; r < 130; r += 4)
+      for (let a = 0; a < 6.28; a += 0.2) {
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        if (heightAt(x, z) < SEA_LEVEL - 3) {
+          sea = { x, z };
+          break outer;
+        }
+      }
+    p.x = sea.x;
+    p.z = sea.z;
+    p.y = SEA_LEVEL - 1;
+    p.swimming = true;
+    p.legs = "walk"; // left over from a swing just before diving in
+    run(0.3);
+    expect(p.swimming).toBe(true);
+    expect(p.legs).toBeNull();
   });
 
   test("with auto-attack off, nothing swings on its own", () => {
