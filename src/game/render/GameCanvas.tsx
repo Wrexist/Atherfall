@@ -1,6 +1,14 @@
 import { Canvas, useThree } from "@react-three/fiber";
 import { PerformanceMonitor, useGLTF } from "@react-three/drei";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import * as THREE from "three";
 import { SAVER_FPS, frameDue } from "../core/frameCap";
 import { useSettings } from "../core/settings";
@@ -37,7 +45,48 @@ function FrameCap() {
   return null;
 }
 
+/**
+ * A model that fails to download (a dropped connection on mobile data) throws
+ * out of the 3D scene. Catch it here and offer a retry in the game's own
+ * look, instead of the site's generic error page.
+ */
+class LoadErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  override render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="fixed inset-0 z-[55] flex flex-col items-center justify-center gap-4 bg-[var(--ink)] p-6 text-center">
+        <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">
+          CONNECTION LOST
+        </h2>
+        <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">
+          Part of the world didn't download. Check your connection and try again. Your progress is
+          safe.
+        </p>
+        <button
+          className="min-h-11 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 text-sm font-semibold text-[var(--parchment)]"
+          // What already arrived is cached, so the retry picks up where it stopped.
+          onClick={() => window.location.reload()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
+
 export function GameCanvas() {
+  return (
+    <LoadErrorBoundary>
+      <GameCanvasInner />
+    </LoadErrorBoundary>
+  );
+}
+
+function GameCanvasInner() {
   const quality = useGame((s) => s.quality);
   // Render continuously only while something moves; menus get on-demand frames
   // so a paused phone isn't burning battery redrawing a still scene.

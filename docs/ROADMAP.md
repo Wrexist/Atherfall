@@ -105,7 +105,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. A quest marker shows the distance over the current goal (the NPC, the area, or the nearest living target) and slides to the screen edge, pointing the way, when the goal is off-screen. | ✅ |
 | 50 | P2 | Enemy knockback is a quick decaying slide instead of a teleport. Getting hit costs a moment of control so your own knockback reads. Nearby enemies push apart instead of stacking. Camera shake is smooth, frame-rate independent, with a small roll kick. | ✅ |
 | 51 | P2 | The world keeps running behind the journal (it's an MMO). While enemies are hunting you, the journal shows an "In combat!" banner, and the Bag and Map buttons show a pulsing red dot (screen readers hear "enemies near"). | ✅ |
-| 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |
+| 52 | P2 | **Loading screen**: gameplay tips rotate while the world downloads. If progress stands still for 15s, a Retry button appears. If a download fails outright, a "Connection lost" screen with Retry replaces the site's generic error page (it used to take the whole game down). Files that already arrived are cached, so a retry resumes. | ✅ |
 
 ## Phase 4 — Remaining gameplay bugs ✅ (tests in `tests/regressions.test.ts` and `tests/world.test.ts`)
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QUESTS } from "../data/quests";
 import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
@@ -12,6 +12,7 @@ import {
 } from "./Account";
 import { useCloudSync } from "../online/cloudSave";
 import { PHONE_SIDEWAYS } from "./layout";
+import { LOADING_TIPS, loadStalled } from "../core/loading";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
@@ -58,13 +59,34 @@ function enterMobileFullscreen() {
 const freshSeed = () => (Math.random() * 2 ** 32) >>> 0;
 
 export function LoadingScreen({ progress }: { progress: number }) {
+  const [tip, setTip] = useState(0);
+  const [stalled, setStalled] = useState(false);
+  const lastChange = useRef(Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setTip((t) => (t + 1) % LOADING_TIPS.length), 4500);
+    return () => clearInterval(iv);
+  }, []);
+  // Progress moved: the clock for "stuck" starts again.
+  useEffect(() => {
+    lastChange.current = Date.now();
+    setStalled(false);
+  }, [progress]);
+  useEffect(() => {
+    const iv = setInterval(
+      () => setStalled(loadStalled(progress, lastChange.current, Date.now())),
+      1000,
+    );
+    return () => clearInterval(iv);
+  }, [progress]);
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6">
-      <h1 className="font-display text-4xl tracking-[0.4em] text-[var(--gilt)]">AETHERFALL</h1>
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
+      <h1 className="font-display text-3xl tracking-[0.3em] text-[var(--gilt)] sm:text-4xl sm:tracking-[0.4em]">
+        AETHERFALL
+      </h1>
       <p className="mt-2 text-xs uppercase tracking-[0.3em] text-[var(--parchment)]/50">
         Dawnreach
       </p>
-      <div className="mt-8 h-1.5 w-64 overflow-hidden rounded-full bg-[var(--parchment)]/15">
+      <div className="mt-8 h-1.5 w-64 max-w-full overflow-hidden rounded-full bg-[var(--parchment)]/15">
         <div
           className="h-full rounded-full bg-[var(--gilt)] transition-[width] duration-200"
           style={{ width: `${Math.round(progress * 100)}%` }}
@@ -73,6 +95,28 @@ export function LoadingScreen({ progress }: { progress: number }) {
       <p className="mt-3 text-[11px] text-[var(--parchment)]/45">
         Raising the pines… {Math.round(progress * 100)}%
       </p>
+      {stalled ? (
+        <div className="mt-6 flex max-w-xs flex-col items-center gap-3">
+          <p className="text-sm text-[var(--parchment)]/80">
+            Still loading. Your connection may be slow or have dropped.
+          </p>
+          <button
+            className="min-h-11 rounded-lg border border-[var(--gilt)]/50 bg-[var(--gilt)]/20 px-5 text-sm font-semibold text-[var(--parchment)]"
+            // Files that already arrived are cached, so a retry picks up where it stopped.
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <p
+          className="mt-6 min-h-10 max-w-xs text-sm leading-snug text-[var(--parchment)]/70"
+          aria-live="polite"
+        >
+          <span className="text-[var(--gilt)]">✦ </span>
+          {LOADING_TIPS[tip]}
+        </p>
+      )}
     </div>
   );
 }

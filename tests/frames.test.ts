@@ -29,3 +29,12 @@ describe("battery saver", () => {
     expect(drawnPerSecond(24)).toBe(24);
   });
 });
+
+describe("loading screen", () => {
+  test("offers a retry only after progress has stood still for a while", async () => {
+    const { STALL_MS, loadStalled } = await import("../src/game/core/loading");
+    expect(loadStalled(0.4, 0, STALL_MS - 1)).toBe(false);
+    expect(loadStalled(0.4, 0, STALL_MS)).toBe(true);
+    expect(loadStalled(1, 0, STALL_MS * 3)).toBe(false); // finished: nothing to retry
+  });
+});
