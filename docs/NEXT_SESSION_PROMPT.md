@@ -15,11 +15,11 @@ only for decisions that are genuinely mine: money, accounts, or product directio
 
 ## 0. Get the latest code
 
-1. If there is no checkout, clone `https://github.com/Wrexist/Atherfall.git` and `cd` into it. Then run `git fetch --all --prune`.
-2. Check PR https://github.com/Wrexist/Atherfall/pull/1 (branch `claude/zen-sagan-8nhykx`):
-   - **If it is merged:** `git checkout main && git pull`, then create a new branch for this session's work, e.g. `git checkout -b dev/next-<date>`.
-   - **If it is still open:** `git checkout claude/zen-sagan-8nhykx && git pull`, and keep working on that branch. Pushing updates PR #1.
-3. If `main` has commits the branch lacks (e.g. edits made in Lovable), bring them in with `git merge origin/main` (never rebase) and resolve any conflicts.
+1. If there is no checkout, clone `https://github.com/Wrexist/Atherfall.git` and `cd` into it.
+2. Run `git fetch --all --prune && git checkout main && git pull`.
+   PR #1 (mobile foundations, performance, controls, online) is already merged into `main`.
+3. Create a branch for this session's work, e.g. `git checkout -b dev/next-<date>`. Push it and open a PR into `main` when a batch is ready. `main` is the branch Lovable syncs, so only merge working code into it.
+4. If `main` later gets new commits (e.g. edits made in Lovable), bring them in with `git merge origin/main` (never rebase) and resolve any conflicts.
 
 ## 1. Rules (important)
 
@@ -74,9 +74,9 @@ npx vite build                   # must succeed
 
 ## 5. What to do, in priority order
 
-**A. PR hygiene first.**
-- Read the review comments on PR #1 (Codex and CodeRabbit bots). Verify each finding against the code. Fix the real ones with tests; reply briefly on the false ones.
-- Once PR #1 is green and I've merged it, continue from `main`.
+**A. Review leftovers first.**
+- PR #1 is merged, but its review bots (Codex, CodeRabbit) may have left comments after the merge. Read them on https://github.com/Wrexist/Atherfall/pull/1.
+- Verify each finding against the code on `main`, and fix the real ones (with tests) in your new branch.
 
 **B. Remaining ⬜/◐ roadmap items** (small, high value):
 1. **#51, combat while the journal is open.** Keep the world running (it's an MMO), but show an "In combat!" warning in the journal, and let the Bag/Map buttons show enemies are near.
