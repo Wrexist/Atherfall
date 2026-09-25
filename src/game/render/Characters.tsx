@@ -372,6 +372,51 @@ export function EnemyViews() {
   );
 }
 
+/** A name plate (and optional quest mark) drawn once to a canvas, for a sprite. */
+function plateTexture(name: string, quest: boolean) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 192;
+  const g = c.getContext("2d")!;
+  g.font = "800 44px Nunito, system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const w = Math.min(500, g.measureText(name).width + 44);
+  // Dark pill with the name, like the mockup.
+  g.fillStyle = "rgba(14,22,36,0.72)";
+  g.beginPath();
+  g.roundRect(256 - w / 2, 128, w, 58, 29);
+  g.fill();
+  g.fillStyle = "#f4f1ea";
+  g.fillText(name, 256, 159);
+  if (quest) {
+    // Gold diamond with a "!" above the name.
+    g.save();
+    g.translate(256, 62);
+    g.rotate(Math.PI / 4);
+    const grad = g.createLinearGradient(-40, -40, 40, 40);
+    grad.addColorStop(0, "#ffe68a");
+    grad.addColorStop(1, "#e89b2e");
+    g.fillStyle = grad;
+    g.strokeStyle = "#3a2206";
+    g.lineWidth = 8;
+    g.beginPath();
+    g.roundRect(-38, -38, 76, 76, 10);
+    g.fill();
+    g.stroke();
+    g.restore();
+    g.fillStyle = "#3a2206";
+    g.font = "900 64px Nunito, system-ui, sans-serif";
+    g.fillText("!", 256, 66);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** How near the hero must be for a villager's name to show. */
+const PLATE_NEAR = 16;
+
 function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const group = useRef<THREE.Group>(null);
   const { scene, animations, rig } = useCharacter(npc.model, npc.tint);
@@ -379,7 +424,7 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const camera = useThree((s) => s.camera);
   const questStep = useGame((s) => s.questStep);
   const complete = useGame((s) => s.questComplete);
-  const marker = useRef<THREE.Mesh>(null);
+  const marker = useRef<THREE.Sprite>(null);
 
   useEffect(() => {
     play("idle");
@@ -388,13 +433,15 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
   const questIdx = useGame((s) => s.questIdx);
   const step = QUESTS[questIdx]?.steps[questStep];
   const wants = npc.id === "sela" && !complete && step?.kind === "talk";
+  const plate = useMemo(() => plateTexture(npc.name, wants), [npc.name, wants]);
+  useEffect(() => () => plate.dispose(), [plate]);
 
   useFrame((state, dt) => {
     if (Math.hypot(npc.x - camera.position.x, npc.z - camera.position.z) < ANIM_FAR) update(dt);
     if (marker.current) {
-      marker.current.visible = wants;
-      marker.current.position.y = 3 + Math.sin(state.clock.elapsedTime * 2.4) * 0.16;
-      marker.current.rotation.y += 0.02;
+      const p = world.player;
+      marker.current.visible = wants || Math.hypot(npc.x - p.x, npc.z - p.z) < PLATE_NEAR;
+      marker.current.position.y = 3.35 + (wants ? Math.sin(state.clock.elapsedTime * 2.4) * 0.1 : 0);
     }
   });
 
@@ -403,15 +450,45 @@ function NpcView({ npc }: { npc: (typeof NPCS)[number] }) {
       <group ref={group} scale={npc.scale * rig.scale}>
         <primitive object={scene} />
       </group>
-      <mesh ref={marker} position={[0, 3, 0]} visible={false}>
-        <octahedronGeometry args={[0.28, 0]} />
-        <meshStandardMaterial
-          color="#f6c453"
-          emissive="#f0a92c"
-          emissiveIntensity={1.4}
-          roughness={0.4}
-        />
+      {/* Name plate (and the quest "!"), always facing the camera. */}
+      <sprite ref={marker} position={[0, 3.35, 0]} scale={[3.4, 1.28, 1]} visible={false} renderOrder={5}>
+        <spriteMaterial map={plate} transparent depthWrite={false} />
+      </sprite>
+    </group>
+  );
+}
+
+/**
+ * The Warden's statue on the fountain: the knight model in a proud pose,
+ * turned to stone (posed once, never animated).
+ */
+export function Statue({ x, z, y, scale }: { x: number; z: number; y: number; scale: number }) {
+  const group = useRef<THREE.Group>(null);
+  const { scene, animations, rig } = useCharacter("/models/kaykit/knight.glb");
+  const { play, update } = useAnimator(group, animations, rig);
+  useEffect(() => {
+    play("emote-cheer");
+    update(0.45);
+    const stone = new THREE.MeshStandardMaterial({ color: "#cfc8ba", roughness: 0.92, flatShading: true });
+    scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = stone;
+    });
+    return () => stone.dispose();
+  }, [scene, play, update]);
+  return (
+    <group position={[x, y, z]} rotation-y={0}>
+      {/* A stepped stone pillar rising from the basin. */}
+      <mesh position={[0, 0.8, 0]}>
+        <cylinderGeometry args={[0.55, 0.7, 1.6, 8]} />
+        <meshStandardMaterial color="#c9c2b4" roughness={0.95} flatShading />
       </mesh>
+      <mesh position={[0, 1.7, 0]}>
+        <cylinderGeometry args={[0.8, 0.8, 0.22, 8]} />
+        <meshStandardMaterial color="#d6cfc1" roughness={0.95} flatShading />
+      </mesh>
+      <group ref={group} position={[0, 1.8, 0]} scale={scale * rig.scale}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
