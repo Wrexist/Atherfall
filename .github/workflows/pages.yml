@@ -1,0 +1,80 @@
+# The playable build at https://wrexist.github.io/aetherfall-play/ (docs/DEPLOY.md).
+# Every push to main builds the game as static files for that sub-path and
+# commits them to the public Wrexist/aetherfall-play repo, which GitHub Pages
+# serves. (This repo is private, and GitHub's free plan only hosts Pages for
+# public repos.) Pull requests that touch this setup build without publishing.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/pages.yml
+      - vite.config.ts
+      - scripts/pages/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PAGES_BASE: /aetherfall-play/
+  PLAY_REPO: Wrexist/aetherfall-play
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Build (static, offline, served from PAGES_BASE)
+        run: npx vite build
+      - name: Prepare the site
+        run: |
+          site=dist/client
+          cp "$site/_shell.html" "$site/index.html"
+          cp "$site/_shell.html" "$site/404.html"
+          touch "$site/.nojekyll"
+          cp scripts/pages/README.md "$site/README.md"
+          # Sanity: the page points inside the sub-path, and the models are there.
+          grep -q "src=\"${PAGES_BASE}assets/" "$site/index.html"
+          test -f "$site/models/kaykit/knight.glb"
+      - name: Publish to the play repo
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DEPLOY_KEY: ${{ secrets.PLAY_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/play_deploy
+          chmod 600 ~/.ssh/play_deploy
+          # GitHub's SSH host keys, fetched over HTTPS rather than trusted on first use.
+          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/play_deploy -o IdentitiesOnly=yes"
+          git clone --depth 1 "git@github.com:${PLAY_REPO}.git" play
+          # Replace everything except the history with the new build.
+          find play -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a dist/client/. play/
+          cd play
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing changed; not publishing."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Build ${GITHUB_SHA::7} from ${GITHUB_REPOSITORY}"
+          git push origin HEAD:main
+          echo "Published: https://wrexist.github.io${PAGES_BASE}"

@@ -11,6 +11,9 @@
 // - /assets/* files have content hashes in their names, so a cached copy can
 //   never be stale — they are cache-first.
 
+/** Where the game is served from: "/" normally, "/aetherfall-play/" on GitHub Pages. */
+const BASE = new URL(self.registration.scope).pathname;
+
 const CACHE = "aetherfall-assets-v1";
 const APP = "aetherfall-app-v1";
 /** Old hashed bundles from previous releases are pruned beyond this many entries. */
@@ -18,9 +21,10 @@ const APP_MAX = 60;
 
 const isAsset = (url) =>
   (url.origin === self.location.origin &&
-    (url.pathname.startsWith("/models/") ||
-      /^\/(icon-[\w-]+|apple-touch-icon)\.png$/.test(url.pathname) ||
-      url.pathname === "/favicon.ico")) ||
+    url.pathname.startsWith(BASE) &&
+    (url.pathname.startsWith(`${BASE}models/`) ||
+      /^(icon-[\w-]+|apple-touch-icon)\.png$/.test(url.pathname.slice(BASE.length)) ||
+      url.pathname === `${BASE}favicon.ico`)) ||
   url.origin === "https://fonts.gstatic.com" ||
   url.origin === "https://fonts.googleapis.com";
 
@@ -38,8 +42,8 @@ self.addEventListener("activate", (event) => {
 });
 
 async function prune(cache) {
-  // Oldest first; the saved page ("/") is always kept.
-  const keys = (await cache.keys()).filter((k) => new URL(k.url).pathname !== "/");
+  // Oldest first; the saved page (BASE) is always kept.
+  const keys = (await cache.keys()).filter((k) => new URL(k.url).pathname !== BASE);
   for (let i = 0; i < keys.length - APP_MAX; i++) await cache.delete(keys[i]);
 }
 
@@ -54,17 +58,17 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(APP);
         try {
           const res = await fetch(req);
-          if (res.ok) cache.put("/", res.clone());
+          if (res.ok) cache.put(BASE, res.clone());
           return res;
         } catch {
-          return (await cache.match("/")) ?? Response.error();
+          return (await cache.match(BASE)) ?? Response.error();
         }
       })(),
     );
     return;
   }
 
-  if (url.origin === self.location.origin && url.pathname.startsWith("/assets/")) {
+  if (url.origin === self.location.origin && url.pathname.startsWith(`${BASE}assets/`)) {
     event.respondWith(
       (async () => {
         const cache = await caches.open(APP);

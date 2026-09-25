@@ -1,5 +1,6 @@
 import { useProgress } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { assetUrl } from "../core/assets";
 import { setMuted as setAudioMuted, suspendAudio, unlockAudio } from "../core/audio";
 import { applyLook, input, keys, resetInput } from "../core/input";
 import { loadSaveIntoStore, saveNow } from "../core/sim";
@@ -170,7 +171,7 @@ export function Game() {
   useEffect(() => {
     if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self)
       return;
-    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    navigator.serviceWorker.register(assetUrl("/sw.js")).catch(() => undefined);
   }, []);
 
   // Mobile browsers only allow audio after a user gesture, and suspend it again
