@@ -116,7 +116,7 @@ function Joystick({
     >
       <div
         ref={base}
-        style={{ width: BASE_PX, height: BASE_PX, opacity: Math.max(0.85, opacity) }}
+        style={{ width: BASE_PX, height: BASE_PX, opacity }}
         className={`pointer-events-auto absolute bottom-[max(4.25rem,calc(env(safe-area-inset-bottom)+3rem))] ${
           right
             ? "right-[max(1.75rem,env(safe-area-inset-right))]"

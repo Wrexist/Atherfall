@@ -96,6 +96,22 @@ const TOUCH_ANCHOR: Record<string, string> = {
   talk: "left-1/2 top-[28%] -translate-x-1/2",
 };
 
+/**
+ * A tip's anchor for left-handed controls: side classes swap (left-3 becomes
+ * right-3); centred tips (left-1/2) stay put.
+ */
+export function mirrorAnchor(classes: string) {
+  return classes
+    .split(" ")
+    .map((c) => {
+      if (c === "left-1/2") return c;
+      if (c.startsWith("left-")) return `right-${c.slice(5)}`;
+      if (c.startsWith("right-")) return `left-${c.slice(6)}`;
+      return c;
+    })
+    .join(" ");
+}
+
 export function Tips() {
   const learned = useSettings((s) => s.tipsDone);
   const update = useSettings((s) => s.update);
@@ -184,7 +200,9 @@ export function Tips() {
   if (!active) return null;
   // On touch the tip sits beside the control it teaches (the control glows too),
   // never over the middle of the screen.
-  const anchor = touch.current ? TOUCH_ANCHOR[active.id] : undefined;
+  // Left-handed controls swap sides, so the tips follow their controls.
+  const raw = touch.current ? TOUCH_ANCHOR[active.id] : undefined;
+  const anchor = raw && useSettings.getState().leftHanded ? mirrorAnchor(raw) : raw;
   const bubble = (
     <div
       role="status"

@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   camera: "top",
   batterySaver: false,
   stickSize: 1,
-  stickOpacity: 0.45,
+  stickOpacity: 0.75,
   leftHanded: false,
   tipsDone: [],
   minimap: true,
