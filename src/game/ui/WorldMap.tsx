@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { LANDMARKS, SECRETS, WAYPOINTS } from "../data/world";
-import { QUESTS } from "../data/quests";
-import { SPAWNS } from "../world/layout";
 import { REGIONS, SEA_LEVEL, groundColor, heightAt } from "../world/terrain";
 import { fastTravel, inCombat, world } from "../core/sim";
+import { questTarget } from "../core/questTarget";
 import { useGame } from "../core/store";
 
 const SPAN = 100; // world units from centre to edge of the map
@@ -43,22 +42,6 @@ function terrainImage(ctx: CanvasRenderingContext2D) {
   return img;
 }
 
-function questTarget(): { x: number; z: number } | null {
-  const s = useGame.getState();
-  if (s.questComplete) return null;
-  const step = QUESTS[s.questIdx]?.steps[s.questStep];
-  if (!step) return null;
-  if (step.kind === "talk") return { x: 3.2, z: 3.6 };
-  if (step.kind === "reach") {
-    const r = REGIONS[step.area as keyof typeof REGIONS];
-    return r ? { x: r.x, z: r.z } : null;
-  }
-  if (step.kind === "kill" || step.kind === "boss") {
-    const sp = SPAWNS.find((x) => x.type === step.enemy);
-    return sp ? { x: sp.x, z: sp.z } : null;
-  }
-  return null;
-}
 
 export function WorldMap() {
   const canvas = useRef<HTMLCanvasElement>(null);

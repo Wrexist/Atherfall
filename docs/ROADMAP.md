@@ -102,7 +102,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 46 | P1 | Journal buttons are at least 44px on touch, and 8–10px text is now 11px+. Faint text raised to 70% opacity where touched. | ✅ |
 | 47 | P1 | Journal respects safe areas. The map fits the screen with the fast-travel list beside it, and the satchel shows gear and bag side by side on landscape phones. The old `md` breakpoint was 768px, but a landscape iPhone is ~750px. | ✅ |
 | 48 | P1 | Touch-specific controls list. The climb prompt no longer names keys. | ✅ |
-| 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. **Still to do:** a minimap or quest arrow. | ◐ |
+| 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. A quest marker shows the distance over the current goal (the NPC, the area, or the nearest living target) and slides to the screen edge, pointing the way, when the goal is off-screen. | ✅ |
 | 50 | P2 | Enemy knockback is a quick decaying slide instead of a teleport. Getting hit costs a moment of control so your own knockback reads. Nearby enemies push apart instead of stacking. Camera shake is smooth, frame-rate independent, with a small roll kick. | ✅ |
 | 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
 | 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |

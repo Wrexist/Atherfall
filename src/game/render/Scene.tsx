@@ -13,6 +13,7 @@ import { EnemyViews, NpcViews, PlayerView } from "./Characters";
 import { DropViews, FloaterViews, ProjectileViews, RingViews, SparkViews, ZoneViews } from "./Effects";
 import { Systems } from "./Systems";
 import { WorldObjects } from "./WorldObjects";
+import { QuestMarker } from "./QuestMarker";
 import { DayNight } from "./DayNight";
 
 /** Every model the scene can show, so all downloads start together. */
@@ -190,6 +191,7 @@ export function Scene() {
       <ProjectileViews />
       <BarrowGate />
       <WorldObjects />
+      <QuestMarker />
     </>
   );
 }
