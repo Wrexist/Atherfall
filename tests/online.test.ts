@@ -136,6 +136,31 @@ describe("cloud save syncing", () => {
     expect(server.save!.level).toBe(3);
   });
 
+  test("starting to play while the title screen's upload is still sending doesn't fake a conflict", async () => {
+    // Regression (review of #3): the reconciliation upload bypassed the queue,
+    // so the first in-game save raced it on the same revision and one of them
+    // was taken for another device's save.
+    server = { save: save(1000, 2), revision: 4 };
+    localSave = save(90_000, 3);
+    const slow = deferred<void>();
+    cloud.upload = async (s, base) => {
+      if (!uploads.length) await slow.promise; // the title screen's upload is slow
+      return acceptUpload(s, base);
+    };
+    const sync = startCloudSync("u1", local);
+    await new Promise((r) => setTimeout(r, 0));
+    queueUpload(save(95_000, 3)); // the player pressed Continue and the game saved
+    const game = flushUpload();
+    slow.resolve();
+    await Promise.all([sync, game]);
+    expect(useCloudSync.getState().phase).toBe("done");
+    expect(uploads.map((u) => [u.save.savedAt, u.base])).toEqual([
+      [90_000, 4],
+      [95_000, 5],
+    ]);
+    expect(server.save!.savedAt).toBe(95_000);
+  });
+
   test("another device's save is never overwritten: syncing stops and the player is told", async () => {
     onServer(save(1000, 2), 7);
     localSave = save(1000, 2);

@@ -53,7 +53,7 @@ Everything below was run against a real local Supabase stack, the same software 
 - Uploads only start after that comparison, so an old device can never overwrite newer progress made elsewhere.
 - The title screen waits for the comparison (at most 8s; if the server doesn't answer, play continues from the device with uploads off).
 - Every cloud save has a revision number that only the server sets (+1 on every change). A device uploads "on top of" the revision it last saw, so it can never overwrite a save another device made in the meantime, however wrong either device's clock is. If that happens, the game keeps playing from the device, stops syncing and tells the player to restart to choose.
-- One device's uploads go one at a time, in order, so a slow request can't land after a newer one.
+- One device's uploads go one at a time, in order, the title screen's included, so a slow request can't land after a newer one or be mistaken for another device.
 
 **Presence rules**
 - Each player sends 5 updates per second while moving, and a heartbeat every 3s while still.
@@ -63,7 +63,7 @@ Everything below was run against a real local Supabase stack, the same software 
 
 **Database rules**
 - `profiles` are public to read; each player can edit only their own.
-- `saves` are private to their owner and capped at 256KB. Writes go through `upload_save()`, which refuses an upload based on an old revision.
+- `saves` are private to their owner and capped at 256KB. Players can read and delete their own save, but can only write it through `upload_save()`, which refuses an upload based on an old revision. Direct inserts and updates are blocked, so an old game version or a hand-made request can't skip that check.
 - A sign-up trigger creates the profile.
 - Only signed-in players may use `world:*` channels.
 

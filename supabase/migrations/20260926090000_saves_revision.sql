@@ -7,11 +7,15 @@
 -- progress; the game then stops syncing and lets the player choose on the
 -- title screen. One device's uploads are sent one at a time, so they can't
 -- overtake each other either.
+--
+-- upload_save() is the ONLY way to write a save: direct inserts and updates
+-- (an old game version's upsert, or any hand-made request) would skip the
+-- revision check, so players can no longer write the table directly.
 
 alter table public.saves add column revision bigint not null default 0;
 
--- Server-owned: whatever a client sends, a new save starts at 1 and every
--- change adds 1 (direct table writes included).
+-- Server-owned: whatever a write sends, a new save starts at 1 and every
+-- change adds 1.
 create function public.saves_bump_revision()
 returns trigger
 language plpgsql
@@ -30,9 +34,16 @@ $$;
 create trigger saves_revision before insert or update on public.saves
   for each row execute function public.saves_bump_revision();
 
+-- Reading and deleting your own save stay as they were; writing goes through
+-- upload_save() only.
+drop policy "Players create their own save" on public.saves;
+drop policy "Players update their own save" on public.saves;
+revoke insert, update on public.saves from anon, authenticated;
+
 -- Save on top of revision p_base (0 when this device has never seen a cloud
 -- save). Returns the new revision, or null if the cloud save has moved on.
--- Runs as the caller, so the row-level security rules above still apply.
+-- Runs with the table owner's rights (players can't write the table
+-- themselves), so it only ever touches the caller's own row.
 create function public.upload_save(
   p_data jsonb,
   p_version integer,
@@ -41,19 +52,28 @@ create function public.upload_save(
   p_base bigint
 )
 returns bigint
-language sql
-security invoker
+language plpgsql
+security definer
 set search_path = ''
 as $$
+declare
+  uid uuid := auth.uid();
+  rev bigint;
+begin
+  if uid is null then
+    raise exception 'sign in to save to the cloud' using errcode = '42501';
+  end if;
   insert into public.saves as s (user_id, data, version, level, saved_at)
-  values ((select auth.uid()), p_data, p_version, p_level, p_saved_at)
+  values (uid, p_data, p_version, p_level, p_saved_at)
   on conflict (user_id) do update
     set data = excluded.data,
         version = excluded.version,
         level = excluded.level,
         saved_at = excluded.saved_at
     where s.revision = p_base
-  returning s.revision;
+  returning s.revision into rev;
+  return rev;
+end;
 $$;
 
 revoke execute on function public.upload_save(jsonb, integer, integer, timestamptz, bigint) from public, anon;
