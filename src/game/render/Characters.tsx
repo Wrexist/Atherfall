@@ -88,6 +88,9 @@ export function useCharacter(url: string, tint?: string) {
  * advances every mixer every frame). Callers decide when to `update`, so far
  * or hidden characters can tick slowly or not at all.
  */
+/** Bones above the hips (three.js drops the dots: "upperarm.l" is "upperarml"). */
+const UPPER_BONE = /^(spine|chest|upperarm|lowerarm|wrist|hand|handslot|head)/;
+
 export function useAnimator(
   root: React.RefObject<THREE.Group | null>,
   animations: THREE.AnimationClip[],
@@ -102,6 +105,9 @@ export function useAnimator(
   });
   const current = useRef<string>("");
   const lastKey = useRef(-1);
+  /** Actions playing now, so any switch fades out exactly these. */
+  const active = useRef<THREE.AnimationAction[]>([]);
+  const halves = useRef(new Map<string, THREE.AnimationAction>());
 
   const bind = useCallback(() => {
     const r = rig.current;
@@ -121,6 +127,8 @@ export function useAnimator(
       }
       rig.current = { mixer: null, actions: {} };
       current.current = "";
+      active.current = [];
+      halves.current.clear();
     },
     [animations],
   );
@@ -143,7 +151,6 @@ export function useAnimator(
         if (a) a.timeScale = rate;
         return;
       }
-      const prev = actions[clips[current.current] ?? ""];
       if (!next) return;
       next.reset();
       next.timeScale = rate;
@@ -155,14 +162,70 @@ export function useAnimator(
         next.clampWhenFinished = false;
       }
       const fade = state.startsWith("attack") || state === "dodge" ? 0.06 : 0.14;
+      for (const a of active.current) if (a !== next) a.fadeOut(fade);
       next.fadeIn(fade).play();
-      if (prev && prev !== next) prev.fadeOut(fade);
+      active.current = [next];
       current.current = state;
     },
     [bind, info],
   );
 
-  return { play, update };
+  /** The upper or lower half of a clip (by bone), made once per clip. */
+  const half = useCallback(
+    (clipName: string, upper: boolean) => {
+      const { mixer, actions } = bind();
+      const key = `${clipName}@${upper ? "up" : "low"}`;
+      const hit = halves.current.get(key);
+      if (hit) return hit;
+      const src = actions[clipName]?.getClip();
+      if (!mixer || !src) return null;
+      const tracks = src.tracks.filter((t) => UPPER_BONE.test(t.name) === upper);
+      const action = mixer.clipAction(new THREE.AnimationClip(key, src.duration, tracks));
+      halves.current.set(key, action);
+      return action;
+    },
+    [bind],
+  );
+
+  /**
+   * Swinging on the move: legs from the walk/run clip, everything above the
+   * hips from the attack, so the hero never skates or slows to swing.
+   */
+  const playSplit = useCallback(
+    (armsState: string, legsState: string, key: number) => {
+      const clips = info.clips;
+      const arms = half(clips[armsState] ?? "", true);
+      const legs = half(clips[legsState] ?? "", false);
+      if (!arms || !legs) {
+        play(armsState, 1, key);
+        return;
+      }
+      const restart = key !== lastKey.current;
+      lastKey.current = key;
+      const hold = info.kind === "kaykit" ? FIT_SECONDS[armsState] : undefined;
+      arms.timeScale = hold ? arms.getClip().duration / hold : 1;
+      legs.timeScale = CLIP_SPEED[legsState] ?? 1;
+      const name = `${armsState}|${legsState}`;
+      if (current.current === name && !restart) return;
+      if (restart || !active.current.includes(arms)) {
+        arms.reset();
+        arms.setLoop(THREE.LoopOnce, 1);
+        arms.clampWhenFinished = true;
+      }
+      if (!active.current.includes(legs)) {
+        legs.reset();
+        legs.setLoop(THREE.LoopRepeat, Infinity);
+      }
+      for (const a of active.current) if (a !== arms && a !== legs) a.fadeOut(0.06);
+      arms.fadeIn(0.06).play();
+      legs.fadeIn(0.06).play();
+      active.current = [arms, legs];
+      current.current = name;
+    },
+    [half, info, play],
+  );
+
+  return { play, playSplit, update };
 }
 
 /** Skips the material writes entirely while nothing changes (the common case). */
@@ -210,7 +273,7 @@ function PlayerModel({ url }: { url: string }) {
   const body = useRef<THREE.Group>(null);
   const ward = useRef<THREE.Mesh>(null);
   const { scene, materials, animations, rig } = useCharacter(url);
-  const { play, update } = useAnimator(group, animations, rig);
+  const { play, playSplit, update } = useAnimator(group, animations, rig);
   const flash = useRef({ amount: -1, color: "" });
 
   useFrame((_, dt) => {
@@ -219,7 +282,8 @@ function PlayerModel({ url }: { url: string }) {
     const p = world.player;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.yaw;
-    play(p.anim, CLIP_SPEED[p.anim] ?? 1, p.animKey);
+    if (p.legs && rig.kind === "kaykit") playSplit(p.anim, p.legs, p.animKey);
+    else play(p.anim, CLIP_SPEED[p.anim] ?? 1, p.animKey);
     update(dt);
     const b = body.current;
     if (b) {

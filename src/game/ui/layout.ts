@@ -15,6 +15,11 @@ function useMedia(query: string) {
 }
 
 /** Screens taller than wide (phones held upright) get the portrait HUD and controls. */
+/** Wide enough for side-by-side panels (Tailwind's md breakpoint). */
+export function useWide() {
+  return useMedia("(min-width: 768px)");
+}
+
 export function usePortrait() {
   return useMedia("(orientation: portrait)");
 }

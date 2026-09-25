@@ -34,3 +34,9 @@ describe("settings", () => {
     expect(s.tipsDone).toEqual(["move", "look"]);
   });
 });
+
+test("camera zoom is kept between close and far", () => {
+  expect(sanitizeSettings({ cameraZoom: 9 }).cameraZoom).toBe(1.8);
+  expect(sanitizeSettings({ cameraZoom: 0.1 }).cameraZoom).toBe(0.8);
+  expect(sanitizeSettings({}).cameraZoom).toBe(1);
+});

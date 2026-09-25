@@ -594,6 +594,16 @@ function ComfortSettings() {
           on={prefs.batterySaver}
           onChange={(v) => prefs.update({ batterySaver: v })}
         />
+        {prefs.camera === "top" && (
+          <Slider
+            label="Camera zoom"
+            value={prefs.cameraZoom}
+            min={0.8}
+            max={1.8}
+            show={(v) => (v > 1.02 ? `${v.toFixed(1)}× further` : v < 0.98 ? "closer" : "normal")}
+            onChange={(v) => prefs.update({ cameraZoom: v })}
+          />
+        )}
         <Toggle
           label="Auto-attack"
           note="Turn to and attack enemies in reach as you walk, and keep fighting when you stand still"

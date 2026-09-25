@@ -92,6 +92,27 @@ describe("in the game", () => {
     expect(world.stats.swings).toBeGreaterThan(0);
   });
 
+  test("attacking on the move never slows the hero down", () => {
+    const p = world.player;
+    const walk = (seconds: number) => {
+      const x0 = p.x;
+      const z0 = p.z;
+      input.moveZ = 1;
+      run(seconds);
+      input.moveZ = 0;
+      return Math.hypot(p.x - x0, p.z - z0);
+    };
+    // Swinging (auto-attack at the enemy beside us) while walking…
+    const swings0 = world.stats.swings;
+    const fighting = walk(0.5);
+    expect(world.stats.swings).toBeGreaterThan(swings0);
+    // …covers as much ground as walking with nothing to hit.
+    for (const e of world.enemies) e.x = e.homeX = 900;
+    run(0.6);
+    const free = walk(0.5);
+    expect(fighting).toBeGreaterThan(free * 0.9);
+  });
+
   test("with auto-attack off, nothing swings on its own", () => {
     useSettings.setState({ autoAttack: false });
     run(1.2);

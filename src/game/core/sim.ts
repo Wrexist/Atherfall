@@ -173,6 +173,8 @@ export interface PlayerRuntime {
   coyote: number;
   jumpBuffer: number;
   anim: string;
+  /** Legs while swinging on the move ("walk"/"sprint"): the body runs, the arms attack. */
+  legs: string | null;
   /** Increments whenever a one-shot animation should restart. */
   animKey: number;
   speedMag: number;
@@ -236,6 +238,7 @@ function freshPlayer(): PlayerRuntime {
     coyote: 0,
     jumpBuffer: 0,
     anim: "idle",
+    legs: null,
     animKey: 0,
     speedMag: 0,
     action: "none",
@@ -1060,8 +1063,8 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
     ? pickAutoTarget(p.x, p.z, world.enemies, AUTO_RANGE[kind], world.lockId)
     : null;
   if (auto) p.yaw = Math.atan2(auto.x - p.x, auto.z - p.z);
-  // Backing away while swinging: no lunge dragging you back toward the enemy.
-  const retreating = mag > 0.2 && mx * Math.sin(p.yaw) + mz * Math.cos(p.yaw) < 0;
+  // Only a planted swing lunges: on the move, your stick decides where you go.
+  const planted = mag <= 0.2;
   p.action = "attack";
   p.actionT = 0;
   p.comboIdx = idx + 1;
@@ -1069,9 +1072,12 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   p.hitIds = new Set();
   p.swingSerial += 1;
   p.animKey += 1;
-  const lunge = kind === "melee" && !retreating ? swing.lunge : 0;
-  p.vx = Math.sin(p.yaw) * lunge;
-  p.vz = Math.cos(p.yaw) * lunge;
+  const lunge = kind === "melee" && planted ? swing.lunge : 0;
+  if (planted) {
+    // A planted swing lunges; on the move, keep the momentum you have.
+    p.vx = Math.sin(p.yaw) * lunge;
+    p.vz = Math.cos(p.yaw) * lunge;
+  }
   world.stats.swings += 1;
   sfx.swing(idx);
 }
@@ -1418,8 +1424,12 @@ function stepPlayer(dt: number, camYaw: number) {
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
     const melee = basicKind() === "melee";
-    ctrl = melee ? 0.15 : 0.5;
-    speedCap = melee ? 1.4 : 2.6;
+    // On the move you attack at full speed and full control (the legs keep
+    // running, the arms swing); standing, a sword swing plants you and lunges.
+    if (mag <= 0.2) {
+      ctrl = melee ? 0.15 : 0.5;
+      speedCap = melee ? 1.4 : 2.6;
+    }
     if (melee) {
       if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow)
         applySwingHits(p, swing);
@@ -1506,7 +1516,7 @@ function stepPlayer(dt: number, camYaw: number) {
     const tx = mx * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
     const tz = mz * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
     const k = !p.grounded ? AIR_CONTROL : moving ? ACCEL : DECEL;
-    const blend = (1 - Math.exp(-k * dt)) * (p.action === "attack" ? 0.6 : 1);
+    const blend = (1 - Math.exp(-k * dt)) * (p.action === "attack" && !moving ? 0.6 : 1);
     p.vx += (tx - p.vx) * blend;
     p.vz += (tz - p.vz) * blend;
   } else if (p.action === "burst") {
@@ -1640,6 +1650,8 @@ function stepPlayer(dt: number, camYaw: number) {
   }
   stepEmote(p, dt, mag > 0.1);
   const swingAnim = p.action === "attack" ? `attack${p.comboIdx}` : null;
+  p.legs =
+    swingAnim && p.grounded && planar > 1.2 ? (planar > 7.2 * speedMul ? "sprint" : "walk") : null;
   p.anim =
     p.action === "dodge"
       ? "dodge"

@@ -67,7 +67,7 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     const targetZ = top ? p.z - frame.lookAhead : p.z;
 
     const cosP = Math.cos(input.pitch);
-    let dist = top ? frame.distance : BASE_DISTANCE;
+    let dist = top ? frame.distance * useSettings.getState().cameraZoom : BASE_DISTANCE;
 
     // Pull the camera in when terrain would block the view.
     const dirX = -Math.sin(input.yaw) * cosP;
