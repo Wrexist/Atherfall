@@ -173,6 +173,8 @@ export interface PlayerRuntime {
   coyote: number;
   jumpBuffer: number;
   anim: string;
+  /** Legs while swinging on the move ("walk"/"sprint"): the body runs, the arms attack. */
+  legs: string | null;
   /** Increments whenever a one-shot animation should restart. */
   animKey: number;
   speedMag: number;
@@ -236,6 +238,7 @@ function freshPlayer(): PlayerRuntime {
     coyote: 0,
     jumpBuffer: 0,
     anim: "idle",
+    legs: null,
     animKey: 0,
     speedMag: 0,
     action: "none",
@@ -613,6 +616,7 @@ export function lineBlocked(ax: number, az: number, bx: number, bz: number) {
 function killPlayer() {
   const p = world.player;
   p.dead = true;
+  p.legs = null; // the death clip plays whole, never split
   p.deathTimer = 0;
   p.anim = "die";
   sfx.death();
@@ -865,7 +869,18 @@ function damageEnemy(
     opts.crit ? "#ff9d5c" : opts.big ? "#ffcf5c" : "#fff2d6",
     opts.big || !!opts.crit,
   );
-  spark(e.x, e.y + def.scale * 0.55, e.z, opts.big ? "#ffc35a" : "#ffe2a8", opts.big ? 0.6 : 0.38);
+  spark(
+    e.x,
+    e.y + def.scale * 0.55,
+    e.z,
+    opts.crit ? "#ff8a3d" : opts.big ? "#ffc35a" : "#ffe2a8",
+    opts.crit ? 0.85 : opts.big ? 0.6 : 0.38,
+  );
+  if (opts.crit) {
+    // Crits land harder: a touch more hit-stop and a tiny camera kick.
+    world.hitstop = Math.max(world.hitstop, 0.06);
+    world.cameraShake = Math.max(world.cameraShake, 0.14);
+  }
   if (e.hp <= 0) {
     killEnemy(e);
     e.zones = [];
@@ -1049,8 +1064,8 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
     ? pickAutoTarget(p.x, p.z, world.enemies, AUTO_RANGE[kind], world.lockId)
     : null;
   if (auto) p.yaw = Math.atan2(auto.x - p.x, auto.z - p.z);
-  // Backing away while swinging: no lunge dragging you back toward the enemy.
-  const retreating = mag > 0.2 && mx * Math.sin(p.yaw) + mz * Math.cos(p.yaw) < 0;
+  // Only a planted swing lunges: on the move, your stick decides where you go.
+  const planted = mag <= 0.2;
   p.action = "attack";
   p.actionT = 0;
   p.comboIdx = idx + 1;
@@ -1058,9 +1073,12 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   p.hitIds = new Set();
   p.swingSerial += 1;
   p.animKey += 1;
-  const lunge = kind === "melee" && !retreating ? swing.lunge : 0;
-  p.vx = Math.sin(p.yaw) * lunge;
-  p.vz = Math.cos(p.yaw) * lunge;
+  const lunge = kind === "melee" && planted ? swing.lunge : 0;
+  if (planted) {
+    // A planted swing lunges; on the move, keep the momentum you have.
+    p.vx = Math.sin(p.yaw) * lunge;
+    p.vz = Math.cos(p.yaw) * lunge;
+  }
   world.stats.swings += 1;
   sfx.swing(idx);
 }
@@ -1296,6 +1314,9 @@ function stepRains() {
 function stepPlayer(dt: number, camYaw: number) {
   const p = world.player;
   const store = useGame.getState();
+  // Split legs only ever last one frame of a moving swing (set again below);
+  // early exits (death, swimming, climbing) must never keep a stale value.
+  p.legs = null;
 
   if (p.dead) {
     p.deathTimer += dt;
@@ -1407,8 +1428,12 @@ function stepPlayer(dt: number, camYaw: number) {
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
     const melee = basicKind() === "melee";
-    ctrl = melee ? 0.15 : 0.5;
-    speedCap = melee ? 1.4 : 2.6;
+    // On the move you attack at full speed and full control (the legs keep
+    // running, the arms swing); standing, a sword swing plants you and lunges.
+    if (mag <= 0.2) {
+      ctrl = melee ? 0.15 : 0.5;
+      speedCap = melee ? 1.4 : 2.6;
+    }
     if (melee) {
       if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow)
         applySwingHits(p, swing);
@@ -1495,7 +1520,7 @@ function stepPlayer(dt: number, camYaw: number) {
     const tx = mx * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
     const tz = mz * (target / (mag || 1)) * (mag > 0 ? 1 : 0);
     const k = !p.grounded ? AIR_CONTROL : moving ? ACCEL : DECEL;
-    const blend = (1 - Math.exp(-k * dt)) * (p.action === "attack" ? 0.6 : 1);
+    const blend = (1 - Math.exp(-k * dt)) * (p.action === "attack" && !moving ? 0.6 : 1);
     p.vx += (tx - p.vx) * blend;
     p.vz += (tz - p.vz) * blend;
   } else if (p.action === "burst") {
@@ -1629,6 +1654,8 @@ function stepPlayer(dt: number, camYaw: number) {
   }
   stepEmote(p, dt, mag > 0.1);
   const swingAnim = p.action === "attack" ? `attack${p.comboIdx}` : null;
+  p.legs =
+    swingAnim && p.grounded && planar > 1.2 ? (planar > 7.2 * speedMul ? "sprint" : "walk") : null;
   p.anim =
     p.action === "dodge"
       ? "dodge"
@@ -2271,14 +2298,28 @@ function collectDrop(d: DropRuntime) {
   sfx.pickup();
 }
 
+/** Loot within this many metres flies to the hero, once it has popped out. */
+export const LOOT_MAGNET = 5.5;
+const MAGNET_DELAY = 0.35;
+
 function stepDrops(dt: number) {
-  void dt;
   const p = world.player;
-  const store = useGame.getState();
   for (const d of world.drops) {
     if (d.taken) continue;
     const dist = Math.hypot(d.x - p.x, d.z - p.z);
-    if (dist < 2.0 && !p.dead) collectDrop(d);
+    if (dist < 2.0 && !p.dead) {
+      collectDrop(d);
+      continue;
+    }
+    // Pickup magnet: after the loot burst has been seen, nearby drops fly in,
+    // faster as they close (no walking over every coin).
+    if (!p.dead && dist < LOOT_MAGNET && world.time - d.born > MAGNET_DELAY) {
+      const speed = 4 + (LOOT_MAGNET - dist) * 3;
+      const step = Math.min(dist, speed * dt);
+      d.x += ((p.x - d.x) / dist) * step;
+      d.z += ((p.z - d.z) / dist) * step;
+      d.y = heightAt(d.x, d.z);
+    }
   }
   // Unclaimed loot fades after a while (gear lasts longer than coin); if the cap
   // is still hit, the oldest *collected* entries go first, never fresh loot.

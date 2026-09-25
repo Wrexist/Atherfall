@@ -29,7 +29,7 @@ import {
 } from "../core/rules";
 import { SlotIcon, type SlotId } from "./Cooldowns";
 import { WorldMap } from "./WorldMap";
-import { useThreatened } from "./layout";
+import { useThreatened, useWide } from "./layout";
 import {
   BTN,
   CARD,
@@ -92,38 +92,56 @@ function Wallet({ gold, shards }: { gold: number; shards: number }) {
 
 // ------------------------------------------------------------------ Satchel
 
-function ItemSheet({
+function ItemDetails({
   entry,
   wornSlot,
   onClose,
+  inline,
 }: {
   entry: InvEntry;
-  /** Set when the item is worn: offers Unequip instead of Equip/Sell. */
+  /** Set when the item is worn: offers Take off instead of Equip/Sell. */
   wornSlot: EquipSlot | null;
   onClose: () => void;
+  /** A column beside the bag (wide screens) rather than a card over it (phones). */
+  inline: boolean;
 }) {
   const s = useGame();
   const def = ITEMS[entry.itemId]!;
   const st = itemStats(def, entry.plus);
   const cmp = wornSlot ? null : compareToEquipped(s.archetype, s.level, s.equipped, entry);
   const tooHigh = def.level > s.level;
+  // One row of chips: the item's own stats, each with what it changes against
+  // what you wear (no separate comparison box, so the card never scrolls).
+  const chips = [
+    { icon: "attack" as const, title: "Attack", v: st.attack, d: cmp?.delta.attack },
+    { icon: "defense" as const, title: "Defense", v: st.defense, d: cmp?.delta.defense },
+    { icon: "health" as const, title: "Health", v: st.health, d: cmp?.delta.maxHp },
+    { icon: "crit" as const, title: "Critical", v: st.crit, d: cmp?.delta.crit, suffix: "%" },
+  ].filter((c) => c.v > 0 || (c.d ?? 0) !== 0);
   return (
     <div
-      className="absolute inset-x-0 bottom-0 z-10 max-h-[78%] overflow-y-auto overscroll-contain rounded-t-3xl border-t-2 p-4 shadow-[0_-12px_30px_rgba(0,0,0,0.5)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[24rem] sm:rounded-3xl sm:border-2"
-      style={{ borderColor: RARITY_COLOR[def.rarity], background: "var(--panel)" }}
+      className={
+        inline
+          ? "flex h-full flex-col rounded-2xl border-2 bg-[var(--panel-2)] p-3"
+          : "absolute inset-x-0 bottom-0 z-10 rounded-t-3xl border-t-2 p-3.5 shadow-[0_-12px_30px_rgba(0,0,0,0.5)]"
+      }
+      style={{
+        borderColor: RARITY_COLOR[def.rarity],
+        background: inline ? undefined : "var(--panel)",
+      }}
       role="dialog"
       aria-label={def.name}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5">
         <ItemTile entry={entry} size="lg" />
         <div className="min-w-0 flex-1">
           <div
-            className="font-display text-xl leading-tight text-outline"
+            className="font-display text-lg leading-tight text-outline"
             style={{ color: RARITY_COLOR[def.rarity] }}
           >
             {itemName(entry)}
           </div>
-          <div className="mt-0.5 text-xs font-bold text-[var(--parchment)]/70">
+          <div className="mt-0.5 text-[11px] font-bold text-[var(--parchment)]/70">
             {RARITY_LABEL[def.rarity]} {SLOT_LABEL[def.slot].toLowerCase()} · level {def.level}
             {def.boss ? " · boss reward" : ""}
           </div>
@@ -133,66 +151,48 @@ function ItemSheet({
             </div>
           )}
         </div>
-        <button
-          onClick={onClose}
-          aria-label="Close item"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--ink)]/60"
-        >
-          <Glyph id="close" className="h-4 w-4" />
-        </button>
+        {!inline && (
+          <button
+            onClick={onClose}
+            aria-label="Close item"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--ink)]/60"
+          >
+            <Glyph id="close" className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-1.5">
-        {st.attack > 0 && <StatChip icon="attack" title="Attack" value={`+${st.attack}`} />}
-        {st.defense > 0 && <StatChip icon="defense" title="Defense" value={`+${st.defense}`} />}
-        {st.health > 0 && <StatChip icon="health" title="Health" value={`+${st.health}`} />}
-        {st.crit > 0 && <StatChip icon="crit" title="Critical" value={`+${st.crit}`} suffix="%" />}
+      {cmp && (
+        <div className="mt-2 text-[10px] font-extrabold uppercase tracking-wider text-[var(--parchment)]/55">
+          {cmp.replaces ? `Compared with ${itemName(cmp.replaces)}` : "Fills an empty slot"}
+        </div>
+      )}
+      <div
+        data-testid={cmp ? "compare" : undefined}
+        className={`${cmp ? "mt-1" : "mt-2"} grid grid-cols-2 gap-1.5`}
+      >
+        {chips.map((c) => (
+          <StatChip
+            key={c.title}
+            icon={c.icon}
+            title={c.title}
+            value={c.v > 0 ? `+${c.v}` : ""}
+            delta={c.d}
+            suffix={c.suffix ?? ""}
+          />
+        ))}
       </div>
       {def.mod && (
-        <p className="mt-2 rounded-xl bg-[var(--gilt)]/12 px-2.5 py-1.5 text-xs font-bold text-[var(--parchment)]">
+        <p className="mt-1.5 text-xs font-bold leading-snug text-[var(--parchment)]">
           <span className="text-[var(--gilt)]">{MODIFIERS[def.mod].name}:</span>{" "}
           {MODIFIERS[def.mod].text}
         </p>
       )}
+      <p className="mt-1 line-clamp-2 text-[11px] italic text-[var(--parchment)]/55">
+        {def.flavor}
+      </p>
 
-      {cmp && (
-        <div data-testid="compare" className="mt-3 rounded-2xl bg-[var(--ink)]/45 p-2.5">
-          <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[var(--parchment)]/60">
-            {cmp.replaces ? `Instead of ${itemName(cmp.replaces)}` : "Fills an empty slot"}
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <StatChip
-              icon="attack"
-              title="Attack"
-              value={cmp.after.attack}
-              delta={cmp.delta.attack}
-            />
-            <StatChip
-              icon="defense"
-              title="Defense"
-              value={cmp.after.defense}
-              delta={cmp.delta.defense}
-            />
-            <StatChip
-              icon="health"
-              title="Max health"
-              value={cmp.after.maxHp}
-              delta={cmp.delta.maxHp}
-            />
-            <StatChip
-              icon="crit"
-              title="Critical"
-              value={Math.round(cmp.after.crit * 100)}
-              suffix="%"
-              delta={cmp.delta.crit}
-            />
-          </div>
-        </div>
-      )}
-
-      <p className="mt-2 text-xs italic text-[var(--parchment)]/60">{def.flavor}</p>
-
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className={`mt-2.5 flex gap-2 ${inline ? "mt-auto pt-2" : ""}`}>
         {wornSlot ? (
           <button
             className={`${BTN.secondary} flex-1`}
@@ -218,7 +218,8 @@ function ItemSheet({
             </button>
             <button
               data-testid="sell-one"
-              className={`${BTN.secondary} flex-1`}
+              title="Sell for embers"
+              className={`${BTN.secondary} flex-1 !px-2`}
               onClick={() => {
                 s.disposeBatch([entry.uid], "sell");
                 onClose();
@@ -229,7 +230,8 @@ function ItemSheet({
             </button>
             <button
               data-testid="salvage-one"
-              className={`${BTN.shard} flex-1`}
+              title="Salvage into Aether Shards"
+              className={`${BTN.shard} flex-1 !px-2`}
               onClick={() => {
                 s.disposeBatch([entry.uid], "salvage");
                 onClose();
@@ -241,11 +243,6 @@ function ItemSheet({
           </>
         )}
       </div>
-      {!wornSlot && (
-        <p className="mt-1.5 text-center text-[11px] font-bold text-[var(--parchment)]/50">
-          Sell for embers, or salvage into Aether Shards for the forge.
-        </p>
-      )}
     </div>
   );
 }
@@ -257,6 +254,7 @@ function Satchel() {
   const [marked, setMarked] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<EquipSlot | "all">("all");
   const stats = statsFor(s);
+  const wide = useWide();
 
   const wornSlot = SLOTS.find((k) => s.equipped[k]?.uid === selected) ?? null;
   const sel =
@@ -287,10 +285,10 @@ function Satchel() {
   };
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[17rem_1fr]">
+    <div className="grid gap-3 md:h-full md:min-h-0 md:grid-cols-[14.5rem_minmax(0,1fr)_17rem]">
       <div className={`${CARD} space-y-3`}>
         <h3 className={H3}>Equipped</h3>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-4 justify-items-center gap-1.5 md:grid-cols-2 md:gap-y-2">
           {SLOTS.map((slot) => {
             const e = s.equipped[slot];
             return (
@@ -326,7 +324,7 @@ function Satchel() {
         <Wallet gold={s.gold} shards={s.shards} />
       </div>
 
-      <div className={`${CARD} min-w-0`}>
+      <div className={`${CARD} flex min-w-0 flex-col md:min-h-0`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className={H3}>
             Bag <span className="text-[var(--parchment)]">{s.inventory.length}</span>
@@ -389,7 +387,7 @@ function Satchel() {
             Your bag is empty. Beaten foes drop gear: walk over it to pick it up.
           </p>
         ) : (
-          <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] justify-items-center gap-2">
+          <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] content-start justify-items-center gap-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:pb-1">
             {shown.map((e) => (
               <ItemTile
                 key={e.uid}
@@ -425,12 +423,32 @@ function Satchel() {
         )}
       </div>
 
-      {sel && !marking && (
-        <ItemSheet
+      {/* Wide screens: the chosen item in its own column, always there. */}
+      {wide && (
+        <div className="min-h-0">
+          {sel && !marking ? (
+            <ItemDetails
+              key={sel.uid}
+              entry={sel}
+              wornSlot={wornSlot}
+              onClose={() => setSelected(null)}
+              inline
+            />
+          ) : (
+            <div className="grid h-full place-items-center rounded-2xl border-2 border-dashed border-[var(--edge)] p-4 text-center text-sm font-bold text-[var(--parchment)]/55">
+              Tap an item to see what it does, and to equip, sell or salvage it.
+            </div>
+          )}
+        </div>
+      )}
+      {/* Phones: a card over the bag. */}
+      {!wide && sel && !marking && (
+        <ItemDetails
           key={sel.uid}
           entry={sel}
           wornSlot={wornSlot}
           onClose={() => setSelected(null)}
+          inline={false}
         />
       )}
     </div>
@@ -889,7 +907,7 @@ export function InventoryPanel() {
     >
       <div
         data-testid="journal"
-        className="relative flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
+        className="relative flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border-2 border-[var(--edge)] bg-[var(--panel)] text-[var(--parchment)] shadow-[0_16px_48px_rgba(0,0,0,0.6)] md:h-full md:max-h-[46rem]"
       >
         <div className="flex items-center gap-1 border-b-2 border-[var(--edge)]/60 bg-[var(--ink)]/35 px-1.5 py-1.5 sm:px-3">
           <div className="flex min-w-0 flex-1 gap-1">
@@ -935,7 +953,11 @@ export function InventoryPanel() {
             In combat! Enemies are attacking you, and the fight goes on while this is open.
           </div>
         )}
-        <div className="overflow-y-auto overscroll-contain p-2.5 sm:p-4">
+        <div
+          className={`min-h-0 flex-1 overscroll-contain p-2.5 sm:p-4 ${
+            tab === "satchel" ? "overflow-y-auto md:overflow-hidden" : "overflow-y-auto"
+          }`}
+        >
           {tab === "satchel" && <Satchel />}
           {tab === "forge" && <Forge />}
           {tab === "build" && <Build />}

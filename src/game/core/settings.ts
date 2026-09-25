@@ -14,6 +14,8 @@ export interface Settings {
   holdToAttack: boolean;
   /** Turn to and attack enemies in reach on your own (walking, or standing in a fight). */
   autoAttack: boolean;
+  /** Camera distance multiplier for the top view: 0.8 (closer) to 1.8 (see more). */
+  cameraZoom: number;
   /** High 3/4 view (default) or the orbiting behind-the-back camera. */
   camera: CameraMode;
   /** Cap the game at 30 fps: a cooler phone and longer play. */
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   floatingStick: true,
   holdToAttack: true,
   autoAttack: true,
+  cameraZoom: 1,
   camera: "top",
   batterySaver: false,
   stickSize: 1,
@@ -93,6 +96,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       (out as Record<string, unknown>)[k] = v;
   }
   out.lookSensitivity = clamp(out.lookSensitivity, 0.4, 2.2);
+  out.cameraZoom = clamp(out.cameraZoom, 0.8, 1.8);
   out.stickSize = clamp(out.stickSize, 0.75, 1.4);
   out.stickOpacity = clamp(out.stickOpacity, 0.25, 1);
   if (out.camera !== "top" && out.camera !== "behind") out.camera = DEFAULT_SETTINGS.camera;

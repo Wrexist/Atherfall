@@ -7,7 +7,7 @@ import { useSettings } from "../src/game/core/settings";
 import { initWorld, stepWorld, world } from "../src/game/core/sim";
 import { useGame } from "../src/game/core/store";
 import { COLLIDERS } from "../src/game/world/layout";
-import { heightAt, regionAt } from "../src/game/world/terrain";
+import { SEA_LEVEL, heightAt, regionAt } from "../src/game/world/terrain";
 
 const foe = (id: string, x: number, z: number, hp = 10, phase = "idle") => ({
   id,
@@ -92,9 +92,100 @@ describe("in the game", () => {
     expect(world.stats.swings).toBeGreaterThan(0);
   });
 
+  test("attacking on the move never slows the hero down", () => {
+    const p = world.player;
+    const walk = (seconds: number) => {
+      const x0 = p.x;
+      const z0 = p.z;
+      input.moveZ = 1;
+      run(seconds);
+      input.moveZ = 0;
+      return Math.hypot(p.x - x0, p.z - z0);
+    };
+    // Swinging (auto-attack at the enemy beside us) while walking…
+    const swings0 = world.stats.swings;
+    const fighting = walk(0.5);
+    expect(world.stats.swings).toBeGreaterThan(swings0);
+    // …covers as much ground as walking with nothing to hit.
+    for (const e of world.enemies) e.x = e.homeX = 900;
+    run(0.6);
+    const free = walk(0.5);
+    expect(fighting).toBeGreaterThan(free * 0.9);
+  });
+
+  test("split walking legs never outlive the swing (swimming)", () => {
+    const p = world.player;
+    for (const e of world.enemies) e.x = e.homeX = 900;
+    // Deep water: the swim step returns early, before the animation choice.
+    let sea = { x: 0, z: 0 };
+    outer: for (let r = 60; r < 130; r += 4)
+      for (let a = 0; a < 6.28; a += 0.2) {
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        if (heightAt(x, z) < SEA_LEVEL - 3) {
+          sea = { x, z };
+          break outer;
+        }
+      }
+    p.x = sea.x;
+    p.z = sea.z;
+    p.y = SEA_LEVEL - 1;
+    p.swimming = true;
+    p.legs = "walk"; // left over from a swing just before diving in
+    run(0.3);
+    expect(p.swimming).toBe(true);
+    expect(p.legs).toBeNull();
+  });
+
   test("with auto-attack off, nothing swings on its own", () => {
     useSettings.setState({ autoAttack: false });
     run(1.2);
     expect(world.stats.swings).toBe(0);
+  });
+});
+
+describe("loot", () => {
+  beforeEach(() => {
+    useGame.getState().resetProgress();
+    useGame.setState({ screen: "playing", questStep: 1 });
+    initWorld(null);
+    for (const e of world.enemies) {
+      e.x = e.homeX = 900;
+      e.z = e.homeZ = 900;
+    }
+    const p = world.player;
+    p.x = OPEN.x;
+    p.z = OPEN.z;
+    p.y = heightAt(OPEN.x, OPEN.z);
+    input.moveX = input.moveZ = 0;
+  });
+
+  const coins = (dx: number) =>
+    world.drops.push({
+      id: 9001,
+      x: OPEN.x + dx,
+      y: heightAt(OPEN.x + dx, OPEN.z),
+      z: OPEN.z,
+      potion: false,
+      gold: 25,
+      shards: 0,
+      born: world.time,
+      taken: false,
+    });
+
+  test("nearby loot flies to the hero after its pop, no walking over it", () => {
+    const before = useGame.getState().gold;
+    coins(4.5);
+    run(0.2);
+    expect(useGame.getState().gold).toBe(before); // still popping out
+    run(1.5);
+    expect(useGame.getState().gold).toBe(before + 25);
+  });
+
+  test("loot further away waits for you", () => {
+    const before = useGame.getState().gold;
+    coins(9);
+    run(2);
+    expect(useGame.getState().gold).toBe(before);
   });
 });
