@@ -25,7 +25,7 @@ Lovable Cloud is managed by Lovable and runs on its usage allowance. It does not
 
 Everything below was run against a real local Supabase stack, the same software Lovable Cloud uses:
 
-- **Security checks:** 18 of 18 passed (script kept outside the repo).
+- **Security checks:** 18 of 18 passed (script kept outside the repo). The saves and parties rules are now also checked on every PR by `tests/db.test.ts`, which applies all migrations to an in-process Postgres (PGlite).
   - Sign-up creates the profile. A duplicate name, in any letter case, falls back to a "Wanderer…" name.
   - Players can read and write only their own save. Other players and signed-out users get nothing.
   - Players can only rename themselves. The database rejects invalid names and oversized saves.
