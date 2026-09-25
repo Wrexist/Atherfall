@@ -2,6 +2,7 @@ import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar } from "./Cooldowns";
+import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
 function Bar({
@@ -24,7 +25,28 @@ function Bar({
 }
 
 export function Hud() {
-  const s = useGame();
+  // Select only what the HUD shows, so unrelated store writes don't re-render it.
+  const s = useGame(
+    useShallow((g) => ({
+      archetype: g.archetype,
+      level: g.level,
+      hp: g.hp,
+      xp: g.xp,
+      equipped: g.equipped,
+      gold: g.gold,
+      shards: g.shards,
+      potions: g.potions,
+      region: g.region,
+      questIdx: g.questIdx,
+      questStep: g.questStep,
+      questKills: g.questKills,
+      questComplete: g.questComplete,
+      bossBar: g.bossBar,
+      interactPrompt: g.interactPrompt,
+      dialogue: g.dialogue,
+      toasts: g.toasts,
+    })),
+  );
   const stats = statsFor(s);
   const quest = QUESTS[s.questIdx]!;
   const step = quest.steps[s.questStep];

@@ -28,6 +28,7 @@ function Joystick() {
       ref={base}
       className="pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.75rem,env(safe-area-inset-left))] flex h-32 w-32 touch-none items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 backdrop-blur-sm"
       onPointerDown={(e) => {
+        if (id.current !== null) return; // a second thumb must not steal the stick
         id.current = e.pointerId;
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         const rect = base.current!.getBoundingClientRect();
@@ -38,12 +39,14 @@ function Joystick() {
         if (id.current !== e.pointerId) return;
         set(e.clientX - origin.current.x, e.clientY - origin.current.y);
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
+        if (id.current !== e.pointerId) return;
         id.current = null;
         set(0, 0);
         setSprintTouch(false);
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(e) => {
+        if (id.current !== e.pointerId) return;
         id.current = null;
         set(0, 0);
         setSprintTouch(false);
@@ -90,7 +93,10 @@ function LookPad() {
     <div
       className="pointer-events-auto absolute inset-y-0 right-0 w-1/2 touch-none"
       onPointerDown={(e) => {
+        if (id.current !== null) return;
         id.current = e.pointerId;
+        // Capture so the release is seen even if the finger slides off the pad.
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
         last.current = { x: e.clientX, y: e.clientY };
       }}
       onPointerMove={(e) => {
@@ -98,11 +104,11 @@ function LookPad() {
         applyLook((e.clientX - last.current.x) * 1.6, (e.clientY - last.current.y) * 1.6);
         last.current = { x: e.clientX, y: e.clientY };
       }}
-      onPointerUp={() => {
-        id.current = null;
+      onPointerUp={(e) => {
+        if (id.current === e.pointerId) id.current = null;
       }}
-      onPointerCancel={() => {
-        id.current = null;
+      onPointerCancel={(e) => {
+        if (id.current === e.pointerId) id.current = null;
       }}
     />
   );
@@ -180,6 +186,14 @@ export function TouchControls() {
           <TouchButton label="Bag" size="h-11 w-14 !rounded-xl" onPress={() => toggleInventory()} />
           <TouchButton label={`Heal ${potions}`} size="h-11 w-14 !rounded-xl" onPress={() => (input.healQueued = true)} />
           <TouchButton label="Map" size="h-11 w-14 !rounded-xl" onPress={() => useGame.getState().toggleInventory(true, "map")} />
+          <TouchButton
+            label="Menu"
+            size="h-11 w-14 !rounded-xl"
+            onPress={() => {
+              useGame.getState().toggleInventory(false);
+              useGame.setState({ screen: "paused" });
+            }}
+          />
           {prompt && /^(Speak|Climb|Open)/.test(prompt) && (
             <TouchButton label={prompt.startsWith("Climb") ? "Climb" : prompt.startsWith("Open") ? "Open" : "Talk"} size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
           )}

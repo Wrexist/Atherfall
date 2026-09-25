@@ -160,3 +160,25 @@
     letter-spacing: 0.04em;
   }
 }
+
+/* Game shell on phones: no rubber-band scrolling, long-press callout, text
+   magnifier or grey tap flash while thumbs are on the controls. */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The 3D canvas repaints every frame, so each backdrop blur over it is recomputed
+   every frame too — a big GPU/battery cost on mobile Safari and Android. Touch
+   devices get the flat translucent panels instead. */
+@media (pointer: coarse) {
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}

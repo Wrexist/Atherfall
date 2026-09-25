@@ -140,11 +140,62 @@ export function migrateV1(old: SaveFileV1): SaveFile {
   };
 }
 
+const num = (n: unknown, fallback: number) => (typeof n === "number" && Number.isFinite(n) ? n : fallback);
+const strings = (a: unknown): string[] => (Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : []);
+
+/**
+ * Current-version saves are trusted structurally but repaired field by field
+ * (in place): a hand-edited or partially written save, or one naming an item a
+ * later update removed, must never crash the satchel or strand the player.
+ */
+function repairV2(s: SaveFile): SaveFile {
+  const known = (e: InvEntry | null | undefined): e is InvEntry =>
+    !!e && typeof e === "object" && typeof e.itemId === "string" && !!ITEMS[e.itemId];
+  const p = (s.player ?? {}) as Partial<SaveFile["player"]>;
+  s.player = { x: num(p.x, 0), y: num(p.y, 0), z: num(p.z, 12), yaw: num(p.yaw, Math.PI) };
+  if (!["vanguard", "ranger", "arcanist"].includes(s.archetype)) s.archetype = "vanguard";
+  s.level = Math.max(1, Math.floor(num(s.level, 1)));
+  s.hp = num(s.hp, 1);
+  s.xp = Math.max(0, num(s.xp, 0));
+  s.gold = Math.max(0, num(s.gold, 0));
+  s.shards = Math.max(0, num(s.shards, 0));
+  s.potions = Math.max(0, num(s.potions, 0));
+  s.questIdx = Math.max(0, Math.floor(num(s.questIdx, 0)));
+  s.questStep = Math.max(0, Math.floor(num(s.questStep, 0)));
+  s.questKills = Math.max(0, num(s.questKills, 0));
+  s.deaths = num(s.deaths, 0);
+  s.kills = num(s.kills, 0);
+  s.elapsed = num(s.elapsed, 0);
+  s.inventory = (Array.isArray(s.inventory) ? s.inventory : [])
+    .filter(known)
+    .map((e, i) => ({ uid: typeof e.uid === "string" && e.uid ? e.uid : `r${i}`, itemId: e.itemId, plus: num(e.plus, 0) }));
+  const eq = (s.equipped ?? {}) as Partial<Equipped>;
+  s.equipped = {
+    weapon: known(eq.weapon) ? eq.weapon : null,
+    armor: known(eq.armor) ? eq.armor : null,
+    accessory: known(eq.accessory) ? eq.accessory : null,
+    relic: known(eq.relic) ? eq.relic : null,
+  };
+  const c = (s.codex ?? {}) as Partial<Codex>;
+  s.codex = {
+    kills: c.kills && typeof c.kills === "object" ? c.kills : {},
+    seen: strings(c.seen),
+    places: strings(c.places),
+    items: strings(c.items),
+  };
+  s.defeated = strings(s.defeated);
+  s.waypoints = strings(s.waypoints);
+  s.secrets = strings(s.secrets);
+  s.landmarks = strings(s.landmarks);
+  if (!["low", "medium", "high"].includes(s.quality)) s.quality = "medium";
+  return s;
+}
+
 /** Upgrade any known save shape to the current version. */
 export function migrateSave(raw: unknown): SaveFile | null {
   if (!raw || typeof raw !== "object") return null;
   const v = (raw as { v?: unknown }).v;
-  if (v === SAVE_VERSION) return raw as SaveFile;
+  if (v === SAVE_VERSION) return repairV2(raw as SaveFile);
   if (v === 1) return migrateV1(raw as SaveFileV1);
   return null;
 }
@@ -154,8 +205,17 @@ export function readSave(): SaveFile | null {
   try {
     const text = window.localStorage.getItem(SAVE_KEY);
     if (!text) return null;
-    const parsed = JSON.parse(text) as { v?: number };
+    let parsed: { v?: number };
+    try {
+      parsed = JSON.parse(text) as { v?: number };
+    } catch {
+      keepUnreadable(text);
+      return null;
+    }
     const save = migrateSave(parsed);
+    // Unknown (e.g. newer) version: keep the original so a fix can recover it,
+    // since starting a new journey would otherwise overwrite it.
+    if (!save) keepUnreadable(text);
     if (save && parsed.v !== SAVE_VERSION) {
       window.localStorage.setItem(`${SAVE_KEY}.v${parsed.v}.bak`, text);
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -163,6 +223,15 @@ export function readSave(): SaveFile | null {
     return save;
   } catch {
     return null;
+  }
+}
+
+function keepUnreadable(text: string) {
+  try {
+    const key = `${SAVE_KEY}.unreadable`;
+    if (window.localStorage.getItem(key) !== text) window.localStorage.setItem(key, text);
+  } catch {
+    /* ignore */
   }
 }
 

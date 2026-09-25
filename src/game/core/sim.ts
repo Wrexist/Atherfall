@@ -23,7 +23,7 @@ import { ITEMS } from "../data/items";
 import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
 import { REGIONS, SEA_LEVEL, WORLD_RADIUS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
 import { CLIMBS, LANDMARKS, RESOURCES, RESOURCE_RESPAWN, SECRETS, WAYPOINTS } from "../data/world";
-import { sfx } from "./audio";
+import { setMuted as setAudioMuted, sfx } from "./audio";
 import { input } from "./input";
 import { readSave, writeSave, SAVE_VERSION, type SaveFile } from "./persistence";
 import { statsFor, useGame } from "./store";
@@ -289,6 +289,7 @@ const CLIMB_SPEED = 2.4;
 /** Seconds for a full day/night cycle. */
 export const DAY_LENGTH = 480;
 let lastSwimHint = -10;
+let wardHeal = 0;
 
 function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
   const def = enemyDef(spawn.type);
@@ -402,6 +403,13 @@ export function saveNow() {
 export function loadSaveIntoStore(): SaveFile | null {
   const save = readSave();
   if (!save) return null;
+  if (!(save.hp > 0)) {
+    // Saved on the death screen: wake at the nearest known waypoint like a respawn.
+    const known = Array.from(new Set(["emberhollow", ...(save.waypoints ?? [])]));
+    const wp = nearestWaypoint(save.player.x, save.player.z, known);
+    save.player = { ...save.player, x: wp ? wp.x + 1.5 : SPAWN_POINT.x, z: wp ? wp.z + 1.5 : SPAWN_POINT.z };
+    save.hp = Math.round(statsFor({ archetype: save.archetype, level: save.level, equipped: save.equipped }).maxHp * 0.6);
+  }
   useGame.getState().hydrate({
     archetype: save.archetype,
     hp: save.hp,
@@ -424,8 +432,11 @@ export function loadSaveIntoStore(): SaveFile | null {
     deaths: save.deaths,
     kills: save.kills,
     elapsed: save.elapsed,
+    quality: save.quality ?? useGame.getState().quality,
+    muted: !!save.muted,
     hasSave: true,
   });
+  setAudioMuted(!!save.muted);
   return save;
 }
 
@@ -542,14 +553,20 @@ function killEnemy(enemy: EnemyRuntime) {
   enemy.aggro = false;
   enemy.respawnIn = def.respawnDelay;
   world.defeated.add(enemy.id);
+  const firstDrop = world.drops.length;
   dropLoot(enemy);
+  // Bosses and elites never respawn and drops aren't saved, so their reward goes
+  // straight into the satchel — closing the app before walking over it can't lose it.
+  if (def.boss || def.elite) {
+    for (const d of world.drops.slice(firstDrop)) collectDrop(d);
+  }
   sfx.enemyDown();
   const store = useGame.getState();
   store.addXp(def.xp);
   store.registerKill(enemy.type);
   if (def.boss) {
     useGame.setState({ bossBar: null });
-    store.toast(`${def.name} falls! Boss reward dropped.`, "quest");
+    store.toast(`${def.name} falls! Boss reward claimed.`, "quest");
     spark(enemy.x, enemy.y + 0.2, enemy.z, "#ffd27a", 7, true, 1.1);
   }
   saveNow();
@@ -687,9 +704,12 @@ function damageEnemy(
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const d = Math.hypot(dx, dz) || 1;
+    const ox = e.x;
+    const oz = e.z;
     e.x += (dx / d) * kb;
     e.z += (dz / d) * kb;
     resolveCollisions(e, 0.6);
+    keepOnLand(e, ox, oz);
   }
   if (opts.stagger && !def.boss && e.phase !== "charge") {
     // Interrupts windups — rewarding a well-timed finisher.
@@ -918,7 +938,7 @@ export function abilityInSlot(idx: number): AbilityId | null {
   return a?.abilities[idx] ?? null;
 }
 
-function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
+function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
   const id = abilityInSlot(idx);
   if (!id || p.dead) return;
   const def = ABILITIES[id];
@@ -1074,9 +1094,13 @@ function stepPlayer(dt: number, camYaw: number) {
     const before = p.wardT;
     p.wardT = Math.max(0, p.wardT - dt);
     const max = statsFor(store).maxHp;
-    const heal = ((before - p.wardT) / 4) * max * 0.2;
-    if (store.hp < max) store.setHp(Math.min(max, store.hp + heal));
-  }
+    wardHeal += ((before - p.wardT) / 4) * max * 0.2;
+    // Flush whole points only: a store write per frame re-renders the HUD at 60Hz.
+    if (store.hp < max && (wardHeal >= 1 || p.wardT === 0)) {
+      store.setHp(Math.min(max, store.hp + wardHeal));
+      wardHeal = 0;
+    }
+  } else wardHeal = 0;
 
   const { mx, mz, mag } = moveIntent(camYaw);
 
@@ -1103,7 +1127,7 @@ function stepPlayer(dt: number, camYaw: number) {
   if (input.abilityQueued !== null) {
     const idx = input.abilityQueued;
     input.abilityQueued = null;
-    useAbility(p, idx, mx, mz, mag);
+    castAbility(p, idx, mx, mz, mag);
   }
   if (input.attackQueued) {
     input.attackQueued = false;
@@ -1644,7 +1668,10 @@ function checkUnlocks() {
 // ---------------------------------------------------------------- open world
 
 function keepOnLand(e: EnemyRuntime, ox: number, oz: number) {
-  if (heightAt(e.x, e.z) < SEA_LEVEL - 0.6) {
+  // Reject only steps that go *deeper*: an enemy already in deep water (e.g.
+  // knocked back into it) must still be able to walk out towards shore.
+  const h = heightAt(e.x, e.z);
+  if (h < SEA_LEVEL - 0.6 && h < heightAt(ox, oz)) {
     e.x = ox;
     e.z = oz;
   }
@@ -1810,6 +1837,8 @@ function stepExploration(dt: number) {
       return;
     }
   }
+  // Lore waits until the fight is over — a dialogue box mid-charge blocks attacks.
+  if (inCombat() || s.dialogue) return;
   for (const l of LANDMARKS) {
     if (s.landmarks.includes(l.id)) continue;
     if (Math.hypot(l.x - p.x, l.z - p.z) < 9) {
@@ -1820,6 +1849,22 @@ function stepExploration(dt: number) {
   }
 }
 
+function collectDrop(d: DropRuntime) {
+  const store = useGame.getState();
+  d.taken = true;
+  if (d.itemId) store.addItem(d.itemId);
+  if (d.potion) {
+    useGame.setState({ potions: useGame.getState().potions + 1 });
+    store.toast("Picked up a Sunbloom Draught", "good");
+  }
+  if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
+  if (d.shards > 0) {
+    useGame.setState({ shards: useGame.getState().shards + d.shards });
+    store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
+  }
+  sfx.pickup();
+}
+
 function stepDrops(dt: number) {
   void dt;
   const p = world.player;
@@ -1827,20 +1872,7 @@ function stepDrops(dt: number) {
   for (const d of world.drops) {
     if (d.taken) continue;
     const dist = Math.hypot(d.x - p.x, d.z - p.z);
-    if (dist < 2.0 && !p.dead) {
-      d.taken = true;
-      if (d.itemId) store.addItem(d.itemId);
-      if (d.potion) {
-        useGame.setState({ potions: store.potions + 1 });
-        store.toast("Picked up a Sunbloom Draught", "good");
-      }
-      if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
-      if (d.shards > 0) {
-        useGame.setState({ shards: useGame.getState().shards + d.shards });
-        store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
-      }
-      sfx.pickup();
-    }
+    if (dist < 2.0 && !p.dead) collectDrop(d);
   }
   if (world.drops.length > 60) world.drops.splice(0, world.drops.length - 60);
   for (let i = world.drops.length - 1; i >= 0; i--) {
@@ -1975,6 +2007,7 @@ export function stepWorld(dtRaw: number) {
   const store = useGame.getState();
   if (store.screen !== "playing") {
     if (input.interactQueued) input.interactQueued = false;
+    world.cameraShake = 0; // shake only decays while playing; don't jitter menus
     return;
   }
   const dt0 = Math.min(dtRaw, 0.05);

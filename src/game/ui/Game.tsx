@@ -1,8 +1,8 @@
 import { useProgress } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { initAudio, setMuted as setAudioMuted } from "../core/audio";
+import { setMuted as setAudioMuted, suspendAudio, unlockAudio } from "../core/audio";
 import { applyLook, input, keys, resetInput } from "../core/input";
-import { loadSaveIntoStore } from "../core/sim";
+import { loadSaveIntoStore, saveNow } from "../core/sim";
 import { useGame } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 import { GameCanvas } from "../render/GameCanvas";
@@ -13,6 +13,7 @@ import {
   DialogueBox,
   LoadingScreen,
   PauseMenu,
+  RotateHint,
   TitleScreen,
   WebglError,
 } from "./Menus";
@@ -115,7 +116,6 @@ export function Game() {
       if (e.pointerType !== "mouse") return;
       const state = useGame.getState();
       if (state.screen !== "playing" || state.inventoryOpen || state.dialogue) return;
-      initAudio();
       if (document.pointerLockElement !== el) {
         void el.requestPointerLock?.();
         dragging.current = true;
@@ -146,6 +146,40 @@ export function Game() {
     };
   }, []);
 
+  // Mobile browsers only allow audio after a user gesture, and suspend it again
+  // after interruptions — so every tap (touch, pen or mouse) re-unlocks it.
+  useEffect(() => {
+    const onGesture = () => unlockAudio();
+    window.addEventListener("pointerdown", onGesture, true);
+    window.addEventListener("keydown", onGesture, true);
+    return () => {
+      window.removeEventListener("pointerdown", onGesture, true);
+      window.removeEventListener("keydown", onGesture, true);
+    };
+  }, []);
+
+  // Backgrounding (home button, app switch, incoming call, tab switch): pause,
+  // save immediately — iOS may kill the page without warning — and stop audio.
+  useEffect(() => {
+    const persist = () => {
+      const s = useGame.getState().screen;
+      if (s === "playing" || s === "paused" || s === "dead") saveNow();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      resetInput();
+      if (useGame.getState().screen === "playing") useGame.setState({ screen: "paused" });
+      persist();
+      suspendAudio();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", persist);
+    };
+  }, []);
+
   // Release the cursor whenever gameplay is interrupted — including the satchel,
   // so its buttons are clickable with a visible mouse cursor.
   const inventoryOpen = useGame((s) => s.inventoryOpen);
@@ -171,6 +205,7 @@ export function Game() {
       <DeathScreen />
       <TitleScreen save={save} />
       {showLoading && <LoadingScreen progress={useGame.getState().loadProgress} />}
+      <RotateHint />
     </div>
   );
 }

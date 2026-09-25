@@ -16,6 +16,21 @@ export function initAudio() {
   master.connect(ctx.destination);
 }
 
+/**
+ * Create (if needed) and resume the context. Must run inside a user gesture —
+ * iOS/Android keep audio locked until then, and suspend it again whenever the
+ * page is backgrounded or a call/notification interrupts it.
+ */
+export function unlockAudio() {
+  initAudio();
+  if (ctx && ctx.state !== "running") void ctx.resume().catch(() => undefined);
+}
+
+/** Stop audio processing while the game is hidden (saves battery). */
+export function suspendAudio() {
+  if (ctx && ctx.state === "running") void ctx.suspend().catch(() => undefined);
+}
+
 export function setMuted(v: boolean) {
   muted = v;
   if (master) master.gain.value = v ? 0 : 0.35;

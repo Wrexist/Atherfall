@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QUESTS } from "../data/quests";
-import { setMuted as setAudioMuted, sfx } from "../core/audio";
+import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
@@ -13,10 +13,33 @@ const QUALITIES: Array<{ id: Quality; label: string; note: string }> = [
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-lg rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-6 shadow-2xl backdrop-blur">
+    // Capped to the visible height and scrollable: on a landscape phone (~390px tall)
+    // the pause menu and controls list would otherwise be clipped off-screen.
+    <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-5 shadow-2xl backdrop-blur sm:p-6">
       {children}
     </div>
   );
+}
+
+/**
+ * On phones, take over the whole screen and hold landscape (Android/Chrome).
+ * iPhone Safari has no element fullscreen; there the home-screen install
+ * (manifest, display: fullscreen) gives the same result. Must run in a tap.
+ */
+function enterMobileFullscreen() {
+  if (!window.matchMedia("(pointer: coarse)").matches) return;
+  if (window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches) return;
+  const root = document.documentElement;
+  if (document.fullscreenElement || !root.requestFullscreen) return;
+  root
+    .requestFullscreen({ navigationUI: "hide" })
+    .then(() => {
+      const orientation = screen.orientation as ScreenOrientation & {
+        lock?: (o: string) => Promise<void>;
+      };
+      return orientation?.lock?.("landscape");
+    })
+    .catch(() => undefined);
 }
 
 export function LoadingScreen({ progress }: { progress: number }) {
@@ -52,14 +75,20 @@ export function WebglError() {
   );
 }
 
-export function TitleScreen({ save }: { save: SaveFile | null }) {
+export function TitleScreen({ save: bootSave }: { save: SaveFile | null }) {
   const screen = useGame((s) => s.screen);
+  // The save read at page load goes stale once "Erase save" is used; only offer
+  // Continue while the store still says a save exists.
+  const hasSave = useGame((s) => s.hasSave);
+  const save = hasSave ? bootSave : null;
   const quality = useGame((s) => s.quality);
   const setQuality = useGame((s) => s.setQuality);
   const [showControls, setShowControls] = useState(false);
   if (screen !== "title") return null;
 
   const start = (useSave: boolean) => {
+    unlockAudio();
+    enterMobileFullscreen();
     sfx.ui();
     if (!useSave) {
       clearSave();
@@ -176,8 +205,14 @@ function ControlsList() {
 }
 
 export function PauseMenu() {
+  const screen = useGame((g) => g.screen);
+  if (screen !== "paused") return null;
+  return <PauseMenuBody />;
+}
+
+/** Only mounted while paused, so the always-mounted wrapper stays cheap. */
+function PauseMenuBody() {
   const s = useGame();
-  if (s.screen !== "paused") return null;
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--ink)]/35 p-4">
       <Panel>
@@ -273,7 +308,14 @@ export function DialogueBox() {
   const openDialogue = useGame((s) => s.openDialogue);
   if (!dialogue) return null;
   return (
-    <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex justify-center p-4">
+    <div
+      className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex justify-center p-4"
+      style={{
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(1rem, env(safe-area-inset-left))",
+        paddingRight: "max(1rem, env(safe-area-inset-right))",
+      }}
+    >
       <div className="w-full max-w-2xl rounded-xl border border-[var(--gilt)]/35 bg-[var(--panel)]/95 p-4 backdrop-blur">
         <div className="font-display text-sm tracking-[0.2em] text-[var(--gilt)]">
           {dialogue.name.toUpperCase()}
@@ -286,15 +328,51 @@ export function DialogueBox() {
           ))}
         </div>
         <button
-          className="mt-3 rounded-lg border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-4 py-2 text-xs text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
+          className="mt-3 min-h-11 rounded-lg border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-5 py-2 text-sm text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
           onClick={() => {
             sfx.ui();
             openDialogue(null);
           }}
         >
-          Close (E)
+          Close<span className="hidden [@media(pointer:fine)]:inline"> (E)</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phones held upright: the controls and HUD are designed for landscape, so ask
+ * the player to rotate and pause the fight underneath instead of letting
+ * enemies hit an unplayable layout.
+ */
+export function RotateHint() {
+  const [portrait, setPortrait] = useState(false);
+  const loading = useGame((g) => g.screen === "loading");
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: portrait) and (pointer: coarse)");
+    const update = () => {
+      setPortrait(mq.matches);
+      if (mq.matches && useGame.getState().screen === "playing") {
+        useGame.setState({ screen: "paused" });
+      }
+    };
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  if (!portrait || loading) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[var(--ink)] p-8 text-center">
+      <svg viewBox="0 0 64 64" className="h-16 w-16 animate-pulse text-[var(--gilt)]" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden>
+        <rect x="20" y="6" width="24" height="44" rx="4" />
+        <path d="M10 44a22 22 0 0 0 18 14M54 20A22 22 0 0 0 36 6" strokeLinecap="round" />
+        <path d="M24 55l4 3-3 4M40 3l-4 3 3 4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">ROTATE YOUR DEVICE</h2>
+      <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">
+        Aetherfall plays in landscape. Turn your phone sideways to continue your journey.
+      </p>
     </div>
   );
 }
