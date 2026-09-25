@@ -78,6 +78,7 @@ export function Game() {
         if (e.code === "KeyI") state.toggleInventory(undefined, "satchel");
         if (e.code === "KeyB") state.toggleInventory(undefined, "build");
         if (e.code === "KeyK") state.toggleInventory(undefined, "codex");
+        if (e.code === "KeyN") state.toggleInventory(undefined, "map");
         if (e.code === "KeyF" || e.code === "ControlLeft") input.dodgeQueued = true;
         if (e.code === "Digit1") input.abilityQueued = 0;
         if (e.code === "Digit2") input.abilityQueued = 1;

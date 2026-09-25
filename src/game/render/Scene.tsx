@@ -10,6 +10,8 @@ import { Terrain } from "./Terrain";
 import { EnemyViews, NpcViews, PlayerView } from "./Characters";
 import { DropViews, FloaterViews, ProjectileViews, RingViews, SparkViews, ZoneViews } from "./Effects";
 import { Systems } from "./Systems";
+import { WorldObjects } from "./WorldObjects";
+import { DayNight } from "./DayNight";
 
 const QUALITY: Record<Quality, { segments: number; shadows: boolean; shadowMap: number; far: number; detail: boolean }> = {
   low: { segments: 90, shadows: false, shadowMap: 512, far: 95, detail: false },
@@ -108,6 +110,8 @@ export function Scene() {
   const quality = useGame((s) => s.quality);
   const q = QUALITY[quality];
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const ambRef = useRef<THREE.AmbientLight>(null);
   const props = useMemo(
     () => groupProps(q.detail ? PROPS : PROPS.filter((p) => !p.detail)),
     [q.detail],
@@ -119,8 +123,9 @@ export function Scene() {
       <color attach="background" args={["#f0cfa1"]} />
       <fog attach="fog" args={["#efc99c", q.far * 0.32, q.far]} />
 
-      <hemisphereLight args={["#ffe2b8", "#4e5a3a", 0.85]} />
-      <ambientLight intensity={0.35} color="#ffd9b0" />
+      <hemisphereLight ref={hemiRef} args={["#ffe2b8", "#4e5a3a", 0.85]} />
+      <ambientLight ref={ambRef} intensity={0.35} color="#ffd9b0" />
+      <DayNight sun={sunRef} hemi={hemiRef} amb={ambRef} />
       <directionalLight
         ref={sunRef}
         color="#ffcf93"
@@ -153,6 +158,7 @@ export function Scene() {
       <FloaterViews />
       <ProjectileViews />
       <BarrowGate />
+      <WorldObjects />
     </>
   );
 }

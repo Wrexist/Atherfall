@@ -150,7 +150,7 @@ export function Hud() {
           <span><b className="text-[var(--gilt)]">Space</b> jump</span>
           <span><b className="text-[var(--gilt)]">E</b> talk</span>
           <span><b className="text-[var(--gilt)]">Q</b> draught ({s.potions})</span>
-          <span><b className="text-[var(--gilt)]">I / B / K</b> satchel · build · codex</span>
+          <span><b className="text-[var(--gilt)]">I B K N</b> bag · build · codex · map</span>
           <span><b className="text-[var(--gilt)]">F / RMB</b> dodge</span>
           <span><b className="text-[var(--gilt)]">1 2 3</b> abilities</span>
           <span><b className="text-[var(--gilt)]">Esc</b> pause</span>

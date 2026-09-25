@@ -39,6 +39,10 @@ export interface SaveFile {
   questComplete: boolean;
   barrowUnlocked: boolean;
   codex: Codex;
+  /** Added after v2 shipped; optional so earlier v2 saves still load. */
+  waypoints?: string[];
+  secrets?: string[];
+  landmarks?: string[];
   deaths: number;
   kills: number;
   elapsed: number;
