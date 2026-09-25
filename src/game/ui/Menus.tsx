@@ -383,6 +383,40 @@ function Toggle({
   );
 }
 
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  show,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  show: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block py-1.5">
+      <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
+        {label}
+        <span className="text-xs text-[var(--parchment)]/70">{show(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.05}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 h-11 w-full accent-[var(--gilt)]"
+      />
+    </label>
+  );
+}
+
 /** Controls and comfort: stored per device, not in the save. */
 function ComfortSettings() {
   const prefs = useSettings();
@@ -439,6 +473,28 @@ function ComfortSettings() {
         />
         {touch && (
           <>
+            <Toggle
+              label="Left-handed controls"
+              note="Stick on the right, Attack on the left"
+              on={prefs.leftHanded}
+              onChange={(v) => prefs.update({ leftHanded: v })}
+            />
+            <Slider
+              label="Joystick size"
+              value={prefs.stickSize}
+              min={0.75}
+              max={1.4}
+              show={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => prefs.update({ stickSize: v })}
+            />
+            <Slider
+              label="Joystick opacity"
+              value={prefs.stickOpacity}
+              min={0.25}
+              max={1}
+              show={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => prefs.update({ stickOpacity: v })}
+            />
             <Toggle
               label="Floating joystick"
               note="Appears wherever your left thumb lands"

@@ -94,7 +94,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | # | Pri | Item | Status |
 |---|-----|------|--------|
 | 40 | P1 | Floating joystick: it appears wherever the left thumb lands on the left half. It can be switched back to a fixed stick. | ✅ |
-| 41 | P1 | Settings: look sensitivity, invert Y, hold-to-attack, floating joystick, vibration. Stored per device. Still to do: joystick size and opacity, left-handed layout. | ◐ |
+| 41 | P1 | Settings: look sensitivity, invert Y, hold-to-attack, floating joystick, vibration, **joystick size (75–140%) and opacity, and a left-handed layout** (stick on the right, Attack and its rings mirrored on the left, in portrait and landscape). Stored per device; stored values are cleaned and clamped (`sanitizeSettings`, tested). At 130%+ on a 390px-wide phone the resting stick overlaps the outer ability ring; buttons stay on top, so taps land on them. | ✅ |
 | 42 | P1 | Vibration on hit, damage, perfect evade, kill, burst, boss roar, level-up and death (Android; iPhone browsers have no vibration API). | ✅ |
 | 43 | P1 | 180ms input buffer for attack, dodge and abilities: early presses fire as soon as they're allowed instead of being dropped. | ✅ |
 | 44 | P1 | Hold Attack to keep swinging (touch and mouse). Lock-on: the Target button (Tab/R on keyboard) locks the nearest enemy in view, tap again for the next, then off. The camera tracks the target, attacks aim at it, a gold ring marks it, and the lock drops on death or distance. | ✅ |

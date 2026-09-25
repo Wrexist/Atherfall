@@ -15,7 +15,25 @@ const TRAVEL = 56;
  * thumb lands in the left half of the screen, so there's no small target to hunt
  * for. Fixed: only the resting stick in the corner responds.
  */
-function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: string }) {
+function Joystick({
+  floating,
+  zone: zoneClass,
+  size,
+  opacity,
+  right,
+}: {
+  floating: boolean;
+  zone: string;
+  /** Size multiplier. */
+  size: number;
+  /** Opacity at rest (full while held). */
+  opacity: number;
+  /** Rest in the bottom-right corner (left-handed layout). */
+  right: boolean;
+}) {
+  const BASE_PX = BASE * size;
+  const KNOB_PX = KNOB * size;
+  const TRAVEL_PX = TRAVEL * size;
   const zone = useRef<HTMLDivElement>(null);
   const base = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
@@ -24,13 +42,13 @@ function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: stri
 
   const set = (dx: number, dy: number) => {
     const len = Math.hypot(dx, dy);
-    const clamped = len > TRAVEL ? TRAVEL / len : 1;
+    const clamped = len > TRAVEL_PX ? TRAVEL_PX / len : 1;
     const kx = dx * clamped;
     const ky = dy * clamped;
     if (knob.current) knob.current.style.transform = `translate(${kx}px, ${ky}px)`;
-    touch.moveX = kx / TRAVEL;
-    touch.moveZ = -ky / TRAVEL;
-    setSprintTouch(Math.hypot(kx, ky) / TRAVEL > 0.85);
+    touch.moveX = kx / TRAVEL_PX;
+    touch.moveZ = -ky / TRAVEL_PX;
+    setSprintTouch(Math.hypot(kx, ky) / TRAVEL_PX > 0.85);
   };
 
   /** Move the stick's centre to a point in zone coordinates (null = back to its resting spot). */
@@ -40,7 +58,7 @@ function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: stri
     if (!el || !z) return;
     el.style.transform = "";
     if (x === null || y === null) {
-      el.style.opacity = "";
+      el.style.opacity = String(opacity);
       return;
     }
     const rest = el.getBoundingClientRect();
@@ -74,8 +92,8 @@ function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: stri
         if (floating) {
           const z = zone.current!.getBoundingClientRect();
           // Keep the whole stick on screen even when the thumb lands at an edge.
-          const x = Math.max(BASE / 2, Math.min(z.width - BASE / 2, e.clientX - z.left));
-          const y = Math.max(BASE / 2, Math.min(z.height - BASE / 2, e.clientY - z.top));
+          const x = Math.max(BASE_PX / 2, Math.min(z.width - BASE_PX / 2, e.clientX - z.left));
+          const y = Math.max(BASE_PX / 2, Math.min(z.height - BASE_PX / 2, e.clientY - z.top));
           placeBase(x, y);
           origin.current = { x: x + z.left, y: y + z.top };
         } else {
@@ -93,12 +111,16 @@ function Joystick({ floating, zone: zoneClass }: { floating: boolean; zone: stri
     >
       <div
         ref={base}
-        style={{ width: BASE, height: BASE }}
-        className={`pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.75rem,env(safe-area-inset-left))] flex items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 transition-opacity ${floating ? "opacity-60" : ""}`}
+        style={{ width: BASE_PX, height: BASE_PX, opacity }}
+        className={`pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] ${
+          right
+            ? "right-[max(1.75rem,env(safe-area-inset-right))]"
+            : "left-[max(1.75rem,env(safe-area-inset-left))]"
+        } flex items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 transition-opacity`}
       >
         <div
           ref={knob}
-          style={{ width: KNOB, height: KNOB }}
+          style={{ width: KNOB_PX, height: KNOB_PX }}
           className="rounded-full border border-[var(--gilt)]/50 bg-[var(--gilt)]/30"
         />
       </div>
@@ -137,13 +159,13 @@ function TouchButton({
   );
 }
 
-/** Drag-to-look surface covering the right half of the screen. */
-function LookPad() {
+/** Drag-to-look surface covering the half of the screen away from the stick. */
+function LookPad({ left }: { left: boolean }) {
   const id = useRef<number | null>(null);
   const last = useRef({ x: 0, y: 0 });
   return (
     <div
-      className="pointer-events-auto absolute inset-y-0 right-0 w-1/2 touch-none"
+      className={`pointer-events-auto absolute inset-y-0 w-1/2 touch-none ${left ? "left-0" : "right-0"}`}
       onPointerDown={(e) => {
         if (id.current !== null) return;
         id.current = e.pointerId;
@@ -261,7 +283,12 @@ export function TouchControls() {
   const slots = useAbilitySlots();
   const floatingStick = useSettings((s) => s.floatingStick);
   const orbit = useSettings((s) => s.camera === "behind");
+  const stickSize = useSettings((s) => s.stickSize);
+  const stickOpacity = useSettings((s) => s.stickOpacity);
+  const lefty = useSettings((s) => s.leftHanded);
   const portrait = usePortrait();
+  /** Left-handed: everything mirrored left to right. */
+  const ang = (a: number) => (lefty ? 180 - a : a);
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(pointer: coarse)").matches);
@@ -297,28 +324,40 @@ export function TouchControls() {
     const OUTER = [174, 148, 122];
     return (
       <div className="pointer-events-none fixed inset-0 z-20">
-        {orbit && <LookPad />}
-        <Joystick floating={floatingStick} zone="bottom-0 left-0 h-[58%] w-[56%]" />
-        <div className="pointer-events-none absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-[5.25rem] w-[5.25rem]">
+        {orbit && <LookPad left={lefty} />}
+        <Joystick
+          floating={floatingStick}
+          zone={`bottom-0 h-[58%] w-[56%] ${lefty ? "right-0" : "left-0"}`}
+          size={stickSize}
+          opacity={stickOpacity}
+          right={lefty}
+        />
+        <div
+          className={`pointer-events-none absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] h-[5.25rem] w-[5.25rem] ${
+            lefty
+              ? "left-[max(1.25rem,env(safe-area-inset-left))]"
+              : "right-[max(1.25rem,env(safe-area-inset-right))]"
+          }`}
+        >
           {attack}
           <ArcButton
             id="jump"
             label="Jump"
-            angle={188}
+            angle={ang(188)}
             radius={94}
             onPress={() => (input.jumpQueued = true)}
           />
           <ArcButton
             id="dodge"
             label="Dodge"
-            angle={140}
+            angle={ang(140)}
             radius={94}
             onPress={() => (input.dodgeQueued = true)}
           />
           <ArcButton
             id="heal"
             label={`Heal ${potions}`}
-            angle={94}
+            angle={ang(94)}
             radius={94}
             onPress={() => (input.healQueued = true)}
           />
@@ -328,7 +367,7 @@ export function TouchControls() {
               id={a.id}
               label={a.label}
               small
-              angle={OUTER[i]!}
+              angle={ang(OUTER[i]!)}
               radius={160}
               onPress={() => (input.abilityQueued = a.idx)}
             />
@@ -337,14 +376,16 @@ export function TouchControls() {
             id="target"
             label="Target"
             small
-            angle={98}
+            angle={ang(98)}
             radius={160}
             onPress={() => (input.lockQueued = true)}
           />
           {interact && (
             <div
               className="absolute left-1/2 top-1/2"
-              style={{ transform: "translate(calc(-50% - 60px), calc(-50% - 222px))" }}
+              style={{
+                transform: `translate(calc(-50% ${lefty ? "+" : "-"} 60px), calc(-50% - 222px))`,
+              }}
             >
               <TouchButton
                 label={interact}
@@ -362,8 +403,14 @@ export function TouchControls() {
   const OUTER = [178, 146, 114];
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
-      {orbit && <LookPad />}
-      <Joystick floating={floatingStick} zone="inset-y-0 left-0 w-1/2" />
+      {orbit && <LookPad left={lefty} />}
+      <Joystick
+        floating={floatingStick}
+        zone={`inset-y-0 w-1/2 ${lefty ? "right-0" : "left-0"}`}
+        size={stickSize}
+        opacity={stickOpacity}
+        right={lefty}
+      />
       {/* Utility row, bottom centre, clear of both thumbs */}
       <div className="pointer-events-none absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
         <CombatStates />
@@ -397,19 +444,25 @@ export function TouchControls() {
           )}
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] h-20 w-20">
+      <div
+        className={`pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] h-20 w-20 ${
+          lefty
+            ? "left-[max(1.25rem,env(safe-area-inset-left))]"
+            : "right-[max(1.25rem,env(safe-area-inset-right))]"
+        }`}
+      >
         {attack}
         <ArcButton
           id="jump"
           label="Jump"
-          angle={192}
+          angle={ang(192)}
           radius={90}
           onPress={() => (input.jumpQueued = true)}
         />
         <ArcButton
           id="dodge"
           label="Dodge"
-          angle={138}
+          angle={ang(138)}
           radius={90}
           onPress={() => (input.dodgeQueued = true)}
         />
@@ -417,7 +470,7 @@ export function TouchControls() {
           id="target"
           label="Target"
           small
-          angle={84}
+          angle={ang(84)}
           radius={92}
           onPress={() => (input.lockQueued = true)}
         />
@@ -427,7 +480,7 @@ export function TouchControls() {
             id={a.id}
             label={a.label}
             small
-            angle={OUTER[i]!}
+            angle={ang(OUTER[i]!)}
             radius={150}
             onPress={() => (input.abilityQueued = a.idx)}
           />
