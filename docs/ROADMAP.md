@@ -18,7 +18,7 @@ feel or polish, **P2** = improvement.
 - **World:** 5 regions, with fast-travel waypoints, secret caches, landmarks, shard nodes and a day/night cycle.
 - **Items:** 21 items, 6 modifiers, forging to +5, sell and salvage, plus a codex.
 - **Saves:** stored in the browser only, versioned.
-- **Health:** 49 tests pass, typecheck is clean and the build passes.
+- **Health:** 79 tests pass, typecheck is clean and the build passes.
 - **Still missing:** everything that makes it an MMO (accounts, server, other players) and
   everything that makes it an installable phone app (store build, offline cache).
 
@@ -137,7 +137,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 
 | # | Item | Status |
 |---|------|--------|
-| 69 | **Accounts plus cloud saves.** Optional email sign-in and a unique player name. Cloud saves reconcile with the device save on sign-in and never silently overwrite progress. Tested against a real local Supabase. **To switch on:** enable Lovable Cloud and apply the migration (2 steps in `docs/ONLINE.md`). Still to do: Google sign-in, password reset. | ◐ |
+| 69 | **Accounts plus cloud saves.** Optional email sign-in and a unique player name. Cloud saves reconcile with the device save on sign-in and never silently overwrite progress. Tested against a real local Supabase. **To switch on:** enable Lovable Cloud and apply the migrations (2 steps in `docs/ONLINE.md`). Still to do: Google sign-in, password reset. | ◐ |
 | 70 | **Server-authoritative economy.** Loot, gold, forging and trades validated on the server (edge functions), so saves can't be edited for items. Needed before anything is tradeable. | ⬜ |
 | 71 | **Presence.** Other signed-in players are shown live, with name tags and an "N online" count, over a private channel for signed-in players only. Shard into instances when busy; move to Cloudflare Durable Objects at scale. | ✅ |
 | 72 | **Social.** Chat with moderation and filters, friends, parties (shared quest credit, shared loot rules), emotes. | ⬜ |
@@ -145,6 +145,17 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 74 | **Progression depth.** Talent trees, more regions past the Tidewrack gate, crafting from shards, cosmetics. | ⬜ |
 | 75 | **Live ops.** Events, season pass, leaderboards. | ⬜ |
 | 76 | **Anti-cheat and safety.** Rate limits, movement sanity checks, report and block. | ⬜ |
+
+## Phase 6b — PR #1 review fixes ✅ (2026-09-25, tests in `tests/online.test.ts` and `tests/regressions.test.ts`)
+
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 80 | P1 | A second device (or a delayed request) could overwrite a newer cloud save. The database now keeps the newest save (`…_saves_keep_newest.sql`); "Keep this device's" re-stamps the save it keeps. Checked on real Postgres: fails on the old schema, passes on the new. | ✅ |
+| 81 | P1 | Backgrounding uploaded *before* the game made its final save, so that save waited on a timer a frozen phone never fires. Saves made while hidden now upload at once. | ✅ |
+| 82 | P1 | Pressing Continue while the cloud check was running dropped its result and turned cloud saves off for the session. The check now runs outside the title screen, the start buttons wait for it (8s max), and a "cloud is newer" question replaces them so it's never below the fold. | ✅ |
+| 83 | P2 | Damaged equipped items in a save kept a missing uid or a non-numeric `plus` (unusable item, NaN stats). They're now rebuilt like satchel items and must match their slot. | ✅ |
+
+Verified in Chromium as an iPhone 13 in landscape, against a mocked slow backend: start buttons wait, uploads resume, the save made on hide goes up within 1s, both choice buttons are on screen, and offline mode makes no network calls.
 
 ## Housekeeping
 

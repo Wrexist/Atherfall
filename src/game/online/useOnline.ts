@@ -3,7 +3,7 @@ import { onSave } from "../core/sim";
 import { useGame } from "../core/store";
 import { initAccount, useAccount } from "./account";
 import { onlineConfigured } from "./client";
-import { dropPendingUpload, flushUpload, queueUpload } from "./cloudSave";
+import { dropPendingUpload, queueUpload, setBackgrounded } from "./cloudSave";
 import { joinWorld, leaveWorld, updateMeta } from "./presence";
 
 /**
@@ -24,19 +24,21 @@ export function useOnline() {
     if (!onlineConfigured) return undefined;
     initAccount();
     const off = onSave(queueUpload);
-    // Backgrounded: push the latest save now. (Leaving the world is handled by
+    // Backgrounded: push the latest save now, including the one the game makes
+    // on hide (its listener may run after ours). Leaving the world is handled by
     // the effect below — iOS may freeze the page, and a silent socket would
-    // leave a statue behind.)
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") void flushUpload();
-    };
-    const onHide = () => void flushUpload();
+    // leave a statue behind.
+    const onVisibility = () => setBackgrounded(document.visibilityState === "hidden");
+    const onHide = () => setBackgrounded(true);
+    const onShow = () => setBackgrounded(document.visibilityState === "hidden");
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onHide);
+    window.addEventListener("pageshow", onShow);
     return () => {
       off();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("pageshow", onShow);
     };
   }, []);
 
