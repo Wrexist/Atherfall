@@ -121,8 +121,8 @@ function RemotePlayerSlot({ id }: { id: string }) {
 
 function RemotePlayerView({ id, url }: { id: string; url: string }) {
   const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useCharacter(url);
-  const { play, update } = useAnimator(group, animations);
+  const { scene, animations, rig } = useCharacter(url);
+  const { play, update } = useAnimator(group, animations, rig);
 
   useFrame((_, dt) => {
     const g = group.current;
@@ -142,7 +142,7 @@ function RemotePlayerView({ id, url }: { id: string; url: string }) {
 
   return (
     <group ref={group} visible={false}>
-      <group scale={2.15}>
+      <group scale={2.15 * rig.scale}>
         <primitive object={scene} />
       </group>
     </group>

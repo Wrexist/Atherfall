@@ -35,6 +35,8 @@ export interface NpcDef {
   z: number;
   yaw: number;
   scale: number;
+  /** Colour wash over the model's palette, to tell villagers apart. */
+  tint?: string;
 }
 
 export interface SpawnDef {
@@ -62,7 +64,7 @@ export const NPCS: NpcDef[] = [
   {
     id: "sela",
     name: "Warden Sela",
-    model: "/models/mini/npc-sela.glb",
+    model: "/models/kaykit/rogue.glb",
     x: 3.2,
     z: 3.6,
     yaw: -2.3,
@@ -71,7 +73,7 @@ export const NPCS: NpcDef[] = [
   {
     id: "smith",
     name: "Oda the Smith",
-    model: "/models/mini/smith.glb",
+    model: "/models/kaykit/barbarian.glb",
     x: 7.5,
     z: -2.5,
     yaw: -1.2,
@@ -80,11 +82,12 @@ export const NPCS: NpcDef[] = [
   {
     id: "elder",
     name: "Elder Kervan",
-    model: "/models/mini/npc-elder.glb",
+    model: "/models/kaykit/elder.glb",
     x: -7.5,
     z: 1.5,
     yaw: 1.1,
     scale: 2.1,
+    tint: "#b9b2a4",
   },
 ];
 
@@ -398,14 +401,15 @@ export const ALL_MODELS: string[] = Array.from(
     ...PROPS.map((p) => p.model),
     ...COTTAGES.flatMap((c) => cottageWalls(c).map((w) => w.model)),
     ...NPCS.map((n) => n.model),
-    "/models/mini/hero.glb",
-    "/models/gy/character-zombie.glb",
-    "/models/gy/character-skeleton.glb",
-    "/models/gy/character-vampire.glb",
-    "/models/dng/character-orc.glb",
+    "/models/kaykit/knight.glb",
+    "/models/kaykit/ranger.glb",
+    "/models/kaykit/mage.glb",
+    "/models/kaykit/skeleton-minion.glb",
+    "/models/kaykit/skeleton-warrior.glb",
+    "/models/kaykit/skeleton-rogue.glb",
+    "/models/kaykit/skeleton-mage.glb",
+    "/models/kaykit/animations.glb",
     "/models/dng/gate.glb",
     "/models/dng/chest.glb",
-    "/models/mini/ranger.glb",
-    "/models/mini/arcanist.glb",
   ]),
 );
