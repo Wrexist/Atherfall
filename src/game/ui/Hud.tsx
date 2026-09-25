@@ -36,12 +36,17 @@ function LocationBanner({ region }: { region: string | null }) {
   const [shown, setShown] = useState<string | null>(null);
   const last = useRef<string | null>(null);
   useEffect(() => {
-    if (!region || region === last.current) return;
+    // Left every region: drop the banner, and let the next entry show it again.
+    if (!region) {
+      last.current = null;
+      setShown(null);
+      return;
+    }
+    if (region === last.current) return;
     last.current = region;
     setShown(region);
   }, [region]);
-  // Its own timer: the region can blink to none at an edge, and that must not
-  // cancel the fade (it used to, leaving the banner up for good).
+  // Its own timer, so a region change can never cancel the fade.
   useEffect(() => {
     if (!shown) return undefined;
     const t = setTimeout(() => setShown(null), 2600);
