@@ -232,6 +232,15 @@ export function Game() {
   return (
     <div ref={shellRef} id="game-shell" className="fixed inset-0 overflow-hidden bg-[var(--ink)] touch-none">
       <GameCanvas />
+      {/* Soft dark corners that frame the hero, like the target mockups. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[1]"
+        style={{
+          background:
+            "radial-gradient(ellipse 75% 65% at 50% 55%, transparent 55%, rgba(8,14,26,0.38) 100%)",
+        }}
+      />
       {overlay && <Hud />}
       {overlay && <TouchControls />}
       <DialogueBox />

@@ -216,21 +216,14 @@ function QuestTracker({
       <div
         className={`flex items-center gap-1.5 font-display text-[var(--gilt)] text-outline ${compact ? "text-[12px]" : "text-sm"}`}
       >
-        <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[var(--gilt)] text-[10px] leading-none text-[#3a2206]">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-gradient-to-b from-[#ffd970] to-[#e89b2e] font-display text-[15px] leading-none text-[#3a2206] ring-2 ring-[#0b1320]">
           !
         </span>
         <span className="truncate">{quest.name}</span>
-        {dist !== null && dist > 6 && !s.questComplete && (
-          <span
-            data-testid="quest-distance"
-            className="ml-auto shrink-0 rounded-full bg-[var(--ink)]/70 px-1.5 font-sans text-[11px] font-black text-[var(--parchment)]"
-          >
-            {dist} m
-          </span>
-        )}
         <span
           aria-hidden
-          className={`${dist !== null && dist > 6 && !s.questComplete ? "" : "ml-auto"} h-3 w-3 shrink-0 rotate-45 rounded-[2px] bg-gradient-to-br from-[#ffe28a] to-[#e89b2e] ring-1 ring-[#0b1320]`}
+          title={dist !== null ? `${dist} m` : undefined}
+          className="ml-auto h-3.5 w-3.5 shrink-0 rotate-45 rounded-[3px] bg-gradient-to-br from-[#ffe28a] to-[#e89b2e] ring-1 ring-[#0b1320]"
         />
       </div>
       {s.questComplete ? (
@@ -418,11 +411,27 @@ function PortraitHud({ s, online, fine }: { s: HudState; online: number; fine: b
         <LocationBanner region={s.region} />
         {/* The game's mark, bottom left under the joystick's rest spot. */}
         {!fine && (
-          <div className="pointer-events-none absolute bottom-0 left-1 flex flex-col items-start leading-none opacity-90">
-            <span className="font-display text-[22px] tracking-[0.06em] text-[#f1e3c0] text-outline">
+          <div className="pointer-events-none absolute bottom-0 left-1 flex flex-col items-center leading-none opacity-95">
+            {/* A spire-and-star emblem over the name. */}
+            <svg viewBox="0 0 40 26" className="-mb-1 h-6 w-9" aria-hidden>
+              <path
+                d="M20 1 22 14 20 25 18 14Z M20 9 30 14 20 12 10 14Z"
+                fill="#e2c275"
+                stroke="#3a2a12"
+                strokeWidth="1"
+              />
+            </svg>
+            <span
+              className="text-[21px] tracking-[0.04em] text-[#f1e3c0]"
+              style={{
+                fontFamily: "Cinzel, Georgia, serif",
+                fontWeight: 700,
+                textShadow: "0 2px 0 #0b1320, 0 0 8px rgba(0,0,0,0.6)",
+              }}
+            >
               AETHERFALL
             </span>
-            <span className="mt-0.5 text-[7px] font-extrabold tracking-[0.28em] text-[#d8c79a]">
+            <span className="mt-1 text-[7px] font-extrabold tracking-[0.28em] text-[#e2d3a8] text-outline">
               EXPLORE &middot; FIGHT &middot; FARM &middot; GROW
             </span>
           </div>

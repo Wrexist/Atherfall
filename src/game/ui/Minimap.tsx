@@ -18,7 +18,7 @@ import { ENEMIES } from "../data/enemies";
 import { ITEMS, RARITY_COLOR } from "../data/items";
 import { WAYPOINTS } from "../data/world";
 import { remotes, usePresence } from "../online/presence";
-import { NPCS } from "../world/layout";
+import { COTTAGES, NPCS } from "../world/layout";
 import { BTN } from "./kit";
 import { usePortrait } from "./layout";
 import { MAP_SPAN, drawHeroArrow, terrainCanvas } from "./mapPaint";
@@ -130,6 +130,25 @@ export function Minimap() {
 
       ctx.lineWidth = 1.3;
       ctx.strokeStyle = "#0b1320";
+      // Houses, drawn like a painted map: a little roof in the house's colour.
+      const hs = half / rM; // pixels per metre
+      for (const c of COTTAGES) {
+        const m = project(c.x - p.x, c.z - p.z, rM, half);
+        if (toRim(m.x, m.y, half, round, 4).outside) continue;
+        const w = Math.max(5, c.w * 3 * hs);
+        const d = Math.max(5, c.d * 3 * hs);
+        ctx.save();
+        ctx.translate(half + m.x, half + m.y);
+        ctx.rotate(-c.yaw);
+        ctx.fillStyle = "rgba(11,19,32,0.35)";
+        ctx.fillRect(-w / 2 + 1.5, -d / 2 + 1.5, w, d);
+        ctx.fillStyle = c.roof;
+        ctx.fillRect(-w / 2, -d / 2, w, d);
+        ctx.fillStyle = "rgba(255,255,255,0.28)";
+        ctx.fillRect(-w / 2, -d / 2, w, d / 2);
+        ctx.strokeRect(-w / 2, -d / 2, w, d);
+        ctx.restore();
+      }
       const st = useGame.getState();
       for (const w of WAYPOINTS) {
         if (!st.waypoints.includes(w.id)) continue;
@@ -186,14 +205,30 @@ export function Minimap() {
           ctx.stroke();
           ctx.restore();
         } else {
-          const pulse = 6 + Math.sin(performance.now() / 260) * 1.5;
-          ctx.lineWidth = 3.5;
-          ctx.beginPath();
-          ctx.arc(x, y, pulse, 0, TAU);
-          ctx.stroke();
-          ctx.strokeStyle = "#ffcb5c";
+          // A gold map pin, bobbing gently, with a ring where it points.
+          const bob = Math.sin(performance.now() / 300) * 1.2;
           ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(255,203,92,0.9)";
+          ctx.beginPath();
+          ctx.ellipse(x, y, 6, 3.2, 0, 0, TAU);
           ctx.stroke();
+          ctx.save();
+          ctx.translate(x, y - 3 + bob);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(-7, -8, -7, -16, 0, -16);
+          ctx.bezierCurveTo(7, -16, 7, -8, 0, 0);
+          ctx.closePath();
+          ctx.fillStyle = "#ffcb5c";
+          ctx.strokeStyle = "#0b1320";
+          ctx.lineWidth = 1.6;
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, -10.5, 2.6, 0, TAU);
+          ctx.fillStyle = "#3a2206";
+          ctx.fill();
+          ctx.restore();
         }
       }
       drawHeroArrow(ctx, half, half, p.yaw, 0.95);
