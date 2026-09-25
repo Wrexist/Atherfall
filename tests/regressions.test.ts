@@ -334,3 +334,49 @@ describe("combat feel", () => {
     expect(Math.hypot(a!.x - b!.x, a!.z - b!.z)).toBeGreaterThan(1);
   });
 });
+
+describe("lock-on", () => {
+  const place = (id: string, dx: number, dz: number) => {
+    const e = world.enemies.find((x) => x.id === id)!;
+    e.x = e.homeX = world.player.x + dx;
+    e.z = e.homeZ = world.player.z + dz;
+    e.phase = "idle";
+    return e;
+  };
+
+  test("locks the nearest enemy, cycles to the next, then releases", () => {
+    const near = place("b1", 0, 5);
+    const far = place("b2", 0, 12);
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(near.id);
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(far.id);
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBeNull();
+  });
+
+  test("attacks turn to face the locked target", () => {
+    const target = place("b1", 2.5, 0); // off to the side, outside the forward auto-aim cone
+    target.maxHp = target.hp = 9999;
+    world.player.yaw = Math.PI; // facing away from it
+    input.lockQueued = true;
+    stepWorld(DT);
+    input.attackQueued = true;
+    stepWorld(DT);
+    expect(world.player.yaw).toBeCloseTo(Math.atan2(2.5, 0), 2);
+  });
+
+  test("the lock drops when the target dies", () => {
+    const target = place("b1", 0, 4);
+    input.lockQueued = true;
+    stepWorld(DT);
+    expect(world.lockId).toBe(target.id);
+    target.phase = "dead";
+    target.hp = 0;
+    stepWorld(DT);
+    expect(world.lockId).toBeNull();
+  });
+});

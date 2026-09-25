@@ -172,7 +172,7 @@ function ArcButton({
   onPress,
 }: {
   small?: boolean;
-  id: SlotId | "jump";
+  id: SlotId | "jump" | "target";
   label: string;
   angle: number;
   radius: number;
@@ -196,6 +196,14 @@ function ArcButton({
     >
       {id === "jump" ? (
         <span className="text-[11px] font-semibold uppercase tracking-wider">Jump</span>
+      ) : id === "target" ? (
+        <>
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+            <circle cx="12" cy="12" r="7" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+          </svg>
+          <span className="text-[9px] font-semibold uppercase tracking-wide">Target</span>
+        </>
       ) : (
         <>
           <SlotIcon id={id} className="h-5 w-5" />
@@ -264,6 +272,7 @@ export function TouchControls() {
         />
         <ArcButton id="jump" label="Jump" angle={192} radius={90} onPress={() => (input.jumpQueued = true)} />
         <ArcButton id="dodge" label="Dodge" angle={138} radius={90} onPress={() => (input.dodgeQueued = true)} />
+        <ArcButton id="target" label="Target" small angle={84} radius={92} onPress={() => (input.lockQueued = true)} />
         {abilities.map((a, i) => (
           <ArcButton key={a.id} id={a.id} label={a.label} small angle={OUTER[i]!} radius={150} onPress={() => (input.abilityQueued = a.idx)} />
         ))}

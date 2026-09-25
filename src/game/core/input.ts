@@ -17,6 +17,8 @@ export interface InputState {
   dodgeQueued: boolean;
   /** Index into ABILITIES, or null. */
   abilityQueued: number | null;
+  /** Lock onto / cycle / release a target. */
+  lockQueued: boolean;
   /** Camera orbit, radians. */
   yaw: number;
   pitch: number;
@@ -35,6 +37,7 @@ export const input: InputState = {
   healQueued: false,
   dodgeQueued: false,
   abilityQueued: null,
+  lockQueued: false,
   yaw: Math.PI,
   pitch: 0.34,
   touchLook: false,
@@ -71,6 +74,7 @@ export function resetInput() {
   input.healQueued = false;
   input.dodgeQueued = false;
   input.abilityQueued = null;
+  input.lockQueued = false;
 }
 
 /** Fold keyboard + touch into the movement axes. Called once per frame. */

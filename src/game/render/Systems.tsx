@@ -2,7 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
 import { input, pollInput } from "../core/input";
-import { stepWorld, world } from "../core/sim";
+import { lockedEnemy, stepWorld, world } from "../core/sim";
 import { heightAt } from "../world/terrain";
 import { COLLIDERS } from "../world/layout";
 
@@ -35,6 +35,16 @@ export function Systems({ sunRef }: { sunRef: React.RefObject<THREE.DirectionalL
     stepWorld(dt);
 
     const p = world.player;
+    // Lock-on: swing the camera round to keep the target in view ahead of the player.
+    const lock = lockedEnemy();
+    if (lock) {
+      const want = Math.atan2(lock.x - p.x, lock.z - p.z);
+      if (Math.hypot(lock.x - p.x, lock.z - p.z) > 1.5) {
+        let diff = want - input.yaw;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        input.yaw += diff * (1 - Math.exp(-5 * dt));
+      }
+    }
     const targetX = p.x;
     const targetY = p.y + HEAD;
     const targetZ = p.z;

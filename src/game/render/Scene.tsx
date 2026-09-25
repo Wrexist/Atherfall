@@ -10,7 +10,15 @@ import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
 import { Terrain } from "./Terrain";
 import { EnemyViews, NpcViews, PlayerView } from "./Characters";
-import { DropViews, FloaterViews, ProjectileViews, RingViews, SparkViews, ZoneViews } from "./Effects";
+import {
+  DropViews,
+  FloaterViews,
+  LockRing,
+  ProjectileViews,
+  RingViews,
+  SparkViews,
+  ZoneViews,
+} from "./Effects";
 import { Systems } from "./Systems";
 import { WorldObjects } from "./WorldObjects";
 import { QuestMarker } from "./QuestMarker";
@@ -189,6 +197,7 @@ export function Scene() {
       <ZoneViews />
       <FloaterViews />
       <ProjectileViews />
+      <LockRing />
       <BarrowGate />
       <WorldObjects />
       <QuestMarker />

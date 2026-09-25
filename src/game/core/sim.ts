@@ -278,7 +278,45 @@ export const world = {
   hitstop: 0,
   /** Counters exposed for tests. */
   stats: { swings: 0, hits: 0, evades: 0 },
+  /** Locked-on enemy id: the camera tracks it and attacks aim at it. */
+  lockId: null as string | null,
 };
+
+/** How far lock-on reaches, and how far a locked target may get before it drops. */
+export const LOCK_RANGE = 22;
+const LOCK_KEEP = 30;
+
+export function lockedEnemy(): EnemyRuntime | null {
+  if (!world.lockId) return null;
+  return world.enemies.find((e) => e.id === world.lockId) ?? null;
+}
+
+/**
+ * Lock on to the nearest enemy; while locked, move to the next-nearest; after
+ * the last one, release. Targets in front of the camera are preferred.
+ */
+export function cycleLock() {
+  const p = world.player;
+  const fx = Math.sin(input.yaw);
+  const fz = Math.cos(input.yaw);
+  const candidates = world.enemies
+    .filter((e) => e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE)
+    .map((e) => {
+      const dx = e.x - p.x;
+      const dz = e.z - p.z;
+      const d = Math.hypot(dx, dz);
+      const facing = (dx * fx + dz * fz) / (d || 1); // 1 = straight ahead of the camera
+      return { e, score: d - facing * 8 };
+    })
+    .sort((a, b) => a.score - b.score)
+    .map((c) => c.e);
+  if (!candidates.length) {
+    world.lockId = null;
+    return;
+  }
+  const at = candidates.findIndex((e) => e.id === world.lockId);
+  world.lockId = at < 0 ? candidates[0]!.id : (candidates[at + 1]?.id ?? null);
+}
 
 let dropId = 0;
 let sparkId = 0;
@@ -364,6 +402,7 @@ export function initWorld(save: SaveFile | null, seed = SEED) {
   world.projectiles.length = 0;
   world.rains.length = 0;
   world.stats = { swings: 0, hits: 0, evades: 0 };
+  world.lockId = null;
   world.resourceRegrow = {};
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
@@ -778,6 +817,11 @@ function moveIntent(camYaw: number) {
 
 /** Soft aim: at swing start, face a nearby enemy roughly in front. */
 function autoFace(p: PlayerRuntime, range: number) {
+  const locked = lockedEnemy();
+  if (locked && locked.phase !== "dead" && Math.hypot(locked.x - p.x, locked.z - p.z) < range * 1.5) {
+    p.yaw = Math.atan2(locked.x - p.x, locked.z - p.z);
+    return;
+  }
   let best: EnemyRuntime | null = null;
   let bestScore = -Infinity;
   const fx = Math.sin(p.yaw);
@@ -2147,6 +2191,20 @@ export function stepWorld(dtRaw: number) {
   if (input.interactQueued) {
     input.interactQueued = false;
     tryInteract();
+  }
+  if (input.lockQueued) {
+    input.lockQueued = false;
+    cycleLock();
+  }
+  const lock = lockedEnemy();
+  if (
+    lock &&
+    (lock.phase === "dead" ||
+      lock.phase === "return" ||
+      world.player.dead ||
+      Math.hypot(lock.x - world.player.x, lock.z - world.player.z) > LOCK_KEEP)
+  ) {
+    world.lockId = null;
   }
 
   stepPlayer(dt, input.yaw);

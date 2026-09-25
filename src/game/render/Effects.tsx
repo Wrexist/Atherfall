@@ -2,7 +2,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { ITEMS, RARITY_COLOR } from "../data/items";
-import { world, type Zone } from "../core/sim";
+import { lockedEnemy, world, type Zone } from "../core/sim";
+import { enemyDef } from "../data/enemies";
 import { heightAt } from "../world/terrain";
 import { col } from "./colors";
 
@@ -359,5 +360,26 @@ export function ProjectileViews() {
         </mesh>
       ))}
     </>
+  );
+}
+
+/** Pulsing ring under the locked-on enemy. */
+export function LockRing() {
+  const ref = useRef<THREE.Mesh>(null);
+  const geom = useMemo(() => new THREE.RingGeometry(0.82, 1, 36).rotateX(-Math.PI / 2), []);
+  useFrame((state) => {
+    const m = ref.current;
+    if (!m) return;
+    const e = lockedEnemy();
+    m.visible = !!e;
+    if (!e) return;
+    const r = enemyDef(e.type).scale * 0.5 + 0.4;
+    m.position.set(e.x, heightAt(e.x, e.z) + 0.1, e.z);
+    m.scale.setScalar(r * (1 + Math.sin(state.clock.elapsedTime * 5) * 0.06));
+  });
+  return (
+    <mesh ref={ref} geometry={geom} visible={false} renderOrder={4}>
+      <meshBasicMaterial color="#f3c969" transparent opacity={0.8} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
   );
 }
