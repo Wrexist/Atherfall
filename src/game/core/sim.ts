@@ -554,7 +554,7 @@ export function pointInZone(zone: Zone, px: number, pz: number, pad = 0.35) {
   return along >= -0.5 && along <= zone.len + pad && side <= zone.w / 2 + pad;
 }
 
-function damagePlayer(amount: number, fromX: number, fromZ: number) {
+function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: EnemyRuntime) {
   const store = useGame.getState();
   const p = world.player;
   if (p.dead) return;
@@ -567,7 +567,22 @@ function damagePlayer(amount: number, fromX: number, fromZ: number) {
   if (p.invuln > 0) return;
   const stats = statsFor(store);
   let dealt = Math.max(2, Math.round(amount - stats.defense * 0.45));
-  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * WARD.damageTaken));
+  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * 0.4));
+  if (p.shieldHp > 0) {
+    const absorbed = Math.min(p.shieldHp, dealt);
+    p.shieldHp -= absorbed;
+    dealt -= absorbed;
+    if (p.shieldHp <= 0) p.shieldT = 0;
+    if (dealt <= 0) {
+      floater(p.x, p.y + 2.5, p.z, "Absorbed", "#b9a4ff");
+      sfx.evade();
+      return;
+    }
+  }
+  if (attacker && stats.mods.thorns) {
+    const reflect = Math.max(1, Math.round(dealt * stats.mods.thorns));
+    damageEnemy(attacker, reflect, { knock: 0, stagger: false, big: false });
+  }
   const hp = Math.max(0, store.hp - dealt);
   store.setHp(hp);
   p.invuln = 0.45;
@@ -592,15 +607,41 @@ function damagePlayer(amount: number, fromX: number, fromZ: number) {
   if (hp <= 0) killPlayer();
 }
 
-function damageEnemy(e: EnemyRuntime, amount: number, opts: { knock: number; stagger: boolean; big: boolean }) {
+/** Roll a player hit: attack × multiplier, small variance, crit chance from stats. */
+function playerHit(mult: number) {
+  const stats = statsFor(useGame.getState());
+  const crit = rand() < stats.crit;
+  const dmg = Math.round(stats.attack * mult * (0.92 + rand() * 0.16) * (crit ? 1.6 : 1));
+  return { dmg, crit };
+}
+
+function damageEnemy(
+  e: EnemyRuntime,
+  amount: number,
+  opts: { knock: number; stagger: boolean; big: boolean; crit?: boolean; slowFor?: number },
+) {
   const def = enemyDef(e.type);
   if (e.phase === "dead" || e.phase === "roar") return false;
   const p = world.player;
   e.hp -= amount;
   e.hitFlash = 0.22;
   e.aggro = true;
+  if (opts.slowFor) e.slowT = Math.max(e.slowT, opts.slowFor);
   world.stats.hits += 1;
-  floater(e.x, e.y + def.scale * 1.15 + 0.4, e.z, String(amount), opts.big ? "#ffcf5c" : "#fff2d6", opts.big);
+  const store = useGame.getState();
+  const steal = statsFor(store).mods.lifesteal ?? 0;
+  if (steal > 0 && !p.dead) {
+    const max = statsFor(store).maxHp;
+    store.setHp(Math.min(max, store.hp + amount * steal));
+  }
+  floater(
+    e.x,
+    e.y + def.scale * 1.15 + 0.4,
+    e.z,
+    opts.crit ? `${amount}!` : String(amount),
+    opts.crit ? "#ff9d5c" : opts.big ? "#ffcf5c" : "#fff2d6",
+    opts.big || !!opts.crit,
+  );
   spark(e.x, e.y + def.scale * 0.55, e.z, opts.big ? "#ffc35a" : "#ffe2a8", opts.big ? 0.6 : 0.38);
   if (e.hp <= 0) {
     killEnemy(e);
@@ -667,10 +708,99 @@ function autoFace(p: PlayerRuntime, range: number) {
   if (best) p.yaw = Math.atan2(best.x - p.x, best.z - p.z);
 }
 
+function basicKind() {
+  return ARCHETYPES[useGame.getState().archetype]?.basic ?? "melee";
+}
+
+/** Duration of chain step `idx` for the current archetype. */
+function swingDuration(idx: number) {
+  const kind = basicKind();
+  return kind === "melee" ? SWINGS[idx]!.duration : SHOTS[kind].duration[idx]!;
+}
+
+function fireShot(p: PlayerRuntime, idx: number) {
+  const kind = basicKind();
+  if (kind === "melee") return;
+  const cfg = SHOTS[kind];
+  const hit = playerHit(cfg.mult[idx]!);
+  projectileId += 1;
+  world.projectiles.push({
+    id: projectileId,
+    x: p.x + Math.sin(p.yaw) * 0.8,
+    y: p.y + 1.25,
+    z: p.z + Math.cos(p.yaw) * 0.8,
+    vx: Math.sin(p.yaw) * cfg.speed,
+    vz: Math.cos(p.yaw) * cfg.speed,
+    travelled: 0,
+    range: cfg.range,
+    damage: hit.dmg,
+    crit: hit.crit,
+    pierce: cfg.pierce[idx]!,
+    radius: kind === "bolt" ? cfg.radius * (idx === 2 ? 1.5 : 1) : 0,
+    color: cfg.color,
+    hit: new Set(),
+    big: idx === 2,
+  });
+  if (world.projectiles.length > 24) world.projectiles.shift();
+}
+
+function explode(pr: ProjectileRuntime) {
+  for (const e of world.enemies) {
+    if (e.phase === "dead" || pr.hit.has(e.id)) continue;
+    if (Math.hypot(e.x - pr.x, e.z - pr.z) > pr.radius + (enemyDef(e.type).boss ? 1 : 0.3)) continue;
+    pr.hit.add(e.id);
+    damageEnemy(e, pr.damage, { knock: pr.big ? 1.2 : 0.4, stagger: pr.big, big: pr.big, crit: pr.crit });
+  }
+  spark(pr.x, heightAt(pr.x, pr.z) + 0.1, pr.z, pr.color, pr.radius, true, 0.4);
+  sfx.hit(pr.big ? 2 : 0);
+}
+
+function stepProjectiles(dt: number) {
+  for (let i = world.projectiles.length - 1; i >= 0; i--) {
+    const pr = world.projectiles[i]!;
+    const step = Math.hypot(pr.vx, pr.vz) * dt;
+    pr.x += pr.vx * dt;
+    pr.z += pr.vz * dt;
+    pr.travelled += step;
+    let done = pr.travelled >= pr.range;
+    // Solid obstacles stop shots.
+    for (const c of COLLIDERS) {
+      if (c.r >= 0.9 && Math.hypot(pr.x - c.x, pr.z - c.z) < c.r * 0.85) {
+        done = true;
+        break;
+      }
+    }
+    if (!done) {
+      for (const e of world.enemies) {
+        if (e.phase === "dead" || pr.hit.has(e.id)) continue;
+        const reach = enemyDef(e.type).boss ? 1.8 : 1.0;
+        if (Math.hypot(e.x - pr.x, e.z - pr.z) > reach) continue;
+        if (pr.radius > 0) {
+          done = true;
+          break;
+        }
+        pr.hit.add(e.id);
+        damageEnemy(e, pr.damage, { knock: pr.big ? 1.0 : 0.3, stagger: pr.big, big: pr.big, crit: pr.crit });
+        world.hitstop = Math.max(world.hitstop, pr.big ? 0.05 : 0.03);
+        sfx.hit(pr.big ? 2 : 0);
+        if (!pr.pierce) {
+          done = true;
+          break;
+        }
+      }
+    }
+    if (done) {
+      if (pr.radius > 0) explode(pr);
+      world.projectiles.splice(i, 1);
+    }
+  }
+}
+
 function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
   const swing = SWINGS[idx]!;
+  const kind = basicKind();
   if (mag > 0.2) p.yaw = Math.atan2(mx, mz);
-  autoFace(p, swing.range + 1.6);
+  autoFace(p, kind === "melee" ? swing.range + 1.6 : kind === "arrow" ? 20 : 15);
   p.action = "attack";
   p.actionT = 0;
   p.comboIdx = idx + 1;
@@ -678,16 +808,16 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   p.hitIds = new Set();
   p.swingSerial += 1;
   p.animKey += 1;
-  p.vx = Math.sin(p.yaw) * swing.lunge;
-  p.vz = Math.cos(p.yaw) * swing.lunge;
+  const lunge = kind === "melee" ? swing.lunge : 0;
+  p.vx = Math.sin(p.yaw) * lunge;
+  p.vz = Math.cos(p.yaw) * lunge;
   world.stats.swings += 1;
   sfx.swing(idx);
 }
 
 function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   if (p.action === "attack") {
-    const swing = SWINGS[p.comboIdx - 1]!;
-    if (p.actionT >= swing.duration * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
+    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
     return;
   }
   if (p.action !== "none" || p.attackCooldown > 0) return;
@@ -696,7 +826,6 @@ function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
 }
 
 function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
-  const stats = statsFor(useGame.getState());
   const fx = Math.sin(p.yaw);
   const fz = Math.cos(p.yaw);
   let confirmed = false;
@@ -713,8 +842,8 @@ function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
     if (dot < swing.minDot) continue;
     if (lineBlocked(p.x, p.z, e.x, e.z)) continue;
     p.hitIds.add(e.id);
-    const dmg = Math.round(stats.attack * swing.damageMult * (0.92 + rand() * 0.16));
-    damageEnemy(e, dmg, { knock: swing.knockback, stagger: swing.staggers, big: finisher });
+    const hit = playerHit(swing.damageMult);
+    damageEnemy(e, hit.dmg, { knock: swing.knockback, stagger: swing.staggers, big: finisher, crit: hit.crit });
     confirmed = true;
   }
   if (confirmed) {
@@ -834,10 +963,16 @@ function stepPlayer(dt: number, camYaw: number) {
   let speedCap = input.sprint ? SPRINT : WALK;
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
-    ctrl = 0.15;
-    speedCap = 1.4;
-    if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow) applySwingHits(p, swing);
-    if (p.actionT >= swing.duration) {
+    const melee = basicKind() === "melee";
+    ctrl = melee ? 0.15 : 0.5;
+    speedCap = melee ? 1.4 : 2.6;
+    if (melee) {
+      if (p.actionT >= swing.hitAt && p.actionT <= swing.hitAt + swing.hitWindow) applySwingHits(p, swing);
+    } else if (p.actionT >= 0.09 && !p.hitIds.has("__fired")) {
+      p.hitIds.add("__fired");
+      fireShot(p, p.comboIdx - 1);
+    }
+    if (p.actionT >= swingDuration(p.comboIdx - 1)) {
       p.action = "none";
       p.lastSwingEnd = world.time;
       if (p.comboIdx >= SWINGS.length) {
@@ -1068,7 +1203,7 @@ function startRoar(e: EnemyRuntime) {
   spark(e.x, e.y + 0.2, e.z, "#c96b3a", 6.5, true, 0.8);
   world.cameraShake = 0.8;
   sfx.roar();
-  useGame.getState().toast("Thornmaw tears free of its roots — the ground itself answers!", "bad");
+  useGame.getState().toast(`${enemyDef(e.type).name} is enraged — the ground itself answers!`, "bad");
 }
 
 const BOSS_P1: BossMove[] = ["cleave", "cleave", "charge"];
@@ -1197,7 +1332,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
           sfx.slam();
           world.cameraShake = Math.max(world.cameraShake, 0.3);
         }
-        if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z);
+        if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z, e);
       }
       if (e.timer <= 0) {
         e.phase = "recover";
@@ -1218,7 +1353,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       e.chargeLeft -= step;
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
         e.struck = true;
-        damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2);
+        damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2, e);
       }
       if (Math.floor(world.time * 30) % 3 === 0) spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
       if (e.chargeLeft <= 0.01 || moved < step * 0.4) {
