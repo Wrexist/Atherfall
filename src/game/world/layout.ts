@@ -60,6 +60,22 @@ export const COTTAGES: CottageDef[] = [
   { x: -2, z: -17, yaw: 0.1, w: 3, d: 2, roof: "#8c4b39" },
 ];
 
+/** Lantern posts along the north road and round the square (they glow at night and dusk). */
+export const LANTERNS: Array<[number, number]> = [
+  [3, 9],
+  [-3, 9],
+  [2.5, -12],
+  [-3.5, -12],
+  [1.5, -24],
+  [-4.5, -24],
+  [-1, -38],
+  [-9, -38],
+  [9, 3.6],
+  [-8, -1],
+  [6.2, 22.6],
+  [-1, 22],
+];
+
 export const NPCS: NpcDef[] = [
   {
     id: "sela",
@@ -201,20 +217,7 @@ function handmade(): PropInstance[] {
   add(K("weaponrack"), 9.2, -4.4, -1.2, 6, 0, true);
 
   // Lantern posts along the north road and the village square
-  const lanterns: Array<[number, number]> = [
-    [3, 9],
-    [-3, 9],
-    [2.5, -12],
-    [-3.5, -12],
-    [1.5, -24],
-    [-4.5, -24],
-    [-1, -38],
-    [-9, -38],
-    [9, 3.6],
-    [-8, -1],
-    [6.2, 22.6],
-    [-1, 22],
-  ];
+  const lanterns = LANTERNS;
   for (const [x, z] of lanterns) add(K("lantern_post"), x, z, 0, 0.85, 0.4);
 
   // Fences framing the square (the KayKit fence runs along z, so turn it)

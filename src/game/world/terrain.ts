@@ -137,12 +137,12 @@ export function pathDistance(x: number, z: number): number {
   return best;
 }
 
-const GRASS = new THREE.Color("#78b545");
-const GRASS_DRY = new THREE.Color("#a3c257");
-const FOREST = new THREE.Color("#4a8a42");
+const GRASS = new THREE.Color("#5fa83a");
+const GRASS_DRY = new THREE.Color("#7fb846");
+const FOREST = new THREE.Color("#3d7c35");
 const SAND = new THREE.Color("#ead69b");
 const ROCK = new THREE.Color("#9a948a");
-const DIRT = new THREE.Color("#c39461");
+const DIRT = new THREE.Color("#c08a55");
 
 const _c = new THREE.Color();
 /** Vertex colour for the terrain mesh. */
@@ -162,7 +162,7 @@ export function groundColor(x: number, z: number, h: number, out = _c): THREE.Co
   out.lerp(ROCK, smoothstep(0.22, 0.55, slope));
 
   // Worn roads
-  const road = 1 - smoothstep(1.6, 4.2, pathDistance(x, z));
+  const road = 1 - smoothstep(1.1, 2.9, pathDistance(x, z));
   out.lerp(DIRT, road * 0.85 * (1 - Math.max(0, beach)));
   return out;
 }
