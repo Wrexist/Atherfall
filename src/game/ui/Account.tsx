@@ -3,7 +3,15 @@ import { sfx } from "../core/audio";
 import { readSave, writeSave, type SaveFile } from "../core/persistence";
 import { loadSaveIntoStore } from "../core/sim";
 import { ARCHETYPES, type ArchetypeId } from "../data/archetypes";
-import { nameProblem, signIn, signOut, signUp, useAccount } from "../online/account";
+import {
+  nameProblem,
+  requestPasswordReset,
+  setNewPassword,
+  signIn,
+  signOut,
+  signUp,
+  useAccount,
+} from "../online/account";
 import { onlineConfigured } from "../online/client";
 import {
   flushUpload,
@@ -75,7 +83,7 @@ export function AccountLine({ onOpen }: { onOpen?: () => void }) {
 
 /** Sign in / create account. Closes itself once signed in. */
 export function AccountDialog({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -96,6 +104,7 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     sfx.ui();
     if (mode === "signup") await signUp(name, email, password);
+    else if (mode === "reset") await requestPasswordReset(email);
     else await signIn(email, password);
   };
 
@@ -113,22 +122,33 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
       >
-        <div className="flex gap-1">
-          {(["signin", "signup"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={`min-h-11 flex-1 rounded-md font-display text-xs tracking-[0.15em] ${
-                mode === m
-                  ? "bg-[var(--gilt)]/25 text-[var(--parchment)]"
-                  : "text-[var(--parchment)]/70"
-              }`}
-            >
-              {m === "signin" ? "SIGN IN" : "CREATE ACCOUNT"}
-            </button>
-          ))}
-        </div>
+        {mode === "reset" ? (
+          <div>
+            <h2 className="font-display text-sm tracking-[0.18em] text-[var(--gilt)]">
+              RESET PASSWORD
+            </h2>
+            <p className="mt-1 text-xs text-[var(--parchment)]/70">
+              We'll email you a link. Open it on this device to choose a new password.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-1">
+            {(["signin", "signup"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`min-h-11 flex-1 rounded-md font-display text-xs tracking-[0.15em] ${
+                  mode === m
+                    ? "bg-[var(--gilt)]/25 text-[var(--parchment)]"
+                    : "text-[var(--parchment)]/70"
+                }`}
+              >
+                {m === "signin" ? "SIGN IN" : "CREATE ACCOUNT"}
+              </button>
+            ))}
+          </div>
+        )}
 
         {mode === "signup" && (
           <label className="mt-4 block text-sm text-[var(--parchment)]/85">
@@ -158,18 +178,29 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
             required
           />
         </label>
-        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
-          Password
-          <input
-            className={input}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            minLength={6}
-            required
-          />
-        </label>
+        {mode !== "reset" && (
+          <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+            Password
+            <input
+              className={input}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              minLength={6}
+              required
+            />
+          </label>
+        )}
+        {mode === "signin" && (
+          <button
+            type="button"
+            className="mt-1 min-h-11 text-xs text-[var(--parchment)]/75 underline"
+            onClick={() => setMode("reset")}
+          >
+            Forgot password?
+          </button>
+        )}
 
         {error && (
           <p role="alert" className="mt-3 text-sm text-[#f0a595]">
@@ -180,16 +211,94 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="submit" className={primary} disabled={busy || !!nameHint}>
-            {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
+            {busy
+              ? "…"
+              : mode === "signin"
+                ? "Sign in"
+                : mode === "reset"
+                  ? "Send reset link"
+                  : "Create account"}
           </button>
-          <button type="button" className={secondary} onClick={onClose}>
-            Not now
-          </button>
+          {mode === "reset" ? (
+            <button type="button" className={secondary} onClick={() => setMode("signin")}>
+              Back to sign in
+            </button>
+          ) : (
+            <button type="button" className={secondary} onClick={onClose}>
+              Not now
+            </button>
+          )}
         </div>
         <p className="mt-3 text-xs leading-relaxed text-[var(--parchment)]/65">
           Your journey is saved on this device either way. An account keeps it in the cloud too, so
           you can continue on another phone, and lets you see other players in Dawnreach.
         </p>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Arrived from a password-reset email: choose a new password before playing
+ * on. (The link has already signed the player in for just this.)
+ */
+export function NewPasswordDialog() {
+  const recovering = useAccount((a) => a.recovering);
+  const busy = useAccount((a) => a.busy);
+  const error = useAccount((a) => a.error);
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  if (!recovering) return null;
+  const mismatch = again.length > 0 && again !== password;
+  return (
+    <div className="fixed inset-0 z-[56] flex items-center justify-center bg-[var(--ink)]/85 p-4">
+      <form
+        className="w-full max-w-md rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)] p-5 shadow-2xl"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (mismatch) return;
+          sfx.ui();
+          await setNewPassword(password);
+        }}
+      >
+        <h2 className="font-display text-sm tracking-[0.18em] text-[var(--gilt)]">
+          CHOOSE A NEW PASSWORD
+        </h2>
+        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+          New password
+          <input
+            className={input}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={6}
+            required
+          />
+        </label>
+        <label className="mt-3 block text-sm text-[var(--parchment)]/85">
+          Type it again
+          <input
+            className={input}
+            type="password"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+            autoComplete="new-password"
+            minLength={6}
+            required
+          />
+          {mismatch && (
+            <span className="mt-1 block text-xs text-[#f0a595]">The two don't match yet.</span>
+          )}
+        </label>
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-[#f0a595]">
+            {error}
+          </p>
+        )}
+        <button type="submit" className={`${primary} mt-4`} disabled={busy || mismatch}>
+          {busy ? "…" : "Save password"}
+        </button>
       </form>
     </div>
   );

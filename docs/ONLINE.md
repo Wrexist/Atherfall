@@ -1,6 +1,7 @@
 # Aetherfall Online — setup and design
 
 Aetherfall plays fully offline. When a backend is configured, three things switch on:
+
 - **Optional accounts:** email and password, plus a unique player name.
 - **Cloud saves:** continue your journey on another phone.
 - **Live presence:** see other signed-in players moving around Dawnreach, with name tags and an "N online" count.
@@ -9,10 +10,12 @@ Aetherfall plays fully offline. When a backend is configured, three things switc
 
 1. **Enable Lovable Cloud.** In the Lovable editor, open the **Cloud** tab and enable it. Lovable creates the backend and fills in `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env`. The game picks these up automatically.
 2. **Create the tables and permissions.** Ask the Lovable agent:
+
    > Apply the SQL migrations in `supabase/migrations/` to the Cloud database, in filename order.
 
    (If you already applied `…_online_foundation.sql`, only the newer files are needed.)
-3. **Check sign-in settings.** In **Cloud → Users → Auth settings**, keep **Email** sign-in on. Email confirmation can stay on: the game tells new players to confirm, then sign in.
+
+3. **Check sign-in settings.** In **Cloud → Users → Auth settings**, keep **Email** sign-in on. Email confirmation can stay on: the game tells new players to confirm, then sign in. Password-reset emails link back to the game, so the game's address must be allowed as a redirect URL (Cloud → Users → URL configuration). Lovable normally sets this for the published site.
 
 That's it. The title screen now shows **Sign in · play online**.
 
@@ -34,16 +37,17 @@ Everything below was run against a real local Supabase stack, the same software 
 
 ## How it works
 
-| Piece | Where | Notes |
-|---|---|---|
-| Client | `src/game/online/client.ts` | Created only when the env vars exist. It shares the default Supabase session storage, so Lovable-generated auth (e.g. a Google button) shares the same session. |
-| Accounts | `src/game/online/account.ts`, `src/game/ui/Account.tsx` | Sign-in is offered on the title screen only (that's where cloud and device saves are reconciled). |
-| Cloud saves | `src/game/online/cloudSave.ts` | See the rules below. |
-| Presence | `src/game/online/presence.ts`, `src/game/render/RemotePlayers.tsx` | Private Realtime channel `world:dawnreach`. See the rules below. |
-| Database | `supabase/migrations/*.sql` | See the rules below. |
-| Glue | `src/game/online/useOnline.ts` | Wires it all to the game lifecycle, and does nothing without a backend. |
+| Piece       | Where                                                              | Notes                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client      | `src/game/online/client.ts`                                        | Created only when the env vars exist. It shares the default Supabase session storage, so Lovable-generated auth (e.g. a Google button) shares the same session. |
+| Accounts    | `src/game/online/account.ts`, `src/game/ui/Account.tsx`            | Sign-in is offered on the title screen only (that's where cloud and device saves are reconciled).                                                               |
+| Cloud saves | `src/game/online/cloudSave.ts`                                     | See the rules below.                                                                                                                                            |
+| Presence    | `src/game/online/presence.ts`, `src/game/render/RemotePlayers.tsx` | Private Realtime channel `world:dawnreach`. See the rules below.                                                                                                |
+| Database    | `supabase/migrations/*.sql`                                        | See the rules below.                                                                                                                                            |
+| Glue        | `src/game/online/useOnline.ts`                                     | Wires it all to the game lifecycle, and does nothing without a backend.                                                                                         |
 
 **Cloud save rules**
+
 - The device save stays the source of truth while playing.
 - The latest save uploads at most every 30s, and at once when the app is backgrounded or on sign-out.
 - On sign-in the game compares the two saves:
@@ -56,12 +60,14 @@ Everything below was run against a real local Supabase stack, the same software 
 - One device's uploads go one at a time, in order, the title screen's included, so a slow request can't land after a newer one or be mistaken for another device.
 
 **Presence rules**
+
 - Each player sends 5 updates per second while moving, and a heartbeat every 3s while still.
 - Other players are drawn smoothly between updates. Teleports snap instead of sliding across the map.
 - At most the 16 nearest players are drawn.
 - A player whose game is paused shows as "(away)".
 
 **Database rules**
+
 - `profiles` are public to read; each player can edit only their own.
 - `saves` are private to their owner and capped at 256KB. Players can read and delete their own save, but can only write it through `upload_save()`, which refuses an upload based on an old revision. Direct inserts and updates are blocked, so an old game version or a hand-made request can't skip that check.
 - A sign-up trigger creates the profile.
