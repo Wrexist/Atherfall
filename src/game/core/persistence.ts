@@ -170,12 +170,15 @@ function repairV2(s: SaveFile): SaveFile {
     .filter(known)
     .map((e, i) => ({ uid: typeof e.uid === "string" && e.uid ? e.uid : `r${i}`, itemId: e.itemId, plus: num(e.plus, 0) }));
   const eq = (s.equipped ?? {}) as Partial<Equipped>;
-  s.equipped = {
-    weapon: known(eq.weapon) ? eq.weapon : null,
-    armor: known(eq.armor) ? eq.armor : null,
-    accessory: known(eq.accessory) ? eq.accessory : null,
-    relic: known(eq.relic) ? eq.relic : null,
+  // Rebuilt like satchel entries (a missing uid would strand the item once
+  // unequipped; a non-numeric plus would turn stats into NaN), and only kept
+  // in the slot the item actually belongs to.
+  const worn = (slot: EquipSlot): InvEntry | null => {
+    const e = eq[slot];
+    if (!known(e) || ITEMS[e.itemId]?.slot !== slot) return null;
+    return { uid: typeof e.uid === "string" && e.uid ? e.uid : `eq-${slot}`, itemId: e.itemId, plus: num(e.plus, 0) };
   };
+  s.equipped = { weapon: worn("weapon"), armor: worn("armor"), accessory: worn("accessory"), relic: worn("relic") };
   const c = (s.codex ?? {}) as Partial<Codex>;
   s.codex = {
     kills: c.kills && typeof c.kills === "object" ? c.kills : {},
