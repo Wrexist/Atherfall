@@ -1,13 +1,14 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { COTTAGES, MODULE, PROPS, cottageWalls, type PropInstance } from "../world/layout";
-import { REGIONS, heightAt } from "../world/terrain";
+import { BARROW_GATE, COTTAGES, MODULE, PROPS, cottageWalls, type PropInstance } from "../world/layout";
+import { useGLTF } from "@react-three/drei";
+import { heightAt } from "../world/terrain";
 import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
 import { Terrain } from "./Terrain";
 import { EnemyViews, NpcViews, PlayerView } from "./Characters";
-import { DropViews, FloaterViews, RingViews, SparkViews, ZoneViews } from "./Effects";
+import { DropViews, FloaterViews, ProjectileViews, RingViews, SparkViews, ZoneViews } from "./Effects";
 import { Systems } from "./Systems";
 
 const QUALITY: Record<Quality, { segments: number; shadows: boolean; shadowMap: number; far: number; detail: boolean }> = {
@@ -71,8 +72,12 @@ function Cottages({ shadows }: { shadows: boolean }) {
   );
 }
 
-function ShoreGate() {
-  const unlocked = useGame((s) => s.shoreUnlocked);
+/** Iron gate across the barrow entrance; swaps to a guiding beam once opened. */
+function BarrowGate() {
+  const unlocked = useGame((s) => s.barrowUnlocked);
+  const done = useGame((s) => s.questComplete);
+  const gate = useGLTF("/models/dng/gate.glb");
+  const leaves = useMemo(() => [gate.scene.clone(), gate.scene.clone()], [gate.scene]);
   const ref = useRef<THREE.Mesh>(null);
   useFrame((state) => {
     if (ref.current) {
@@ -80,19 +85,21 @@ function ShoreGate() {
       m.opacity = 0.18 + Math.sin(state.clock.elapsedTime * 1.6) * 0.07;
     }
   });
-  if (!unlocked) return null;
-  const x = REGIONS.shore.x;
-  const z = REGIONS.shore.z;
+  const { x, z } = BARROW_GATE;
+  const y = heightAt(x, z);
+  if (!unlocked) {
+    return (
+      <group position={[x, y, z]} rotation-y={Math.PI / 2}>
+        <primitive object={leaves[0]!} position={[-1.7, 0, 0]} scale={4.2} />
+        <primitive object={leaves[1]!} position={[1.7, 0, 0]} scale={4.2} />
+      </group>
+    );
+  }
+  if (done) return null;
   return (
-    <mesh ref={ref} position={[x, heightAt(x, z) + 9, z]}>
+    <mesh ref={ref} position={[x + 2, y + 9, z]}>
       <cylinderGeometry args={[2.2, 2.6, 18, 20, 1, true]} />
-      <meshBasicMaterial
-        color="#ffd88a"
-        transparent
-        opacity={0.22}
-        side={THREE.DoubleSide}
-        depthWrite={false}
-      />
+      <meshBasicMaterial color="#ffd88a" transparent opacity={0.22} side={THREE.DoubleSide} depthWrite={false} />
     </mesh>
   );
 }
@@ -144,7 +151,8 @@ export function Scene() {
       <RingViews />
       <ZoneViews />
       <FloaterViews />
-      <ShoreGate />
+      <ProjectileViews />
+      <BarrowGate />
     </>
   );
 }
