@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { applyLook, input, setSprintTouch, touch } from "../core/input";
+import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
 
 const KNOB = 52;
+const BASE = 128;
+/** Knob travel from the centre at full deflection. */
+const TRAVEL = 56;
 
-function Joystick() {
+/**
+ * Left-thumb movement stick. Floating (default): the stick appears wherever the
+ * thumb lands in the left half of the screen, so there's no small target to hunt
+ * for. Fixed: only the resting stick in the corner responds.
+ */
+function Joystick({ floating }: { floating: boolean }) {
+  const zone = useRef<HTMLDivElement>(null);
   const base = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
   const id = useRef<number | null>(null);
@@ -13,50 +23,82 @@ function Joystick() {
 
   const set = (dx: number, dy: number) => {
     const len = Math.hypot(dx, dy);
-    const max = 56;
-    const clamped = len > max ? max / len : 1;
+    const clamped = len > TRAVEL ? TRAVEL / len : 1;
     const kx = dx * clamped;
     const ky = dy * clamped;
     if (knob.current) knob.current.style.transform = `translate(${kx}px, ${ky}px)`;
-    touch.moveX = kx / max;
-    touch.moveZ = -ky / max;
-    setSprintTouch(Math.hypot(kx, ky) / max > 0.85);
+    touch.moveX = kx / TRAVEL;
+    touch.moveZ = -ky / TRAVEL;
+    setSprintTouch(Math.hypot(kx, ky) / TRAVEL > 0.85);
+  };
+
+  /** Move the stick's centre to a point in zone coordinates (null = back to its resting spot). */
+  const placeBase = (x: number | null, y: number | null) => {
+    const el = base.current;
+    const z = zone.current;
+    if (!el || !z) return;
+    el.style.transform = "";
+    if (x === null || y === null) {
+      el.style.opacity = "";
+      return;
+    }
+    const rest = el.getBoundingClientRect();
+    const zr = z.getBoundingClientRect();
+    const dx = x - (rest.left - zr.left + rest.width / 2);
+    const dy = y - (rest.top - zr.top + rest.height / 2);
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.opacity = "1";
+  };
+
+  const release = (e: React.PointerEvent) => {
+    if (id.current !== e.pointerId) return;
+    id.current = null;
+    set(0, 0);
+    setSprintTouch(false);
+    placeBase(null, null);
   };
 
   return (
     <div
-      ref={base}
-      className="pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.75rem,env(safe-area-inset-left))] flex h-32 w-32 touch-none items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 backdrop-blur-sm"
+      ref={zone}
+      // Floating: the whole left half is the stick's touch area.
+      className={`absolute touch-none ${floating ? "pointer-events-auto inset-y-0 left-0 w-1/2" : "pointer-events-none inset-0"}`}
       onPointerDown={(e) => {
         if (id.current !== null) return; // a second thumb must not steal the stick
+        if (!floating && !base.current!.contains(e.target as Node)) return;
         id.current = e.pointerId;
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        const rect = base.current!.getBoundingClientRect();
-        origin.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        (floating ? (e.currentTarget as HTMLElement) : base.current!).setPointerCapture(e.pointerId);
+        if (floating) {
+          const z = zone.current!.getBoundingClientRect();
+          // Keep the whole stick on screen even when the thumb lands at an edge.
+          const x = Math.max(BASE / 2, Math.min(z.width - BASE / 2, e.clientX - z.left));
+          const y = Math.max(BASE / 2, Math.min(z.height - BASE / 2, e.clientY - z.top));
+          placeBase(x, y);
+          origin.current = { x: x + z.left, y: y + z.top };
+        } else {
+          const rect = base.current!.getBoundingClientRect();
+          origin.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
         set(e.clientX - origin.current.x, e.clientY - origin.current.y);
       }}
       onPointerMove={(e) => {
         if (id.current !== e.pointerId) return;
         set(e.clientX - origin.current.x, e.clientY - origin.current.y);
       }}
-      onPointerUp={(e) => {
-        if (id.current !== e.pointerId) return;
-        id.current = null;
-        set(0, 0);
-        setSprintTouch(false);
-      }}
-      onPointerCancel={(e) => {
-        if (id.current !== e.pointerId) return;
-        id.current = null;
-        set(0, 0);
-        setSprintTouch(false);
-      }}
+      onPointerUp={release}
+      onPointerCancel={release}
     >
       <div
-        ref={knob}
-        style={{ width: KNOB, height: KNOB }}
-        className="rounded-full border border-[var(--gilt)]/50 bg-[var(--gilt)]/30"
-      />
+        ref={base}
+        style={{ width: BASE, height: BASE }}
+        className={`pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.75rem,env(safe-area-inset-left))] flex items-center justify-center rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/40 transition-opacity ${floating ? "opacity-60" : ""}`}
+      >
+        <div
+          ref={knob}
+          style={{ width: KNOB, height: KNOB }}
+          className="rounded-full border border-[var(--gilt)]/50 bg-[var(--gilt)]/30"
+        />
+      </div>
     </div>
   );
 }
@@ -64,11 +106,14 @@ function Joystick() {
 function TouchButton({
   label,
   onPress,
+  onRelease,
   size = "h-16 w-16",
   className = "",
 }: {
   label: string;
   onPress: () => void;
+  /** Called when the finger lifts (or is cancelled) after a press on this button. */
+  onRelease?: () => void;
   size?: string;
   className?: string;
 }) {
@@ -77,8 +122,12 @@ function TouchButton({
       className={`pointer-events-auto touch-none rounded-full border border-[var(--gilt)]/40 bg-[var(--panel)]/70 text-xs font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35 ${size} ${className}`}
       onPointerDown={(e) => {
         e.preventDefault();
+        // Capture so the release is seen even if the thumb slides off the button.
+        if (onRelease) (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         onPress();
       }}
+      // Fires on lift, cancel, or if the browser drops the capture for any reason.
+      onLostPointerCapture={onRelease}
     >
       {label}
     </button>
@@ -150,7 +199,7 @@ function ArcButton({
       ) : (
         <>
           <SlotIcon id={id} className="h-5 w-5" />
-          <span className="text-[8px] font-semibold uppercase tracking-wide">{label}</span>
+          <span className="text-[9px] font-semibold uppercase tracking-wide">{label}</span>
           <CooldownSweep id={id} />
         </>
       )}
@@ -164,6 +213,7 @@ export function TouchControls() {
   const prompt = useGame((s) => s.interactPrompt);
   const toggleInventory = useGame((s) => s.toggleInventory);
   const slots = useAbilitySlots();
+  const floatingStick = useSettings((s) => s.floatingStick);
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(pointer: coarse)").matches);
@@ -178,7 +228,7 @@ export function TouchControls() {
   return (
     <div className="pointer-events-none fixed inset-0 z-20">
       <LookPad />
-      <Joystick />
+      <Joystick floating={floatingStick} />
       {/* Utility row, bottom centre, clear of both thumbs */}
       <div className="pointer-events-none absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
         <CombatStates />
@@ -194,7 +244,7 @@ export function TouchControls() {
               useGame.setState({ screen: "paused" });
             }}
           />
-          {prompt && /^(Speak|Climb|Open)/.test(prompt) && (
+          {prompt && /^(Speak|Climb the|Open)/.test(prompt) && (
             <TouchButton label={prompt.startsWith("Climb") ? "Climb" : prompt.startsWith("Open") ? "Open" : "Talk"} size="h-11 w-14 !rounded-xl" className="border-[var(--gilt)]" onPress={() => (input.interactQueued = true)} />
           )}
         </div>
@@ -206,6 +256,10 @@ export function TouchControls() {
           className="!text-sm"
           onPress={() => {
             input.attackQueued = true;
+            input.attackHeld = true;
+          }}
+          onRelease={() => {
+            input.attackHeld = false;
           }}
         />
         <ArcButton id="jump" label="Jump" angle={192} radius={90} onPress={() => (input.jumpQueued = true)} />

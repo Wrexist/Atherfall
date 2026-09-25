@@ -31,6 +31,12 @@ export const SWINGS: SwingDef[] = [
 export const COMBO_GRACE = 0.4;
 /** Earliest point (fraction of a swing) at which the next press is buffered. */
 export const COMBO_BUFFER_FROM = 0.3;
+/**
+ * How long an attack / dodge / ability press is remembered if it can't happen
+ * yet (too early in a swing, dodge on cooldown, mid-cast). It then fires the
+ * moment it's allowed — so taps are never silently eaten.
+ */
+export const INPUT_BUFFER = 0.18;
 /** Pause after the finisher before a new chain can start. */
 export const CHAIN_RECOVERY = 0.22;
 

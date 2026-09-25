@@ -182,3 +182,11 @@ body {
     backdrop-filter: none !important;
   }
 }
+
+/* Thumb-sized targets in the journal (bag, forge, build, codex, map) on touch
+   screens: Apple and Google both recommend at least 44px. */
+@media (pointer: coarse) {
+  [data-testid="journal"] button {
+    min-height: 44px;
+  }
+}

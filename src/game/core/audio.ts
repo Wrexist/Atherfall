@@ -1,5 +1,7 @@
 // Tiny synthesised SFX kit — no audio files, no external assets.
 
+import { haptic } from "./settings";
+
 type Ctx = AudioContext | null;
 
 let ctx: Ctx = null;
@@ -80,7 +82,7 @@ function noise(dur: number, gain: number, freq = 1200, type: BiquadFilterType = 
   src.start(t);
 }
 
-export const sfx = {
+const sounds = {
   swing: (i = 0) => noise(i === 2 ? 0.26 : 0.15, 0.22, i === 2 ? 700 : 1000 + i * 250),
   hit: (i = 0) => {
     tone(i === 2 ? 120 : 190 + i * 30, i === 2 ? 0.22 : 0.13, "square", i === 2 ? 0.2 : 0.14, 70);
@@ -137,3 +139,29 @@ export const sfx = {
   death: () => tone(200, 0.9, "sawtooth", 0.2, 60),
   ui: () => tone(600, 0.06, "square", 0.07),
 };
+
+/**
+ * Vibration that accompanies a sound, for the moments you should *feel*:
+ * landing hits, taking damage, a perfect evade, a kill, levelling up.
+ * Plays even when muted (haptics have their own toggle in settings).
+ */
+const HAPTICS: Partial<Record<keyof typeof sounds, number | number[]>> = {
+  hit: 10,
+  hurt: 40,
+  evade: [12, 30, 12],
+  enemyDown: 22,
+  burst: 30,
+  roar: 60,
+  levelUp: [30, 60, 40],
+  death: 120,
+};
+
+export const sfx = { ...sounds };
+for (const key of Object.keys(HAPTICS) as Array<keyof typeof sounds>) {
+  const play = sounds[key] as (...args: never[]) => void;
+  const pattern = HAPTICS[key]!;
+  (sfx as Record<string, unknown>)[key] = (...args: never[]) => {
+    play(...args);
+    haptic(pattern);
+  };
+}

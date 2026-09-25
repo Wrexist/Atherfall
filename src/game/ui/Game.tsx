@@ -121,11 +121,15 @@ export function Game() {
         dragging.current = true;
         return;
       }
-      if (e.button === 0) input.attackQueued = true;
+      if (e.button === 0) {
+        input.attackQueued = true;
+        input.attackHeld = true;
+      }
       if (e.button === 2) input.dodgeQueued = true;
     };
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
       dragging.current = false;
+      if (e.pointerType === "mouse" && e.button === 0) input.attackHeld = false;
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;

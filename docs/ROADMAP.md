@@ -89,23 +89,23 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 38 | P2 | The world map is sharp on retina screens and redraws at ~20fps instead of 60. | ✅ |
 | 39 | P2 | Add a battery-saver option (30fps cap). | ⬜ |
 
-## Phase 3 — Mobile controls & feel
+## Phase 3 — Mobile controls & feel ✅ (mostly done)
 
-| # | Pri | Item |
-|---|-----|------|
-| 40 | P1 | Floating joystick: spawn it wherever the left thumb lands, like Genshin. |
-| 41 | P1 | Settings: look sensitivity, invert Y, joystick size and opacity, left-handed layout, haptics on/off. |
-| 42 | P1 | Haptics with `navigator.vibrate` on hit, dodge, damage and level-up (Android; iOS needs a native wrapper). |
-| 43 | P1 | Input buffer of ~150ms. Attack presses are currently dropped during the first 30% of a swing, dodges and casts. |
-| 44 | P1 | Lock-on / target-cycle button and camera recentre. Hold Attack to auto-combo. |
-| 45 | P1 | First-run tutorial with contextual tips: move, look (drag right side), attack, dodge, heal. |
-| 46 | P1 | Touch targets of at least 44px and text of at least 11px everywhere. Journal tabs, "Remove" and filter chips are 15–28px today. Faint text (parchment at 45–55%) fails contrast. |
-| 47 | P1 | Inventory and journal: pad for safe areas, since the notch overlaps the tabs in landscape. The round world map is taller than the panel on a landscape phone, so its bottom half is cut off. |
-| 48 | P1 | Touch-specific text: the climb prompt says "W climb · S descend · Space let go" and the controls list is keyboard-first. |
-| 49 | P2 | HUD at 844×390: collapse the quest hint to one line and move toasts to the top so they don't collide with the ability arc. Add a minimap or quest arrow. |
-| 50 | P2 | Knockback with velocity and decay instead of a teleport. Add enemy separation so groups don't stack on one point. Use noise-based camera shake. |
-| 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open. At least show a warning. |
-| 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. |
+| # | Pri | Item | Status |
+|---|-----|------|--------|
+| 40 | P1 | Floating joystick: it appears wherever the left thumb lands on the left half. It can be switched back to a fixed stick. | ✅ |
+| 41 | P1 | Settings: look sensitivity, invert Y, hold-to-attack, floating joystick, vibration. Stored per device. Still to do: joystick size and opacity, left-handed layout. | ◐ |
+| 42 | P1 | Vibration on hit, damage, perfect evade, kill, burst, boss roar, level-up and death (Android; iPhone browsers have no vibration API). | ✅ |
+| 43 | P1 | 180ms input buffer for attack, dodge and abilities: early presses fire as soon as they're allowed instead of being dropped. | ✅ |
+| 44 | P1 | Hold Attack to keep swinging (touch and mouse). **Still to do:** lock-on / target-cycle button and camera recentre. | ◐ |
+| 45 | P1 | First-run tutorial with contextual tips: move, look (drag right side), attack, dodge, heal. | 🔜 |
+| 46 | P1 | Journal buttons are at least 44px on touch, and 8–10px text is now 11px+. Faint text raised to 70% opacity where touched. | ✅ |
+| 47 | P1 | Journal respects safe areas. The map fits the screen with the fast-travel list beside it, and the satchel shows gear and bag side by side on landscape phones. The old `md` breakpoint was 768px, but a landscape iPhone is ~750px. | ✅ |
+| 48 | P1 | Touch-specific controls list. The climb prompt no longer names keys. | ✅ |
+| 49 | P2 | HUD at 750×342: collapse the quest hint to one line and move toasts to the top so they don't collide with the ability arc. Add a minimap or quest arrow. | 🔜 |
+| 50 | P2 | Knockback with velocity and decay instead of a teleport. Add enemy separation so groups don't stack on one point. Use noise-based camera shake. | ⬜ |
+| 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
+| 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |
 
 ## Phase 4 — Remaining gameplay bugs
 
@@ -116,7 +116,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 55 | P2 | A boss that resets keeps phase 2. |
 | 56 | P2 | Shard nodes: regrow timers aren't reset on a new game and aren't saved, so reloading refills them. |
 | 57 | P2 | Fixed RNG seed on every load, plus forging doesn't save at once: loot, crits and forge rolls can be save-scummed. |
-| 58 | P2 | Pressing E mid-climb restarts the climb. |
+| 58 | P2 | ✅ Pressing E mid-climb restarted the climb (fixed, with a test). |
 | 59 | P2 | Ability numbers are hardcoded in the sim instead of read from data (ward 0.4, heal, haste 1.3, slow 0.45). |
 | 60 | P2 | Any hit cancels Emberburst or Frost Nova but still spends the cooldown. |
 | 61 | P2 | The drop cap deletes the oldest *untaken* loot, and drops never despawn. |

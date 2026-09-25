@@ -143,6 +143,23 @@ describe("climbing", () => {
     expect(world.player.y).toBeGreaterThan(topY - 1.5);
   });
 
+  test("pressing interact mid-climb doesn't restart the climb", () => {
+    calmEnemies();
+    const route = CLIMBS[0]!;
+    put(route.base.x, route.base.z);
+    input.interactQueued = true;
+    stepWorld(DT);
+    input.moveZ = 1;
+    for (let t = 0; t < 0.6; t += DT) stepWorld(DT);
+    const progress = world.player.climbT;
+    expect(progress).toBeGreaterThan(0.05);
+    input.interactQueued = true;
+    stepWorld(DT);
+    input.moveZ = 0;
+    expect(world.player.climbing).toBe(route.id);
+    expect(world.player.climbT).toBeGreaterThanOrEqual(progress);
+  });
+
   test("letting go drops you back down", () => {
     const route = CLIMBS[0]!;
     put(route.base.x, route.base.z);

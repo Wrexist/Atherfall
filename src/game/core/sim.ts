@@ -8,6 +8,7 @@ import {
   CHAIN_RECOVERY,
   COMBO_BUFFER_FROM,
   COMBO_GRACE,
+  INPUT_BUFFER,
   DODGE,
   GALE,
   SHOTS,
@@ -25,6 +26,7 @@ import { REGIONS, SEA_LEVEL, WORLD_RADIUS, clampToWorld, heightAt, mulberry32, r
 import { CLIMBS, LANDMARKS, RESOURCES, RESOURCE_RESPAWN, SECRETS, WAYPOINTS } from "../data/world";
 import { setMuted as setAudioMuted, sfx } from "./audio";
 import { input } from "./input";
+import { useSettings } from "./settings";
 import { readSave, writeSave, SAVE_VERSION, type SaveFile } from "./persistence";
 import { statsFor, useGame } from "./store";
 
@@ -165,6 +167,11 @@ export interface PlayerRuntime {
   comboIdx: number;
   comboBuffered: boolean;
   lastSwingEnd: number;
+  /** Seconds left on buffered presses (see INPUT_BUFFER). */
+  bufAttack: number;
+  bufDodge: number;
+  bufAbility: number;
+  bufAbilityIdx: number;
   attackCooldown: number;
   hitIds: Set<string>;
   swingSerial: number;
@@ -215,6 +222,10 @@ function freshPlayer(): PlayerRuntime {
     comboIdx: 0,
     comboBuffered: false,
     lastSwingEnd: -10,
+    bufAttack: 0,
+    bufDodge: 0,
+    bufAbility: 0,
+    bufAbilityIdx: 0,
     attackCooldown: 0,
     hitIds: new Set(),
     swingSerial: 0,
@@ -869,14 +880,19 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   sfx.swing(idx);
 }
 
-function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
+/** Returns true once the press is used (a swing starts or the next hit is queued). */
+function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number): boolean {
   if (p.action === "attack") {
-    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
-    return;
+    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) {
+      p.comboBuffered = true;
+      return true;
+    }
+    return false;
   }
-  if (p.action !== "none" || p.attackCooldown > 0) return;
+  if (p.action !== "none" || p.attackCooldown > 0) return false;
   const chaining = world.time - p.lastSwingEnd <= COMBO_GRACE && p.comboIdx > 0 && p.comboIdx < SWINGS.length;
   startSwing(p, chaining ? p.comboIdx : 0, mx, mz, mag);
+  return true;
 }
 
 function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
@@ -907,8 +923,8 @@ function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
   }
 }
 
-function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
-  if (p.dodgeCd > 0 || p.dead || p.action === "gale") return;
+function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number): boolean {
+  if (p.dodgeCd > 0 || p.dead || p.action === "gale") return false;
   if (p.action === "attack") {
     // Dodge-cancel out of a swing keeps the chain honest but responsive.
     p.comboIdx = 0;
@@ -925,6 +941,7 @@ function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   p.dodgeIframe = DODGE.iframes;
   p.animKey += 1;
   sfx.dodge();
+  return true;
 }
 
 function abilityCooldown(id: AbilityId) {
@@ -938,17 +955,18 @@ export function abilityInSlot(idx: number): AbilityId | null {
   return a?.abilities[idx] ?? null;
 }
 
-function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
+/** Returns true when the press is used up: cast, or refused for good (locked / no slot). */
+function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number): boolean {
   const id = abilityInSlot(idx);
-  if (!id || p.dead) return;
+  if (!id || p.dead) return true;
   const def = ABILITIES[id];
   const s = useGame.getState();
   if (!abilityUnlocked(s.level, idx)) {
     s.toast(`${def.name} unlocks at level ${ABILITY_UNLOCK_LEVELS[idx]}.`, "info");
-    return;
+    return true;
   }
-  if (p.cooldowns[id] > 0) return;
-  if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return;
+  if (p.cooldowns[id] > 0) return false;
+  if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return false;
   p.comboIdx = 0;
   p.comboBuffered = false;
   p.cooldowns[id] = abilityCooldown(id);
@@ -1029,6 +1047,7 @@ function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag:
       floater(p.x, p.y + 2.8, p.z, def.name, "#b9a4ff");
       break;
   }
+  return true;
 }
 
 function slowAround(x: number, z: number, radius: number) {
@@ -1109,6 +1128,7 @@ function stepPlayer(dt: number, camYaw: number) {
     return;
   }
 
+  if (p.swimming) p.bufAttack = p.bufDodge = p.bufAbility = 0;
   if (p.swimming && (input.attackQueued || input.dodgeQueued || input.abilityQueued !== null || input.jumpQueued)) {
     input.attackQueued = false;
     input.dodgeQueued = false;
@@ -1120,18 +1140,33 @@ function stepPlayer(dt: number, camYaw: number) {
     }
   }
 
+  // Presses are buffered briefly and retried each frame until they can happen.
   if (input.dodgeQueued) {
     input.dodgeQueued = false;
-    tryDodge(p, mx, mz, mag);
+    p.bufDodge = INPUT_BUFFER;
   }
   if (input.abilityQueued !== null) {
-    const idx = input.abilityQueued;
+    p.bufAbilityIdx = input.abilityQueued;
+    p.bufAbility = INPUT_BUFFER;
     input.abilityQueued = null;
-    castAbility(p, idx, mx, mz, mag);
   }
   if (input.attackQueued) {
     input.attackQueued = false;
-    tryAttack(p, mx, mz, mag);
+    p.bufAttack = INPUT_BUFFER;
+  }
+  // Holding Attack keeps the chain going — easier on a phone than tap-spamming.
+  if (input.attackHeld && p.bufAttack <= 0 && !p.swimming && useSettings.getState().holdToAttack) {
+    p.bufAttack = INPUT_BUFFER;
+  }
+  if (p.bufDodge > 0) {
+    p.bufDodge = tryDodge(p, mx, mz, mag) ? 0 : p.bufDodge - dt;
+    if (p.bufDodge === 0 && p.action === "dodge") p.bufAttack = 0; // a dodge cancels a pending attack
+  }
+  if (p.bufAbility > 0) {
+    p.bufAbility = castAbility(p, p.bufAbilityIdx, mx, mz, mag) ? 0 : p.bufAbility - dt;
+  }
+  if (p.bufAttack > 0) {
+    p.bufAttack = tryAttack(p, mx, mz, mag) ? 0 : p.bufAttack - dt;
   }
   if (input.healQueued) {
     input.healQueued = false;
@@ -1747,6 +1782,7 @@ function stepClimb(p: PlayerRuntime, dt: number) {
   input.attackQueued = false;
   input.abilityQueued = null;
   input.dodgeQueued = false;
+  p.bufAttack = p.bufDodge = p.bufAbility = 0;
   // W / joystick up climbs, S climbs down, Space lets go.
   p.climbT = Math.max(0, Math.min(1, p.climbT + (input.moveZ * CLIMB_SPEED * dt) / len));
   // Hug the rock face: stay at the base's x/z until the lip, then step over.
@@ -1957,7 +1993,7 @@ function tryInteract() {
   if (!npc) {
     const p = world.player;
     const climb = climbAt(p.x, p.z);
-    if (climb && !p.swimming) {
+    if (climb && !p.swimming && !p.climbing) {
       startClimb(climb);
       return;
     }
@@ -2054,7 +2090,7 @@ export function stepWorld(dtRaw: number) {
   const climb = !pp.climbing && !pp.swimming ? climbAt(pp.x, pp.z) : null;
   const secret = secretNear(pp.x, pp.z);
   const prompt = pp.climbing
-    ? "W climb · S descend · Space let go"
+    ? "Climbing — up to climb, down to descend, Jump to let go"
     : npc
     ? `Speak with ${npc.name}`
     : climb

@@ -1,5 +1,7 @@
 // Shared input state. Written by DOM listeners / touch UI, read inside useFrame.
 
+import { useSettings } from "./settings";
+
 export interface InputState {
   /** -1..1 movement on the local right axis. */
   moveX: number;
@@ -8,6 +10,8 @@ export interface InputState {
   sprint: boolean;
   jumpQueued: boolean;
   attackQueued: boolean;
+  /** Attack button/mouse held down: keeps chaining swings (if enabled in settings). */
+  attackHeld: boolean;
   interactQueued: boolean;
   healQueued: boolean;
   dodgeQueued: boolean;
@@ -26,6 +30,7 @@ export const input: InputState = {
   sprint: false,
   jumpQueued: false,
   attackQueued: false,
+  attackHeld: false,
   interactQueued: false,
   healQueued: false,
   dodgeQueued: false,
@@ -46,8 +51,10 @@ export const MIN_PITCH = -0.25;
 export const MAX_PITCH = 1.05;
 
 export function applyLook(dx: number, dy: number, sensitivity = 0.0026) {
-  input.yaw -= dx * sensitivity;
-  input.pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, input.pitch + dy * sensitivity));
+  const prefs = useSettings.getState();
+  const k = sensitivity * prefs.lookSensitivity;
+  input.yaw -= dx * k;
+  input.pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, input.pitch + (prefs.invertY ? -dy : dy) * k));
 }
 
 export function resetInput() {
@@ -59,6 +66,7 @@ export function resetInput() {
   input.sprint = false;
   input.jumpQueued = false;
   input.attackQueued = false;
+  input.attackHeld = false;
   input.interactQueued = false;
   input.healQueued = false;
   input.dodgeQueued = false;

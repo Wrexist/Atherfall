@@ -164,8 +164,9 @@ export function WorldMap() {
   const fighting = inCombat();
 
   return (
-    <div className="grid gap-4 md:grid-cols-[auto_1fr]">
-      <div className="mx-auto w-full max-w-[420px]">
+    <div className="grid gap-4 sm:grid-cols-[auto_1fr]">
+      {/* Never taller than the screen allows: on a landscape phone it sits beside the list. */}
+      <div className="mx-auto w-full max-w-[min(420px,calc(100dvh-8.5rem))]">
         <canvas
           ref={canvas}
           width={size}
@@ -173,11 +174,11 @@ export function WorldMap() {
           data-testid="world-map"
           className="aspect-square w-full rounded-full border border-[var(--gilt)]/30"
         />
-        <p className="mt-1 text-center text-[10px] text-[var(--parchment)]/55">North is up · ◆ waypoint · ○ quest goal · ✓ opened cache</p>
+        <p className="mt-1 text-center text-[11px] text-[var(--parchment)]/55">North is up · ◆ waypoint · ○ quest goal · ✓ opened cache</p>
       </div>
       <div className="space-y-3">
         <div>
-          <h3 className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Fast travel</h3>
+          <h3 className="mb-1.5 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Fast travel</h3>
           <div className="space-y-1.5">
             {WAYPOINTS.map((w) => {
               const on = s.waypoints.includes(w.id);
@@ -190,7 +191,7 @@ export function WorldMap() {
                   className="flex w-full items-center justify-between rounded-md border border-[var(--gilt)]/25 bg-[var(--ink)]/40 px-2.5 py-1.5 text-left text-xs text-[var(--parchment)] disabled:opacity-40"
                 >
                   <span>{on ? w.name : "Undiscovered waypoint"}</span>
-                  <span className="text-[10px] text-[var(--gilt)]">{on ? (fighting ? "in combat" : "Travel") : REGIONS[w.region as keyof typeof REGIONS]?.label ?? ""}</span>
+                  <span className="text-[11px] text-[var(--gilt)]">{on ? (fighting ? "in combat" : "Travel") : REGIONS[w.region as keyof typeof REGIONS]?.label ?? ""}</span>
                 </button>
               );
             })}
@@ -198,7 +199,7 @@ export function WorldMap() {
           {msg && <p className="mt-1.5 text-xs text-[#f0a595]">{msg}</p>}
         </div>
         <div>
-          <h3 className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Secrets {s.secrets.length}/{SECRETS.length}</h3>
+          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Secrets {s.secrets.length}/{SECRETS.length}</h3>
           {SECRETS.map((sec) => (
             <p key={sec.id} className="text-[11px] text-[var(--parchment)]/70">
               {s.secrets.includes(sec.id) ? `✓ ${sec.name}` : `? ${sec.hint}`}

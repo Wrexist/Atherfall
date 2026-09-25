@@ -155,3 +155,37 @@ describe("saves", () => {
     });
   });
 });
+
+describe("input buffer", () => {
+  test("an attack pressed early in a swing still chains into the next hit", () => {
+    input.attackQueued = true;
+    stepWorld(DT);
+    expect(world.player.comboIdx).toBe(1);
+    run(0.05); // well before the old 30% cut-off, where the press was dropped
+    input.attackQueued = true;
+    run(0.6);
+    expect(world.player.comboIdx).toBe(2);
+  });
+
+  test("a dodge pressed just before its cooldown ends still happens", () => {
+    input.dodgeQueued = true;
+    stepWorld(DT);
+    expect(world.player.action).toBe("dodge");
+    const cd = world.player.dodgeCd;
+    run(cd - 0.1);
+    input.dodgeQueued = true;
+    stepWorld(DT);
+    expect(world.player.action).not.toBe("dodge");
+    run(0.15);
+    expect(world.player.action).toBe("dodge");
+  });
+
+  test("a stale press expires instead of firing much later", () => {
+    input.dodgeQueued = true;
+    stepWorld(DT);
+    run(0.1);
+    input.dodgeQueued = true; // far too early: cooldown still has a long way to go
+    run(world.player.dodgeCd + 0.05);
+    expect(world.player.action).not.toBe("dodge");
+  });
+});
