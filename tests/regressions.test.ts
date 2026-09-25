@@ -9,7 +9,7 @@ import {
   stepWorld,
   world,
 } from "../src/game/core/sim";
-import { WATCHSTONE } from "../src/game/data/world";
+import { RESOURCES, RESOURCE_RESPAWN, WATCHSTONE } from "../src/game/data/world";
 import { migrateSave, SAVE_KEY } from "../src/game/core/persistence";
 import { useSettings } from "../src/game/core/settings";
 import { statsFor, useGame } from "../src/game/core/store";
@@ -352,6 +352,53 @@ describe("combat feel", () => {
     world.player.x -= 30; // far enough that they stay idle
     run(0.3);
     expect(Math.hypot(a!.x - b!.x, a!.z - b!.z)).toBeGreaterThan(1);
+  });
+});
+
+describe("shard crystals", () => {
+  const standOn = (x: number, z: number) => {
+    const p = world.player;
+    p.x = x;
+    p.z = z;
+    p.y = heightAt(x, z);
+  };
+  const reload = (awaySeconds = 0) => {
+    const save = migrateSave(JSON.parse(JSON.stringify(snapshot())))!;
+    save.savedAt -= awaySeconds * 1000;
+    initWorld(save);
+  };
+
+  test("a gathered crystal stays gathered through a save and reload", () => {
+    // Regression (#56): regrow timers weren't saved, so reloading refilled every crystal.
+    const r = RESOURCES[0]!;
+    standOn(r.x, r.z);
+    const before = useGame.getState().shards;
+    run(0.2);
+    const gathered = useGame.getState().shards;
+    expect(gathered).toBe(before + r.shards);
+    reload();
+    standOn(r.x, r.z);
+    run(0.2);
+    expect(useGame.getState().shards).toBe(gathered);
+  });
+
+  test("time away counts toward regrowing", () => {
+    const r = RESOURCES[1]!;
+    standOn(r.x, r.z);
+    run(0.2);
+    const gathered = useGame.getState().shards;
+    reload(RESOURCE_RESPAWN + 5); // back after the crystal has grown again
+    standOn(r.x, r.z);
+    run(0.2);
+    expect(useGame.getState().shards).toBe(gathered + r.shards);
+  });
+
+  test("a damaged save's timers are cleaned, not trusted", () => {
+    const save = migrateSave({
+      ...JSON.parse(JSON.stringify(snapshot())),
+      shardRegrow: { "r-w1": 1e9, x: "soon", "r-w2": -5 },
+    })!;
+    expect(save.shardRegrow).toEqual({ "r-w1": RESOURCE_RESPAWN });
   });
 });
 

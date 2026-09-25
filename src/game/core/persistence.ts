@@ -4,6 +4,7 @@
 
 import type { ArchetypeId } from "../data/archetypes";
 import { ITEMS, type EquipSlot } from "../data/items";
+import { RESOURCE_RESPAWN } from "../data/world";
 import type { Equipped, InvEntry } from "./rules";
 
 export const SAVE_KEY = "aetherfall.save";
@@ -43,6 +44,8 @@ export interface SaveFile {
   waypoints?: string[];
   secrets?: string[];
   landmarks?: string[];
+  /** Shard crystal id → seconds of play left until it regrows (gathered ones only). */
+  shardRegrow?: Record<string, number>;
   deaths: number;
   kills: number;
   elapsed: number;
@@ -187,6 +190,13 @@ function repairV2(s: SaveFile): SaveFile {
     items: strings(c.items),
   };
   s.defeated = strings(s.defeated);
+  // Crystal timers: positive seconds, never longer than a full regrow.
+  const regrow: Record<string, number> = {};
+  if (s.shardRegrow && typeof s.shardRegrow === "object")
+    for (const [id, left] of Object.entries(s.shardRegrow))
+      if (typeof left === "number" && Number.isFinite(left) && left > 0)
+        regrow[id] = Math.min(RESOURCE_RESPAWN, left);
+  s.shardRegrow = regrow;
   s.waypoints = strings(s.waypoints);
   s.secrets = strings(s.secrets);
   s.landmarks = strings(s.landmarks);

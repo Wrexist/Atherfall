@@ -114,7 +114,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 53 | P2 | A thorns kill at the end of a boss charge left a zombie boss (double loot). | ✅ |
 | 54 | P2 | `damagePlayer` wrote HP from a stale store read, erasing lifesteal or level-up heals triggered by thorns. | ✅ |
 | 55 | P2 | A boss that resets now returns to its calm first phase. | ✅ |
-| 56 | P2 | Shard nodes reset for a new game. **Still to do:** regrow timers aren't saved, so reloading refills the 6 nodes (small payoff). | ◐ |
+| 56 | P2 | Shard nodes reset for a new game, and their regrow timers are now saved: reloading no longer refills gathered crystals. Time spent away counts toward regrowing, and damaged timers in a save are cleaned (positive, at most one full regrow). | ✅ |
 | 57 | P2 | Each session gets a fresh random seed (tests keep the fixed one), and forging saves at once, so rolls can't be save-scummed. | ✅ |
 | 58 | P2 | Pressing E mid-climb restarted the climb. | ✅ |
 | 59 | P2 | Ward, heal, haste and slow numbers are now read from `combat.ts` data. | ✅ |
