@@ -1375,6 +1375,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (playerAlive && dist < def.aggroRange) {
         e.phase = "chase";
         e.aggro = true;
+        useGame.getState().seeEnemy(e.type);
       }
       break;
     }
@@ -1554,6 +1555,10 @@ function stepDrops(dt: number) {
         store.toast("Picked up a Sunbloom Draught", "good");
       }
       if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
+      if (d.shards > 0) {
+        useGame.setState({ shards: useGame.getState().shards + d.shards });
+        store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
+      }
       sfx.pickup();
     }
   }
@@ -1579,46 +1584,54 @@ function nearestNpc() {
   return best;
 }
 
-function selaLines(step: number, complete: boolean): string[] {
-  if (complete) {
+function selaLines(): string[] {
+  const s = useGame.getState();
+  if (s.questComplete) {
     return [
-      "Tidewrack is yours to walk now, Warden-in-training.",
-      "Whatever fell out of that sky is still burning on the sand. Go carefully.",
+      "The barrow is dark and the road is quiet. You have done more than anyone asked.",
+      "Keep your blade sharp at the forge. Whatever fell from the sky is not finished with us.",
     ];
   }
-  if (step === STARTER_QUEST.steps.length - 1) {
-    return [
-      "Thornmaw's fang, still warm. You did not run. Good.",
-      STARTER_QUEST.completionText,
-    ];
+  const quest = QUESTS[s.questIdx];
+  if (s.questIdx === 0) {
+    switch (s.questStep) {
+      case 0:
+        return [
+          "You woke on the meadow road, then. Half of Emberhollow thought you were another falling star.",
+          "Bramblekin have crawled out of Whisperpine since the sky cracked. Walk north past the windmill and cull three of them.",
+          "Strike, then step back. They telegraph every swing — so do you.",
+        ];
+      case 1:
+        return ["North, past the lantern path. The woods start where the pines close in."];
+      case 2:
+        return ["Three Bramblekin. Keep count, and keep your distance between swings."];
+      case 3:
+        return ["Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence."];
+      case 4:
+        return ["Thornmaw nests in the Sunken Arch, east along the old road.", "It charges. Let it commit, then answer."];
+      default:
+        return ["Thornmaw's fang, still warm. You did not run. Good.", quest?.completionText ?? ""];
+    }
   }
-  switch (step) {
+  switch (s.questStep) {
     case 0:
       return [
-        "You woke on the meadow road, then. Half of Emberhollow thought you were another falling star.",
-        "Bramblekin have crawled out of Whisperpine since the sky cracked. Walk north past the windmill and cull three of them.",
-        "Strike, then step back. They telegraph every swing — so do you.",
+        "The Barrow of Lanterns lies west, past the windmill. The gate answers to that key now.",
+        `Go when you are ready — level ${quest?.recommendedLevel ?? "4–7"} is my advice. Oda at the forge can sharpen what you carry.`,
       ];
     case 1:
-      return ["North, past the lantern path. The woods start where the pines close in."];
+      return ["Shades move faster than anything in the woods. Let them swing into nothing, then answer."];
     case 2:
-      return ["Three Bramblekin. Keep count, and keep your distance between swings."];
-    case 3:
-      return ["Whatever they dropped, put it in your hands. An unarmed warden is a rumour, not a defence."];
-    case 4:
-      return [
-        "Thornmaw nests in the Sunken Arch, east along the old road.",
-        "It charges. Let it commit, then answer.",
-      ];
+      return ["The Lantern King sits at the back of the barrow. Break his light."];
     default:
-      return ["Return to me when Thornmaw is down."];
+      return ["You brought back his crown. Emberhollow owes you.", quest?.completionText ?? ""];
   }
 }
 
 function elderLines(): string[] {
   return [
-    "Emberhollow has stood here nine generations. The bay has never glowed like that before.",
-    "Sela will send you somewhere unwise. Drink your draughts — press Q, not pride.",
+    "I keep the Hall of Paths. Vanguard, Ranger, Arcanist — the village has trained all three.",
+    "Change your path here whenever you like. Your level, gear and deeds come with you.",
   ];
 }
 
@@ -1632,19 +1645,21 @@ function tryInteract() {
   if (!npc) return;
   sfx.ui();
   if (npc.id === "sela") {
-    const step = STARTER_QUEST.steps[store.questStep];
-    store.openDialogue({ name: npc.name, lines: selaLines(store.questStep, store.questComplete) });
-    if (step && step.kind === "talk" && step.npc === "sela") {
-      store.advanceQuest();
-    }
-  } else {
+    const step = QUESTS[store.questIdx]?.steps[store.questStep];
+    store.openDialogue({ name: npc.name, lines: selaLines() });
+    if (!store.questComplete && step && step.kind === "talk" && step.npc === "sela") store.advanceQuest();
+  } else if (npc.id === "elder") {
     store.openDialogue({ name: npc.name, lines: elderLines() });
+    store.toggleInventory(true, "build");
+  } else if (npc.id === "smith") {
+    store.openDialogue(null);
+    store.toggleInventory(true, "forge");
   }
 }
 
 function stepQuest() {
   const store = useGame.getState();
-  const step = STARTER_QUEST.steps[store.questStep];
+  const step = QUESTS[store.questIdx]?.steps[store.questStep];
   if (!step || store.questComplete) return;
   if (step.kind === "reach") {
     const region = regionAt(world.player.x, world.player.z);
@@ -1659,7 +1674,7 @@ function stepQuest() {
 }
 
 if (import.meta.env.DEV && typeof window !== "undefined") {
-  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone };
+  (window as unknown as Record<string, unknown>)["__aether"] = { world, useGame, lineBlocked, stepWorld, pointInZone, initWorld, saveNow };
   (window as unknown as Record<string, unknown>)["__aetherInput"] = input;
 }
 
@@ -1688,6 +1703,8 @@ export function stepWorld(dtRaw: number) {
 
   stepPlayer(dt, input.yaw);
   for (const e of world.enemies) stepEnemy(e, dt);
+  stepProjectiles(dt);
+  stepRains();
   stepDrops(dt);
   stepQuest();
 
@@ -1704,7 +1721,8 @@ export function stepWorld(dtRaw: number) {
   const region = regionAt(world.player.x, world.player.z);
   if (region !== lastRegion) {
     lastRegion = region;
-    useGame.setState({ region: region ? REGIONS[region].label : null });
+    useGame.setState({ region: region ? REGIONS[region].label : null, regionId: region });
+    if (region) store.discoverPlace(region);
   }
   const npc = nearestNpc();
   const prompt = npc
