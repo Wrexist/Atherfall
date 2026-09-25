@@ -173,6 +173,14 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* …except where the player types (sign-in form). */
+input,
+textarea {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* The 3D canvas repaints every frame, so each backdrop blur over it is recomputed
    every frame too — a big GPU/battery cost on mobile Safari and Android. Touch
    devices get the flat translucent panels instead. */

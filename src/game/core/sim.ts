@@ -465,9 +465,21 @@ export function snapshot(): SaveFile {
   };
 }
 
+const saveListeners = new Set<(save: SaveFile) => void>();
+
+/** Get told about every save (e.g. to sync it to the cloud). Returns an unsubscribe. */
+export function onSave(listener: (save: SaveFile) => void) {
+  saveListeners.add(listener);
+  return () => {
+    saveListeners.delete(listener);
+  };
+}
+
 export function saveNow() {
-  writeSave(snapshot());
+  const save = snapshot();
+  writeSave(save);
   useGame.setState({ hasSave: true });
+  for (const listener of saveListeners) listener(save);
 }
 
 export function loadSaveIntoStore(): SaveFile | null {

@@ -4,6 +4,7 @@ import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar } from "./Cooldowns";
 import { Tips } from "./Tips";
+import { usePresence } from "../online/presence";
 import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
@@ -41,6 +42,7 @@ function useFinePointer() {
 
 export function Hud() {
   const fine = useFinePointer();
+  const online = usePresence((p) => (p.connected ? p.online : 0));
   // Select only what the HUD shows, so unrelated store writes don't re-render it.
   const s = useGame(
     useShallow((g) => ({
@@ -104,6 +106,11 @@ export function Hud() {
             {s.region ?? "Dawnreach"}
           </div>
           <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.shards} shards</div>
+          {online > 1 && (
+            <div className="text-[11px] text-[#b7e8b1] drop-shadow" data-testid="online-count">
+              ● {online} online
+            </div>
+          )}
         </div>
         <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm [@media(min-height:560px)]:p-3">
           <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">

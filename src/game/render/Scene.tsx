@@ -22,6 +22,7 @@ import {
 import { Systems } from "./Systems";
 import { WorldObjects } from "./WorldObjects";
 import { QuestMarker } from "./QuestMarker";
+import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
 
 /** Every model the scene can show, so all downloads start together. */
@@ -201,6 +202,7 @@ export function Scene() {
       <BarrowGate />
       <WorldObjects />
       <QuestMarker />
+      <RemotePlayers />
     </>
   );
 }

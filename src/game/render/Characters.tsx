@@ -41,7 +41,7 @@ const CLIP: Record<string, string> = {
 
 const ONCE = new Set(["attack", "attack1", "attack2", "attack3", "dodge", "burst", "ward", "die", "windup", "hit"]);
 
-function useCharacter(url: string, tint?: string) {
+export function useCharacter(url: string, tint?: string) {
   const gltf = useGLTF(url);
   const lite = useLiteMaterials();
   return useMemo(() => {
@@ -68,7 +68,7 @@ function useCharacter(url: string, tint?: string) {
  * advances every mixer every frame). Callers decide when to `update`, so far
  * or hidden characters can tick slowly or not at all.
  */
-function useAnimator(
+export function useAnimator(
   root: React.RefObject<THREE.Group | null>,
   animations: THREE.AnimationClip[],
 ) {
@@ -154,7 +154,7 @@ function flashMaterials(
 const ANIM_NEAR = 30;
 const ANIM_FAR = 70;
 
-const CLIP_SPEED: Record<string, number> = { swim: 0.7, climb: 0.8, attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
+export const CLIP_SPEED: Record<string, number> = { swim: 0.7, climb: 0.8, attack1: 1.9, attack2: 1.9, attack3: 1.3, dodge: 2.2, burst: 1.8, ward: 1.6, hit: 1.6, sprint: 1.15 };
 
 /** Remounts the hero model when the archetype changes. */
 export function PlayerView() {

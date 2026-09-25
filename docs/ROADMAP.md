@@ -133,20 +133,18 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 67 | Real-device test matrix: iPhone SE/12/15, a mid-range Android (e.g. Galaxy A-series), a low-end Android. |
 | 68 | Store assets: screenshots, privacy policy, age rating. |
 
-## Phase 6 — Make it an MMO
+## Phase 6 — Make it an MMO (backend: Lovable Cloud, see `docs/ONLINE.md`)
 
-The single-player loop is fun first. The MMO layer then builds on a backend (Lovable Cloud / Supabase).
-
-| # | Item |
-|---|------|
-| 69 | **Accounts plus cloud saves.** Sign in (Apple, Google, email) and store the `SaveFile` server-side, keeping localStorage as an offline cache. |
-| 70 | **Server-authoritative economy.** Loot, gold, forging and trades validated on the server (edge functions), so saves can't be edited for items. |
-| 71 | **Presence.** See other players in Dawnreach through Realtime channels: position and animation at ~5–10Hz with client interpolation, sharded ~20–40 players per zone instance. |
-| 72 | **Social.** Chat with moderation and filters, friends, parties (shared quest credit, shared loot rules), emotes. |
-| 73 | **Co-op content.** World bosses on a timer, a party-scaled dungeon (the Barrow), daily and weekly quests. |
-| 74 | **Progression depth.** Talent trees, more regions past the Tidewrack gate, crafting from shards, cosmetics. |
-| 75 | **Live ops.** Events, season pass, leaderboards. |
-| 76 | **Anti-cheat and safety.** Rate limits, movement sanity checks, report and block. |
+| # | Item | Status |
+|---|------|--------|
+| 69 | **Accounts plus cloud saves.** Optional email sign-in and a unique player name. Cloud saves reconcile with the device save on sign-in and never silently overwrite progress. Tested against a real local Supabase. **To switch on:** enable Lovable Cloud and apply the migration (2 steps in `docs/ONLINE.md`). Still to do: Google sign-in, password reset. | ◐ |
+| 70 | **Server-authoritative economy.** Loot, gold, forging and trades validated on the server (edge functions), so saves can't be edited for items. Needed before anything is tradeable. | ⬜ |
+| 71 | **Presence.** Other signed-in players are shown live, with name tags and an "N online" count, over a private channel for signed-in players only. Shard into instances when busy; move to Cloudflare Durable Objects at scale. | ✅ |
+| 72 | **Social.** Chat with moderation and filters, friends, parties (shared quest credit, shared loot rules), emotes. | ⬜ |
+| 73 | **Co-op content.** World bosses on a timer, a party-scaled dungeon (the Barrow), daily and weekly quests. | ⬜ |
+| 74 | **Progression depth.** Talent trees, more regions past the Tidewrack gate, crafting from shards, cosmetics. | ⬜ |
+| 75 | **Live ops.** Events, season pass, leaderboards. | ⬜ |
+| 76 | **Anti-cheat and safety.** Rate limits, movement sanity checks, report and block. | ⬜ |
 
 ## Housekeeping
 

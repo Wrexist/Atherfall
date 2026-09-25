@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QUESTS } from "../data/quests";
 import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
 import { haptic, useSettings } from "../core/settings";
+import { AccountDialog, AccountLine, CloudSaveSync } from "./Account";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
@@ -78,7 +79,15 @@ export function WebglError() {
   );
 }
 
-export function TitleScreen({ save: bootSave }: { save: SaveFile | null }) {
+export function TitleScreen({
+  save: bootSave,
+  onSaveChanged,
+}: {
+  save: SaveFile | null;
+  onSaveChanged: (save: SaveFile | null) => void;
+}) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
   const screen = useGame((s) => s.screen);
   // The save read at page load goes stale once "Erase save" is used; only offer
   // Continue while the store still says a save exists.
@@ -143,11 +152,15 @@ export function TitleScreen({ save: bootSave }: { save: SaveFile | null }) {
 
         {showControls && <ControlsList />}
 
+        <AccountLine onOpen={() => setAccountOpen(true)} />
+        <CloudSaveSync onSaveChanged={onSaveChanged} />
+
         <div className="mt-5">
           <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
           <QualityPicker quality={quality} setQuality={setQuality} />
         </div>
       </Panel>
+      {accountOpen && <AccountDialog onClose={closeAccount} />}
     </div>
   );
 }
@@ -292,6 +305,8 @@ function PauseMenuBody() {
         </div>
 
         <ComfortSettings />
+
+        <AccountLine />
 
         <ControlsList />
       </Panel>

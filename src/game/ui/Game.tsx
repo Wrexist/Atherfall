@@ -18,6 +18,7 @@ import {
   WebglError,
 } from "./Menus";
 import { TouchControls } from "./TouchControls";
+import { useOnline } from "../online/useOnline";
 
 function webglAvailable() {
   try {
@@ -29,6 +30,7 @@ function webglAvailable() {
 }
 
 export function Game() {
+  useOnline();
   const screen = useGame((s) => s.screen);
   const { progress } = useProgress();
   const [webgl, setWebgl] = useState<boolean | null>(null);
@@ -66,6 +68,9 @@ export function Game() {
   // Keyboard
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
+      // Typing in a form (sign-in) must not move the hero or open menus.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.repeat) return;
       keys.add(e.code);
       const state = useGame.getState();
@@ -218,7 +223,7 @@ export function Game() {
       <InventoryPanel />
       <PauseMenu />
       <DeathScreen />
-      <TitleScreen save={save} />
+      <TitleScreen save={save} onSaveChanged={setSave} />
       {showLoading && <LoadingScreen progress={useGame.getState().loadProgress} />}
       <RotateHint />
     </div>
