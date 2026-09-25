@@ -104,7 +104,7 @@ A real phone GPU is far faster in absolute terms, but it is limited by the same 
 | 48 | P1 | Touch-specific controls list. The climb prompt no longer names keys. | ✅ |
 | 49 | P2 | HUD on landscape phones: vitals and quest panels stay compact (they used to grow at 640px). Tips and toasts sit top-centre, clear of the thumbs. The "E" key hint is hidden on touch. A quest marker shows the distance over the current goal (the NPC, the area, or the nearest living target) and slides to the screen edge, pointing the way, when the goal is off-screen. | ✅ |
 | 50 | P2 | Enemy knockback is a quick decaying slide instead of a teleport. Getting hit costs a moment of control so your own knockback reads. Nearby enemies push apart instead of stacking. Camera shake is smooth, frame-rate independent, with a small roll kick. | ✅ |
-| 51 | P2 | Decide whether the bag should pause combat. Enemies keep attacking while it is open (seen in testing: damage taken with the map open). At least show a warning. | ⬜ |
+| 51 | P2 | The world keeps running behind the journal (it's an MMO). While enemies are hunting you, the journal shows an "In combat!" banner, and the Bag and Map buttons show a pulsing red dot (screen readers hear "enemies near"). | ✅ |
 | 52 | P2 | Loading screen tips, and a retry if assets stall on slow networks. | ⬜ |
 
 ## Phase 4 — Remaining gameplay bugs ✅ (tests in `tests/regressions.test.ts` and `tests/world.test.ts`)

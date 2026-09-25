@@ -3,7 +3,7 @@ import { applyLook, input, setSprintTouch, touch } from "../core/input";
 import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
-import { usePortrait } from "./layout";
+import { THREAT_DOT, usePortrait, useThreatened } from "./layout";
 
 const KNOB = 52;
 const BASE = 128;
@@ -287,6 +287,7 @@ export function TouchControls() {
   const stickOpacity = useSettings((s) => s.stickOpacity);
   const lefty = useSettings((s) => s.leftHanded);
   const portrait = usePortrait();
+  const threat = useThreatened();
   /** Left-handed: everything mirrored left to right. */
   const ang = (a: number) => (lefty ? 180 - a : a);
 
@@ -415,7 +416,12 @@ export function TouchControls() {
       <div className="pointer-events-none absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
         <CombatStates />
         <div className="flex gap-2">
-          <TouchButton label="Bag" size="h-11 w-14 !rounded-xl" onPress={() => toggleInventory()} />
+          <TouchButton
+            label="Bag"
+            size="h-11 w-14 !rounded-xl"
+            className={threat ? `relative ${THREAT_DOT}` : ""}
+            onPress={() => toggleInventory()}
+          />
           <TouchButton
             label={`Heal ${potions}`}
             size="h-11 w-14 !rounded-xl"
@@ -424,6 +430,7 @@ export function TouchControls() {
           <TouchButton
             label="Map"
             size="h-11 w-14 !rounded-xl"
+            className={threat ? `relative ${THREAT_DOT}` : ""}
             onPress={() => useGame.getState().toggleInventory(true, "map")}
           />
           <TouchButton

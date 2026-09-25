@@ -6,7 +6,7 @@ import { Tips } from "./Tips";
 import { usePresence } from "../online/presence";
 import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
-import { useFinePointer, usePortrait } from "./layout";
+import { THREAT_DOT, useFinePointer, usePortrait, useThreatened } from "./layout";
 import { interactLabel } from "./TouchControls";
 
 function Bar({
@@ -240,14 +240,25 @@ function InteractPrompt({ s, className }: { s: HudState; className: string }) {
 
 /** Bag / Map / Menu on touch screens held upright: top right, away from both thumbs. */
 function PortraitMenuButtons() {
+  const threat = useThreatened();
   const btn =
-    "pointer-events-auto flex h-11 w-11 touch-none items-center justify-center rounded-xl border border-[var(--gilt)]/40 bg-[var(--panel)]/75 text-[10px] font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35";
+    "pointer-events-auto relative flex h-11 w-11 touch-none items-center justify-center rounded-xl border border-[var(--gilt)]/40 bg-[var(--panel)]/75 text-[10px] font-semibold uppercase tracking-wider text-[var(--parchment)] active:bg-[var(--gilt)]/35";
+  // Enemies near: the journal won't pause them, so say so before it opens.
+  const warn = threat ? THREAT_DOT : "";
   return (
     <div className="flex flex-col items-end gap-2">
-      <button className={btn} onPointerDown={() => useGame.getState().toggleInventory()}>
+      <button
+        className={`${btn} ${warn}`}
+        aria-label={threat ? "Bag (enemies near)" : "Bag"}
+        onPointerDown={() => useGame.getState().toggleInventory()}
+      >
         Bag
       </button>
-      <button className={btn} onPointerDown={() => useGame.getState().toggleInventory(true, "map")}>
+      <button
+        className={`${btn} ${warn}`}
+        aria-label={threat ? "Map (enemies near)" : "Map"}
+        onPointerDown={() => useGame.getState().toggleInventory(true, "map")}
+      >
         Map
       </button>
       <button
