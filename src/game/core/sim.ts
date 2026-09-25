@@ -281,7 +281,7 @@ const TURN = 18;
 const COYOTE = 0.1;
 const JUMP_BUFFER = 0.12;
 /** Steepest walkable rise per metre travelled. */
-const MAX_GRADE = 1.1;
+const MAX_GRADE = 1.8; // steeper than any beach or hill; only sheer rock blocks
 const SWIM_ENTER = 1.15;
 const SWIM_EXIT = 0.95;
 const SWIM_DEPTH = 1.05;
