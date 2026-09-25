@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { input } from "../core/input";
 import { useSettings } from "../core/settings";
 import { world } from "../core/sim";
 import { statsFor, useGame } from "../core/store";
+import { create } from "zustand";
+
+/** The tip on screen, so the control it teaches can light up. */
+export const useCoach = create<{ tip: string | null }>(() => ({ tip: null }));
 
 /**
  * First-run coaching: one short tip at a time, shown only when it's relevant
@@ -36,7 +41,7 @@ interface TipCtx {
 const TIPS: Tip[] = [
   {
     id: "move",
-    touch: "Put your thumb anywhere on the lower left and slide to walk.",
+    touch: "Drag here to move",
     desk: "Walk with W A S D — hold Shift to sprint.",
     when: () => true,
     done: (c) => c.moved > 4,
@@ -51,7 +56,7 @@ const TIPS: Tip[] = [
   },
   {
     id: "talk",
-    touch: "Warden Sela waits by the fountain — walk up and tap Talk.",
+    touch: "Walk to Warden Sela at the fountain, then tap Talk",
     desk: "Warden Sela waits by the fountain — walk up and press E.",
     when: () => true,
     done: (c) => c.talked,
@@ -59,7 +64,7 @@ const TIPS: Tip[] = [
   {
     id: "attack",
     urgent: true,
-    touch: "Enemy! Tap Attack — hold it to keep swinging.",
+    touch: "Attack! Hold to keep swinging",
     desk: "Enemy! Click to attack — hold to keep swinging.",
     when: (c) => c.threatened,
     done: (c) => c.swings >= 3,
@@ -67,7 +72,7 @@ const TIPS: Tip[] = [
   {
     id: "dodge",
     urgent: true,
-    touch: "Red on the ground means a hit is coming — tap Dodge to roll clear.",
+    touch: "Red on the ground? Dodge!",
     desk: "Red on the ground means a hit is coming — press F or right-click to dodge.",
     when: (c) => c.telegraph,
     done: (c) => c.dodged,
@@ -75,12 +80,37 @@ const TIPS: Tip[] = [
   {
     id: "heal",
     urgent: true,
-    touch: "Health is low — tap Heal to drink a Sunbloom Draught.",
+    touch: "Low health: Heal",
     desk: "Health is low — press Q to drink a Sunbloom Draught.",
     when: (c) => c.lowHp,
     done: (c) => c.healed,
   },
 ];
+
+/** Where each tip sits on an upright touch screen: next to its control. */
+const TOUCH_ANCHOR: Record<string, string> = {
+  move: "left-3 bottom-[12.75rem] !max-w-[10rem]",
+  attack: "right-4 bottom-[8.25rem]",
+  dodge: "right-4 bottom-[12.5rem]",
+  heal: "right-4 bottom-[12.5rem]",
+  talk: "left-1/2 top-[28%] -translate-x-1/2",
+};
+
+/**
+ * A tip's anchor for left-handed controls: side classes swap (left-3 becomes
+ * right-3); centred tips (left-1/2) stay put.
+ */
+export function mirrorAnchor(classes: string) {
+  return classes
+    .split(" ")
+    .map((c) => {
+      if (c === "left-1/2") return c;
+      if (c.startsWith("left-")) return `right-${c.slice(5)}`;
+      if (c.startsWith("right-")) return `left-${c.slice(6)}`;
+      return c;
+    })
+    .join(" ");
+}
 
 export function Tips() {
   const learned = useSettings((s) => s.tipsDone);
@@ -90,6 +120,7 @@ export function Tips() {
   const show = (t: Tip | null) => {
     current.current = t;
     setActive(t);
+    useCoach.setState({ tip: t?.id ?? null });
   };
   const touch = useRef(false);
   // Baselines, so progress counts from when a tip first appears.
@@ -165,19 +196,24 @@ export function Tips() {
     return () => clearInterval(iv);
   }, [allLearned, update]);
 
+  useEffect(() => () => useCoach.setState({ tip: null }), []);
   if (!active) return null;
-  return (
+  // On touch the tip sits beside the control it teaches (the control glows too),
+  // never over the middle of the screen.
+  // Left-handed controls swap sides, so the tips follow their controls.
+  const raw = touch.current ? TOUCH_ANCHOR[active.id] : undefined;
+  const anchor = raw && useSettings.getState().leftHanded ? mirrorAnchor(raw) : raw;
+  const bubble = (
     <div
       role="status"
-      className="pointer-events-auto flex max-w-[min(22rem,44vw)] items-start portrait:max-w-[min(22rem,86vw)] gap-2 rounded-lg border border-[var(--gilt)]/45 bg-[var(--panel)]/90 px-3 py-2 text-sm leading-snug text-[var(--parchment)] shadow-lg"
+      className={`pointer-events-auto flex items-center gap-1.5 rounded-2xl bg-[var(--panel)]/92 py-1.5 pl-3 pr-1 text-[13px] font-extrabold leading-snug text-[var(--parchment)] shadow-[0_4px_0_rgba(0,0,0,0.35)] ring-2 ring-[var(--gilt)]/70 ${
+        anchor ? `fixed z-[22] max-w-[15rem] ${anchor}` : "max-w-[min(22rem,80vw)]"
+      }`}
     >
-      <span className="mt-0.5 text-[var(--gilt)]" aria-hidden>
-        ✦
-      </span>
       <span className="flex-1">{touch.current ? active.touch : active.desk}</span>
       <button
         aria-label="Dismiss tip"
-        className="-my-1 -mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--parchment)]/70"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--parchment)]/70"
         onClick={() => {
           update({ tipsDone: [...useSettings.getState().tipsDone, active.id] });
           show(null);
@@ -187,4 +223,6 @@ export function Tips() {
       </button>
     </div>
   );
+  // Anchored tips sit above the touch controls' layer so × stays tappable.
+  return anchor ? createPortal(bubble, document.getElementById("game-shell") ?? document.body) : bubble;
 }

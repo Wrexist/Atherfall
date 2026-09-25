@@ -4,7 +4,8 @@ import { useSettings } from "../core/settings";
 import { useGame } from "../core/store";
 import { CombatStates, CooldownSweep, SlotIcon, useAbilitySlots, type SlotId } from "./Cooldowns";
 import { EmotePicker } from "./Emotes";
-import { THREAT_DOT, usePortrait, useThreatened } from "./layout";
+import { THREAT_DOT, useEnemiesNear, usePortrait, useThreatened } from "./layout";
+import { useCoach } from "./Tips";
 import { useAccount } from "../online/account";
 import { togglePartyPanel } from "./Party";
 import { Glyph } from "./kit";
@@ -116,16 +117,25 @@ function Joystick({
       <div
         ref={base}
         style={{ width: BASE_PX, height: BASE_PX, opacity }}
-        className={`pointer-events-auto absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] ${
+        className={`pointer-events-auto absolute bottom-[max(4.25rem,calc(env(safe-area-inset-bottom)+3rem))] ${
           right
             ? "right-[max(1.75rem,env(safe-area-inset-right))]"
             : "left-[max(1.75rem,env(safe-area-inset-left))]"
-        } flex items-center justify-center rounded-full border-2 border-white/25 bg-[#0b1320]/35 shadow-[inset_0_0_18px_rgba(0,0,0,0.35)] transition-opacity`}
+        } flex items-center justify-center rounded-full border-2 border-white/35 bg-[radial-gradient(circle,rgba(20,31,51,0.4),rgba(11,19,32,0.6))] shadow-[inset_0_0_18px_rgba(0,0,0,0.35)] transition-opacity`}
       >
+        {/* Direction marks, like a d-pad. */}
+        {[0, 90, 180, 270].map((a) => (
+          <span
+            key={a}
+            aria-hidden
+            className="absolute left-1/2 top-1/2 h-0 w-0 border-x-[6px] border-b-[8px] border-x-transparent border-b-white/55"
+            style={{ transform: `translate(-50%, -50%) rotate(${a}deg) translateY(-${BASE_PX / 2 - 12}px)` }}
+          />
+        ))}
         <div
           ref={knob}
           style={{ width: KNOB_PX, height: KNOB_PX }}
-          className="rounded-full bg-gradient-to-b from-[#ffd970] to-[#f2a93b] shadow-[0_3px_0_#b8741a] ring-2 ring-[#0b1320]/70"
+          className="rounded-full bg-[radial-gradient(circle_at_40%_30%,#ffffff,#c9d2de_60%,#8e99a8)] shadow-[0_4px_8px_rgba(0,0,0,0.45)] ring-2 ring-[#0b1320]/50"
         />
       </div>
     </div>
@@ -133,9 +143,11 @@ function Joystick({
 }
 
 const DISC =
-  "bg-gradient-to-b from-[#3a5078] to-[#22324f] text-[var(--parchment)] ring-2 ring-[#0b1320]/70 shadow-[0_4px_0_rgba(0,0,0,0.4)] active:translate-y-px active:brightness-125";
+  "bg-[radial-gradient(circle_at_50%_30%,#35507e,#152238_75%)] text-[var(--parchment)] ring-[3px] ring-[#8ea3c2]/60 shadow-[0_4px_0_rgba(0,0,0,0.45),inset_0_0_0_2px_rgba(11,19,32,0.8)] active:translate-y-px active:brightness-125";
+/** Coaching glow on the control a tip is teaching. */
+const COACH = "!ring-4 !ring-[var(--gilt)] animate-pulse";
 const GOLD_DISC =
-  "bg-gradient-to-b from-[#ffd970] to-[#f2a93b] text-[#3a2206] ring-[3px] ring-[#0b1320]/75 shadow-[0_5px_0_#9a5f12] active:translate-y-px active:brightness-110";
+  "bg-[radial-gradient(circle_at_50%_30%,#2e4266,#111b2d_75%)] text-white ring-[5px] ring-[#e9b44c] shadow-[0_0_0_2px_#0b1320,0_5px_0_rgba(0,0,0,0.45),0_0_18px_rgba(233,180,76,0.45)] active:translate-y-px active:brightness-125";
 
 function TouchButton({
   label,
@@ -145,6 +157,7 @@ function TouchButton({
   className = "",
   primary = false,
   icon,
+  attention = false,
 }: {
   label: string;
   onPress: () => void;
@@ -155,13 +168,14 @@ function TouchButton({
   /** The big gold button (Attack). */
   primary?: boolean;
   icon?: React.ReactNode;
+  attention?: boolean;
 }) {
   return (
     <button
       aria-label={label}
       className={`pointer-events-auto flex touch-none flex-col items-center justify-center rounded-full text-xs font-black uppercase tracking-wide ${
         primary ? GOLD_DISC : `${DISC} text-outline`
-      } ${size} ${className}`}
+      } ${attention ? COACH : ""} ${size} ${className}`}
       onPointerDown={(e) => {
         e.preventDefault();
         // Capture so the release is seen even if the thumb slides off the button.
@@ -212,16 +226,25 @@ function ArcButton({
   angle,
   radius,
   small = false,
+  tiny = false,
+  attention = false,
+  count,
   onPress,
 }: {
+  /** A small number badge (potions left). */
+  count?: number;
   small?: boolean;
+  /** Tertiary (Jump): smallest, still a 44px target. */
+  tiny?: boolean;
+  /** Coaching: glow until the player uses it. */
+  attention?: boolean;
   id: SlotId | "jump" | "target" | "heal";
   label: string;
   angle: number;
   radius: number;
   onPress: () => void;
 }) {
-  const size = small ? "h-[3.2rem] w-[3.2rem]" : "h-[3.6rem] w-[3.6rem]";
+  const size = tiny ? "h-[3.25rem] w-[3.25rem]" : small ? "h-[3.4rem] w-[3.4rem]" : "h-[3.75rem] w-[3.75rem]";
   // Positioned on an arc around the attack button's centre.
   const rad = (angle * Math.PI) / 180;
   const x = Math.cos(rad) * radius;
@@ -231,45 +254,27 @@ function ArcButton({
       aria-label={label}
       data-testid={`touch-${id}`}
       style={{ transform: `translate(calc(${x}px - 50%), calc(${-y}px - 50%))` }}
-      className={`pointer-events-auto absolute left-1/2 top-1/2 flex ${size} touch-none flex-col items-center justify-center overflow-hidden rounded-full ${DISC}`}
+      className={`pointer-events-auto absolute left-1/2 top-1/2 flex ${size} touch-none flex-col items-center justify-center rounded-full ${DISC} ${attention ? COACH : ""}`}
       onPointerDown={(e) => {
         e.preventDefault();
         onPress();
       }}
     >
-      {id === "jump" ? (
-        <span className="text-[11px] font-black uppercase tracking-wide text-outline">Jump</span>
-      ) : id === "heal" ? (
+      {id === "jump" || id === "heal" || id === "target" || id === "dodge" ? (
         <>
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M9 3h6M10 3v4.5L6.5 13a5.5 5.5 0 1 0 11 0L14 7.5V3" />
-            <path d="M8 14h8" />
-          </svg>
-          <span className="text-[9px] font-black uppercase tracking-wide text-outline">{label}</span>
-        </>
-      ) : id === "target" ? (
-        <>
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            aria-hidden
-          >
-            <circle cx="12" cy="12" r="7" />
-            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-          </svg>
-          <span className="text-[9px] font-black uppercase tracking-wide text-outline">Target</span>
+          <Glyph
+            id={id === "jump" ? "up" : id === "heal" ? "potion" : id === "target" ? "crosshair" : "swoosh"}
+            className="h-6 w-6"
+          />
+          <span className="mt-0.5 text-[9px] font-black uppercase leading-none tracking-wide text-outline">
+            {id === "heal" ? "Heal" : label}
+          </span>
+          {count !== undefined && (
+            <span className="absolute right-1 top-1 font-display text-sm leading-none text-white text-outline">
+              {count}
+            </span>
+          )}
+          {id === "dodge" && <CooldownSweep id="dodge" />}
         </>
       ) : (
         <>
@@ -306,6 +311,8 @@ export function TouchControls() {
   const lefty = useSettings((s) => s.leftHanded);
   const portrait = usePortrait();
   const threat = useThreatened();
+  const near = useEnemiesNear();
+  const coach = useCoach((c) => c.tip);
   const signedIn = useAccount((a) => a.status === "signed-in");
   /** Left-handed: everything mirrored left to right. */
   const ang = (a: number) => (lefty ? 180 - a : a);
@@ -326,8 +333,9 @@ export function TouchControls() {
     <TouchButton
       label="Attack"
       primary
-      icon={<Glyph id="attack" className={portrait ? "h-9 w-9" : "h-8 w-8"} color="#fff" />}
-      size={portrait ? "h-[5.25rem] w-[5.25rem]" : "h-20 w-20"}
+      attention={coach === "attack"}
+      icon={<Glyph id="sword" className={portrait ? "h-10 w-10" : "h-9 w-9"} />}
+      size={portrait ? "h-[5.75rem] w-[5.75rem]" : "h-[5.25rem] w-[5.25rem]"}
       className="!text-sm"
       onPress={() => {
         input.attackQueued = true;
@@ -343,9 +351,17 @@ export function TouchControls() {
     // Upright phone, one thumb each: the stick anywhere in the lower left, and
     // every combat action on rings around Attack in the lower right. Bag, Map
     // and Menu live in the HUD's top-right corner.
-    const OUTER = [174, 148, 122];
+    const OUTER = [182, 160, 138];
     return (
       <div className="pointer-events-none fixed inset-0 z-20">
+        {/* One combat cluster: a soft shade gathers the buttons around Attack. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute bottom-0 h-[17rem] w-[17rem] ${lefty ? "left-0" : "right-0"}`}
+          style={{
+            background: `radial-gradient(circle at ${lefty ? "0%" : "100%"} 100%, rgba(11,19,32,0.42) 0%, rgba(11,19,32,0.18) 45%, transparent 70%)`,
+          }}
+        />
         {orbit && <LookPad left={lefty} />}
         <Joystick
           floating={floatingStick}
@@ -365,22 +381,26 @@ export function TouchControls() {
           <ArcButton
             id="jump"
             label="Jump"
-            angle={ang(188)}
-            radius={94}
+            tiny
+            angle={ang(200)}
+            radius={84}
             onPress={() => (input.jumpQueued = true)}
           />
           <ArcButton
             id="dodge"
             label="Dodge"
-            angle={ang(140)}
-            radius={94}
+            attention={coach === "dodge"}
+            angle={ang(153)}
+            radius={92}
             onPress={() => (input.dodgeQueued = true)}
           />
           <ArcButton
             id="heal"
             label={`Heal ${potions}`}
-            angle={ang(94)}
-            radius={94}
+            count={potions}
+            attention={coach === "heal"}
+            angle={ang(110)}
+            radius={92}
             onPress={() => (input.healQueued = true)}
           />
           {abilities.map((a, i) => (
@@ -398,8 +418,9 @@ export function TouchControls() {
             id="target"
             label="Target"
             small
-            angle={ang(98)}
-            radius={160}
+            attention={near && coach === "attack"}
+            angle={ang(72)}
+            radius={112}
             onPress={() => (input.lockQueued = true)}
           />
           {interact && (

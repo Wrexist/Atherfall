@@ -7,7 +7,7 @@ import { world } from "../core/sim";
 // "moonlight" so the player and enemy telegraphs stay readable.
 const KEYS = [
   { t: 0.0, sky: "#f7d7b4", sun: "#ffd3a4", sunI: 2.2, hemi: 0.95, amb: 0.22 }, // dawn
-  { t: 0.25, sky: "#a9d9f2", sun: "#fff1da", sunI: 2.7, hemi: 1.05, amb: 0.2 }, // noon
+  { t: 0.25, sky: "#a9d9f2", sun: "#ffe6bf", sunI: 2.8, hemi: 1.05, amb: 0.2 }, // noon
   { t: 0.5, sky: "#f3b98a", sun: "#ffb277", sunI: 2.1, hemi: 0.9, amb: 0.22 }, // dusk
   { t: 0.62, sky: "#6f80b3", sun: "#bccbff", sunI: 1.5, hemi: 0.8, amb: 0.36 }, // blue hour
   { t: 0.75, sky: "#43528a", sun: "#bccbff", sunI: 1.35, hemi: 0.78, amb: 0.4 }, // midnight

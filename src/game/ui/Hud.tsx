@@ -10,9 +10,61 @@ import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 import { THREAT_DOT, useFinePointer, usePortrait, useThreatened } from "./layout";
 import { interactLabel } from "./TouchControls";
-import { CLASS_TONE, Glyph, classIconUrl } from "./kit";
+import { Glyph, portraitUrl } from "./kit";
 import { Minimap, useMinimapReserve } from "./Minimap";
 import { useSettings } from "../core/settings";
+import { useEffect, useRef, useState } from "react";
+import { world } from "../core/sim";
+import { questTarget } from "../core/questTarget";
+
+/** Metres to the quest goal, refreshed twice a second (null when there isn't one). */
+function useQuestDistance() {
+  const [m, setM] = useState<number | null>(null);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const q = questTarget();
+      const p = world.player;
+      setM(q ? Math.round(Math.hypot(q.x - p.x, q.z - p.z)) : null);
+    }, 500);
+    return () => clearInterval(iv);
+  }, []);
+  return m;
+}
+
+/** "Emberhollow" across the top for a moment when entering a region. */
+function LocationBanner({ region }: { region: string | null }) {
+  const [shown, setShown] = useState<string | null>(null);
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    // Left every region: drop the banner, and let the next entry show it again.
+    if (!region) {
+      last.current = null;
+      setShown(null);
+      return;
+    }
+    if (region === last.current) return;
+    last.current = region;
+    setShown(region);
+  }, [region]);
+  // Its own timer, so a region change can never cancel the fade.
+  useEffect(() => {
+    if (!shown) return undefined;
+    const t = setTimeout(() => setShown(null), 2600);
+    return () => clearTimeout(t);
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <div
+      role="status"
+      data-testid="location-banner"
+      className="pointer-events-none absolute inset-x-0 top-[22%] flex flex-col items-center animate-in fade-in duration-500"
+    >
+      <span className="h-0.5 w-40 bg-gradient-to-r from-transparent via-[var(--gilt)] to-transparent" />
+      <span className="my-1 font-display text-3xl text-[var(--parchment)] text-outline">{shown}</span>
+      <span className="h-0.5 w-40 bg-gradient-to-r from-transparent via-[var(--gilt)] to-transparent" />
+    </div>
+  );
+}
 
 function Bar({
   value,
@@ -76,32 +128,35 @@ function useHudState() {
 /** Player frame: class emblem with the level, name, health and experience. */
 function Vitals({ s, compact = false }: { s: HudState; compact?: boolean }) {
   const stats = statsFor(s);
-  const tone = CLASS_TONE[s.archetype];
   return (
     <div className="flex items-center gap-2">
       <div className="relative shrink-0">
         <div
-          className={`grid place-items-center rounded-full border-[3px] bg-[var(--panel)] shadow-[0_3px_0_rgba(0,0,0,0.4)] ${
-            compact ? "h-14 w-14" : "h-16 w-16"
+          className={`grid place-items-center overflow-hidden rounded-full border-[3px] border-[#c9a45a] bg-[radial-gradient(circle_at_50%_35%,#3a5078,#141f33)] shadow-[0_3px_0_rgba(0,0,0,0.45)] ring-2 ring-[#0b1320] ${
+            compact ? "h-[3.75rem] w-[3.75rem]" : "h-16 w-16"
           }`}
-          style={{ borderColor: tone }}
         >
           <img
-            src={classIconUrl(s.archetype)}
+            src={portraitUrl(s.archetype)}
             alt=""
-            className={compact ? "h-10 w-10" : "h-12 w-12"}
+            className={compact ? "mt-1 h-12 w-12" : "mt-1 h-14 w-14"}
           />
         </div>
-        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-b from-[#ffd970] to-[#f2a93b] px-1.5 font-display text-[12px] leading-[18px] text-[#3a2206] ring-2 ring-[#0b1320]">
+        <span className="absolute -bottom-1 -left-0.5 grid h-6 min-w-6 place-items-center rounded-full bg-gradient-to-b from-[#ffd970] to-[#e89b2e] px-1 font-display text-[13px] leading-none text-[#3a2206] ring-2 ring-[#0b1320]">
           {s.level}
         </span>
       </div>
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span
-            className={`font-display leading-none text-[var(--parchment)] text-outline ${compact ? "text-sm" : "text-base"}`}
-          >
-            {ARCHETYPES[s.archetype].name}
+        <div className="flex items-end justify-between gap-2">
+          <span className="leading-none">
+            <span
+              className={`block font-display leading-none text-[var(--parchment)] text-outline ${compact ? "text-[15px]" : "text-base"}`}
+            >
+              {ARCHETYPES[s.archetype].name}
+            </span>
+            <span className="text-[10px] font-extrabold leading-none text-[var(--gilt)] text-outline">
+              Lv. {s.level}
+            </span>
           </span>
           <span
             data-testid="hud-stats"
@@ -123,8 +178,8 @@ function Vitals({ s, compact = false }: { s: HudState; compact?: boolean }) {
         <Bar
           value={s.xp}
           max={xpForLevel(s.level)}
-          className="bg-gradient-to-b from-[#ffe0b8] to-[#ff9f5a]"
-          height="h-1.5"
+          className="bg-gradient-to-b from-[#7cc4ff] to-[#2f7fd6]"
+          height="h-2"
         />
       </div>
     </div>
@@ -161,6 +216,7 @@ function QuestTracker({
 }) {
   const quest = QUESTS[s.questIdx]!;
   const step = quest.steps[s.questStep];
+  const dist = useQuestDistance();
   return (
     <div
       className={`w-full rounded-2xl bg-[var(--panel)]/85 shadow-[0_3px_0_rgba(0,0,0,0.35)] ring-2 ring-[#0b1320]/50 ${
@@ -174,6 +230,18 @@ function QuestTracker({
           !
         </span>
         <span className="truncate">{quest.name}</span>
+        {dist !== null && dist > 6 && !s.questComplete && (
+          <span
+            data-testid="quest-distance"
+            className="ml-auto shrink-0 rounded-full bg-[var(--ink)]/70 px-1.5 font-sans text-[11px] font-black text-[var(--parchment)]"
+          >
+            {dist} m
+          </span>
+        )}
+        <span
+          aria-hidden
+          className={`${dist !== null && dist > 6 && !s.questComplete ? "" : "ml-auto"} h-3 w-3 shrink-0 rotate-45 rounded-[2px] bg-gradient-to-br from-[#ffe28a] to-[#e89b2e] ring-1 ring-[#0b1320]`}
+        />
       </div>
       {s.questComplete ? (
         <p className="mt-1 text-xs font-bold leading-snug text-[var(--parchment)]/90">
@@ -271,7 +339,7 @@ function PortraitMenuButtons() {
   const threat = useThreatened();
   const minimap = useSettings((p) => p.minimap);
   const btn =
-    "pointer-events-auto relative flex h-12 w-12 touch-none flex-col items-center justify-center rounded-2xl bg-[var(--panel)]/88 text-[var(--parchment)] shadow-[0_3px_0_rgba(0,0,0,0.4)] ring-2 ring-[#0b1320]/60 active:translate-y-px";
+    "pointer-events-auto relative flex h-[3.4rem] w-[3.4rem] touch-none flex-col items-center justify-center rounded-full bg-[radial-gradient(circle_at_50%_30%,#2e4266,#141f33)] text-[var(--parchment)] shadow-[0_3px_0_rgba(0,0,0,0.45)] ring-2 ring-[#8a7a55]/80 active:translate-y-px";
   const label = "mt-0.5 text-[9px] font-black uppercase leading-none tracking-wide text-outline";
   // Enemies near: the journal won't pause them, so say so before it opens.
   const warn = threat ? THREAT_DOT : "";
@@ -357,6 +425,18 @@ function PortraitHud({ s, online, fine }: { s: HudState; online: number; fine: b
             <BossBar s={s} />
           </div>
         )}
+        <LocationBanner region={s.region} />
+        {/* The game's mark, bottom left under the joystick's rest spot. */}
+        {!fine && (
+          <div className="pointer-events-none absolute bottom-0 left-1 flex flex-col items-start leading-none opacity-90">
+            <span className="font-display text-[22px] tracking-[0.06em] text-[#f1e3c0] text-outline">
+              AETHERFALL
+            </span>
+            <span className="mt-0.5 text-[7px] font-extrabold tracking-[0.28em] text-[#d8c79a]">
+              EXPLORE &middot; FIGHT &middot; FARM &middot; GROW
+            </span>
+          </div>
+        )}
         {/* Between the HUD and the hero (who sits just below the middle). */}
         <div className="absolute left-0 right-16 top-[33%] flex flex-col items-center gap-1.5 px-1">
           <Toasts s={s} />
@@ -412,6 +492,7 @@ export function Hud() {
         )}
 
         <InteractPrompt s={s} className="bottom-40" />
+        <LocationBanner region={s.region} />
 
         {/* Tips + toasts. Desktop: above the ability bar. Touch: top centre, between the
           vitals and quest panels, so they never sit under a thumb or the attack arc. */}
