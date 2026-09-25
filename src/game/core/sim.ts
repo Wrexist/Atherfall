@@ -8,10 +8,12 @@ import {
   CHAIN_RECOVERY,
   COMBO_BUFFER_FROM,
   COMBO_GRACE,
+  INPUT_BUFFER,
   DODGE,
   GALE,
   SHOTS,
   SWINGS,
+  type AbilityEffect,
   type AbilityId,
 } from "../data/combat";
 import { ABILITY_UNLOCK_LEVELS, ARCHETYPES } from "../data/archetypes";
@@ -23,8 +25,9 @@ import { ITEMS } from "../data/items";
 import { BARROW_GATE, COLLIDERS, NPCS, SPAWNS } from "../world/layout";
 import { REGIONS, SEA_LEVEL, WORLD_RADIUS, clampToWorld, heightAt, mulberry32, regionAt } from "../world/terrain";
 import { CLIMBS, LANDMARKS, RESOURCES, RESOURCE_RESPAWN, SECRETS, WAYPOINTS } from "../data/world";
-import { sfx } from "./audio";
+import { setMuted as setAudioMuted, sfx } from "./audio";
 import { input } from "./input";
+import { useSettings } from "./settings";
 import { readSave, writeSave, SAVE_VERSION, type SaveFile } from "./persistence";
 import { statsFor, useGame } from "./store";
 
@@ -54,6 +57,9 @@ export interface EnemyRuntime {
   y: number;
   z: number;
   yaw: number;
+  /** Knockback velocity (m/s), decays each frame. */
+  kvx: number;
+  kvz: number;
   hp: number;
   maxHp: number;
   phase: EnemyPhase;
@@ -165,6 +171,11 @@ export interface PlayerRuntime {
   comboIdx: number;
   comboBuffered: boolean;
   lastSwingEnd: number;
+  /** Seconds left on buffered presses (see INPUT_BUFFER). */
+  bufAttack: number;
+  bufDodge: number;
+  bufAbility: number;
+  bufAbilityIdx: number;
   attackCooldown: number;
   hitIds: Set<string>;
   swingSerial: number;
@@ -195,6 +206,10 @@ export interface PlayerRuntime {
 
 export const SPAWN_POINT = { x: 0, z: 12 };
 
+// Tuning read from data (combat.ts) rather than repeated as magic numbers here.
+const WARD = ABILITIES.barkward.effect as Extract<AbilityEffect, { kind: "ward" }>;
+const SECOND_WIND = ABILITIES.secondwind.effect as Extract<AbilityEffect, { kind: "heal" }>;
+
 function freshPlayer(): PlayerRuntime {
   return {
     x: SPAWN_POINT.x,
@@ -215,6 +230,10 @@ function freshPlayer(): PlayerRuntime {
     comboIdx: 0,
     comboBuffered: false,
     lastSwingEnd: -10,
+    bufAttack: 0,
+    bufDodge: 0,
+    bufAbility: 0,
+    bufAbilityIdx: 0,
     attackCooldown: 0,
     hitIds: new Set(),
     swingSerial: 0,
@@ -259,7 +278,45 @@ export const world = {
   hitstop: 0,
   /** Counters exposed for tests. */
   stats: { swings: 0, hits: 0, evades: 0 },
+  /** Locked-on enemy id: the camera tracks it and attacks aim at it. */
+  lockId: null as string | null,
 };
+
+/** How far lock-on reaches, and how far a locked target may get before it drops. */
+export const LOCK_RANGE = 22;
+const LOCK_KEEP = 30;
+
+export function lockedEnemy(): EnemyRuntime | null {
+  if (!world.lockId) return null;
+  return world.enemies.find((e) => e.id === world.lockId) ?? null;
+}
+
+/**
+ * Lock on to the nearest enemy; while locked, move to the next-nearest; after
+ * the last one, release. Targets in front of the camera are preferred.
+ */
+export function cycleLock() {
+  const p = world.player;
+  const fx = Math.sin(input.yaw);
+  const fz = Math.cos(input.yaw);
+  const candidates = world.enemies
+    .filter((e) => e.phase !== "dead" && e.phase !== "return" && Math.hypot(e.x - p.x, e.z - p.z) < LOCK_RANGE)
+    .map((e) => {
+      const dx = e.x - p.x;
+      const dz = e.z - p.z;
+      const d = Math.hypot(dx, dz);
+      const facing = (dx * fx + dz * fz) / (d || 1); // 1 = straight ahead of the camera
+      return { e, score: d - facing * 8 };
+    })
+    .sort((a, b) => a.score - b.score)
+    .map((c) => c.e);
+  if (!candidates.length) {
+    world.lockId = null;
+    return;
+  }
+  const at = candidates.findIndex((e) => e.id === world.lockId);
+  world.lockId = at < 0 ? candidates[0]!.id : (candidates[at + 1]?.id ?? null);
+}
 
 let dropId = 0;
 let sparkId = 0;
@@ -281,6 +338,8 @@ const TURN = 18;
 const COYOTE = 0.1;
 const JUMP_BUFFER = 0.12;
 /** Steepest walkable rise per metre travelled. */
+/** Knockback decay rate: a hit of `kb` metres slides the enemy ~kb over ~0.25s. */
+const KNOCK_DECAY = 12;
 const MAX_GRADE = 1.8; // steeper than any beach or hill; only sheer rock blocks
 const SWIM_ENTER = 1.15;
 const SWIM_EXIT = 0.95;
@@ -288,7 +347,11 @@ const SWIM_DEPTH = 1.05;
 const CLIMB_SPEED = 2.4;
 /** Seconds for a full day/night cycle. */
 export const DAY_LENGTH = 480;
+/** Seconds unclaimed loot stays on the ground. */
+export const DROP_LIFE_ITEM = 300;
+export const DROP_LIFE_COIN = 180;
 let lastSwimHint = -10;
+let wardHeal = 0;
 
 function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
   const def = enemyDef(spawn.type);
@@ -317,14 +380,20 @@ function makeEnemy(spawn: (typeof SPAWNS)[number]): EnemyRuntime {
     zones: [],
     slowT: 0,
     bossPhase: 1,
+    kvx: 0,
+    kvz: 0,
     moveIdx: 0,
     move: null,
     chargeLeft: 0,
   };
 }
 
-export function initWorld(save: SaveFile | null) {
-  rand = mulberry32(SEED);
+/**
+ * `seed` drives loot, crits and variance. Tests use the fixed SEED for repeatable
+ * runs; real play passes a fresh one, so reloading can't replay the same rolls.
+ */
+export function initWorld(save: SaveFile | null, seed = SEED) {
+  rand = mulberry32(seed);
   world.time = 0;
   world.hitstop = 0;
   world.drops.length = 0;
@@ -333,6 +402,8 @@ export function initWorld(save: SaveFile | null) {
   world.projectiles.length = 0;
   world.rains.length = 0;
   world.stats = { swings: 0, hits: 0, evades: 0 };
+  world.lockId = null;
+  world.resourceRegrow = {};
   world.defeated = new Set(save?.defeated ?? []);
   world.enemies = SPAWNS.map(makeEnemy);
   for (const e of world.enemies) {
@@ -394,14 +465,33 @@ export function snapshot(): SaveFile {
   };
 }
 
+const saveListeners = new Set<(save: SaveFile) => void>();
+
+/** Get told about every save (e.g. to sync it to the cloud). Returns an unsubscribe. */
+export function onSave(listener: (save: SaveFile) => void) {
+  saveListeners.add(listener);
+  return () => {
+    saveListeners.delete(listener);
+  };
+}
+
 export function saveNow() {
-  writeSave(snapshot());
+  const save = snapshot();
+  writeSave(save);
   useGame.setState({ hasSave: true });
+  for (const listener of saveListeners) listener(save);
 }
 
 export function loadSaveIntoStore(): SaveFile | null {
   const save = readSave();
   if (!save) return null;
+  if (!(save.hp > 0)) {
+    // Saved on the death screen: wake at the nearest known waypoint like a respawn.
+    const known = Array.from(new Set(["emberhollow", ...(save.waypoints ?? [])]));
+    const wp = nearestWaypoint(save.player.x, save.player.z, known);
+    save.player = { ...save.player, x: wp ? wp.x + 1.5 : SPAWN_POINT.x, z: wp ? wp.z + 1.5 : SPAWN_POINT.z };
+    save.hp = Math.round(statsFor({ archetype: save.archetype, level: save.level, equipped: save.equipped }).maxHp * 0.6);
+  }
   useGame.getState().hydrate({
     archetype: save.archetype,
     hp: save.hp,
@@ -424,8 +514,11 @@ export function loadSaveIntoStore(): SaveFile | null {
     deaths: save.deaths,
     kills: save.kills,
     elapsed: save.elapsed,
+    quality: save.quality ?? useGame.getState().quality,
+    muted: !!save.muted,
     hasSave: true,
   });
+  setAudioMuted(!!save.muted);
   return save;
 }
 
@@ -542,14 +635,20 @@ function killEnemy(enemy: EnemyRuntime) {
   enemy.aggro = false;
   enemy.respawnIn = def.respawnDelay;
   world.defeated.add(enemy.id);
+  const firstDrop = world.drops.length;
   dropLoot(enemy);
+  // Bosses and elites never respawn and drops aren't saved, so their reward goes
+  // straight into the satchel — closing the app before walking over it can't lose it.
+  if (def.boss || def.elite) {
+    for (const d of world.drops.slice(firstDrop)) collectDrop(d);
+  }
   sfx.enemyDown();
   const store = useGame.getState();
   store.addXp(def.xp);
   store.registerKill(enemy.type);
   if (def.boss) {
     useGame.setState({ bossBar: null });
-    store.toast(`${def.name} falls! Boss reward dropped.`, "quest");
+    store.toast(`${def.name} falls! Boss reward claimed.`, "quest");
     spark(enemy.x, enemy.y + 0.2, enemy.z, "#ffd27a", 7, true, 1.1);
   }
   saveNow();
@@ -601,7 +700,7 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
   if (p.invuln > 0) return;
   const stats = statsFor(store);
   let dealt = Math.max(2, Math.round(amount - stats.defense * 0.45));
-  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * 0.4));
+  if (p.wardT > 0) dealt = Math.max(1, Math.round(dealt * WARD.damageTaken));
   if (p.shieldHp > 0) {
     const absorbed = Math.min(p.shieldHp, dealt);
     p.shieldHp -= absorbed;
@@ -617,7 +716,8 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
     const reflect = Math.max(1, Math.round(dealt * stats.mods.thorns));
     damageEnemy(attacker, reflect, { knock: 0, stagger: false, big: false });
   }
-  const hp = Math.max(0, store.hp - dealt);
+  // Re-read: thorns above can trigger lifesteal or a level-up heal in between.
+  const hp = Math.max(0, useGame.getState().hp - dealt);
   store.setHp(hp);
   p.invuln = 0.45;
   p.hitFlash = 0.3;
@@ -628,7 +728,9 @@ function damagePlayer(amount: number, fromX: number, fromZ: number, attacker?: E
   const d = Math.hypot(dx, dz) || 1;
   p.vx = (dx / d) * 7;
   p.vz = (dz / d) * 7;
-  if (p.action === "attack" || p.action === "burst" || p.action === "ward-cast") {
+  // Basic swings are interrupted; ability casts have armour, since their
+  // cooldown is already spent.
+  if (p.action === "attack") {
     p.action = "none";
     p.comboIdx = 0;
     p.comboBuffered = false;
@@ -656,6 +758,12 @@ function damageEnemy(
 ) {
   const def = enemyDef(e.type);
   if (e.phase === "dead" || e.phase === "roar") return false;
+  if (e.phase === "return") {
+    // Leashed enemies walking home shrug off hits (and heal): no farming a foe
+    // from just past its leash while it can't fight back.
+    floater(e.x, e.y + def.scale * 1.1, e.z, "Evade", "#d8cfbf");
+    return false;
+  }
   const p = world.player;
   e.hp -= amount;
   e.hitFlash = 0.22;
@@ -687,9 +795,9 @@ function damageEnemy(
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const d = Math.hypot(dx, dz) || 1;
-    e.x += (dx / d) * kb;
-    e.z += (dz / d) * kb;
-    resolveCollisions(e, 0.6);
+    // A quick slide rather than a teleport; total travel ≈ kb metres.
+    e.kvx += (dx / d) * kb * KNOCK_DECAY;
+    e.kvz += (dz / d) * kb * KNOCK_DECAY;
   }
   if (opts.stagger && !def.boss && e.phase !== "charge") {
     // Interrupts windups — rewarding a well-timed finisher.
@@ -697,7 +805,7 @@ function damageEnemy(
     e.timer = 0.45;
     e.zones = [];
     e.telegraph = 0;
-  } else if (e.phase === "idle" || e.phase === "return") {
+  } else if (e.phase === "idle") {
     e.phase = "chase";
   }
   if (def.boss && e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) startRoar(e);
@@ -721,6 +829,11 @@ function moveIntent(camYaw: number) {
 
 /** Soft aim: at swing start, face a nearby enemy roughly in front. */
 function autoFace(p: PlayerRuntime, range: number) {
+  const locked = lockedEnemy();
+  if (locked && locked.phase !== "dead" && Math.hypot(locked.x - p.x, locked.z - p.z) < range * 1.5) {
+    p.yaw = Math.atan2(locked.x - p.x, locked.z - p.z);
+    return;
+  }
   let best: EnemyRuntime | null = null;
   let bestScore = -Infinity;
   const fx = Math.sin(p.yaw);
@@ -849,14 +962,19 @@ function startSwing(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
   sfx.swing(idx);
 }
 
-function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number) {
+/** Returns true once the press is used (a swing starts or the next hit is queued). */
+function tryAttack(p: PlayerRuntime, mx: number, mz: number, mag: number): boolean {
   if (p.action === "attack") {
-    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) p.comboBuffered = true;
-    return;
+    if (p.actionT >= swingDuration(p.comboIdx - 1) * COMBO_BUFFER_FROM && p.comboIdx < SWINGS.length) {
+      p.comboBuffered = true;
+      return true;
+    }
+    return false;
   }
-  if (p.action !== "none" || p.attackCooldown > 0) return;
+  if (p.action !== "none" || p.attackCooldown > 0) return false;
   const chaining = world.time - p.lastSwingEnd <= COMBO_GRACE && p.comboIdx > 0 && p.comboIdx < SWINGS.length;
   startSwing(p, chaining ? p.comboIdx : 0, mx, mz, mag);
+  return true;
 }
 
 function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
@@ -887,8 +1005,8 @@ function applySwingHits(p: PlayerRuntime, swing: (typeof SWINGS)[number]) {
   }
 }
 
-function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
-  if (p.dodgeCd > 0 || p.dead || p.action === "gale") return;
+function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number): boolean {
+  if (p.dodgeCd > 0 || p.dead || p.action === "gale") return false;
   if (p.action === "attack") {
     // Dodge-cancel out of a swing keeps the chain honest but responsive.
     p.comboIdx = 0;
@@ -905,6 +1023,7 @@ function tryDodge(p: PlayerRuntime, mx: number, mz: number, mag: number) {
   p.dodgeIframe = DODGE.iframes;
   p.animKey += 1;
   sfx.dodge();
+  return true;
 }
 
 function abilityCooldown(id: AbilityId) {
@@ -918,17 +1037,18 @@ export function abilityInSlot(idx: number): AbilityId | null {
   return a?.abilities[idx] ?? null;
 }
 
-function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number) {
+/** Returns true when the press is used up: cast, or refused for good (locked / no slot). */
+function castAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: number): boolean {
   const id = abilityInSlot(idx);
-  if (!id || p.dead) return;
+  if (!id || p.dead) return true;
   const def = ABILITIES[id];
   const s = useGame.getState();
   if (!abilityUnlocked(s.level, idx)) {
     s.toast(`${def.name} unlocks at level ${ABILITY_UNLOCK_LEVELS[idx]}.`, "info");
-    return;
+    return true;
   }
-  if (p.cooldowns[id] > 0) return;
-  if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return;
+  if (p.cooldowns[id] > 0) return false;
+  if (p.action === "dodge" || p.action === "gale" || p.action === "burst") return false;
   p.comboIdx = 0;
   p.comboBuffered = false;
   p.cooldowns[id] = abilityCooldown(id);
@@ -964,6 +1084,9 @@ function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
         const pos = { x: p.x + bx * 0.5, z: p.z + bz * 0.5 };
         resolveCollisions(pos, 0.55);
         if (Math.hypot(pos.x - p.x, pos.z - p.z) < 0.25) break;
+        // Same rule as walking: sheer rock stops you (the Watchstone must be climbed).
+        const rise = heightAt(pos.x, pos.z) - heightAt(p.x, p.z);
+        if (rise > 0.5 * MAX_GRADE && heightAt(pos.x, pos.z) > p.y + 0.2) break;
         p.x = pos.x;
         p.z = pos.z;
       }
@@ -1009,6 +1132,7 @@ function useAbility(p: PlayerRuntime, idx: number, mx: number, mz: number, mag: 
       floater(p.x, p.y + 2.8, p.z, def.name, "#b9a4ff");
       break;
   }
+  return true;
 }
 
 function slowAround(x: number, z: number, radius: number) {
@@ -1074,9 +1198,13 @@ function stepPlayer(dt: number, camYaw: number) {
     const before = p.wardT;
     p.wardT = Math.max(0, p.wardT - dt);
     const max = statsFor(store).maxHp;
-    const heal = ((before - p.wardT) / 4) * max * 0.2;
-    if (store.hp < max) store.setHp(Math.min(max, store.hp + heal));
-  }
+    wardHeal += ((before - p.wardT) / WARD.duration) * max * WARD.healFraction;
+    // Flush whole points only: a store write per frame re-renders the HUD at 60Hz.
+    if (store.hp < max && (wardHeal >= 1 || p.wardT === 0)) {
+      store.setHp(Math.min(max, store.hp + wardHeal));
+      wardHeal = 0;
+    }
+  } else wardHeal = 0;
 
   const { mx, mz, mag } = moveIntent(camYaw);
 
@@ -1085,6 +1213,7 @@ function stepPlayer(dt: number, camYaw: number) {
     return;
   }
 
+  if (p.swimming) p.bufAttack = p.bufDodge = p.bufAbility = 0;
   if (p.swimming && (input.attackQueued || input.dodgeQueued || input.abilityQueued !== null || input.jumpQueued)) {
     input.attackQueued = false;
     input.dodgeQueued = false;
@@ -1096,18 +1225,33 @@ function stepPlayer(dt: number, camYaw: number) {
     }
   }
 
+  // Presses are buffered briefly and retried each frame until they can happen.
   if (input.dodgeQueued) {
     input.dodgeQueued = false;
-    tryDodge(p, mx, mz, mag);
+    p.bufDodge = INPUT_BUFFER;
   }
   if (input.abilityQueued !== null) {
-    const idx = input.abilityQueued;
+    p.bufAbilityIdx = input.abilityQueued;
+    p.bufAbility = INPUT_BUFFER;
     input.abilityQueued = null;
-    useAbility(p, idx, mx, mz, mag);
   }
   if (input.attackQueued) {
     input.attackQueued = false;
-    tryAttack(p, mx, mz, mag);
+    p.bufAttack = INPUT_BUFFER;
+  }
+  // Holding Attack keeps the chain going — easier on a phone than tap-spamming.
+  if (input.attackHeld && p.bufAttack <= 0 && !p.swimming && useSettings.getState().holdToAttack) {
+    p.bufAttack = INPUT_BUFFER;
+  }
+  if (p.bufDodge > 0) {
+    p.bufDodge = tryDodge(p, mx, mz, mag) ? 0 : p.bufDodge - dt;
+    if (p.bufDodge === 0 && p.action === "dodge") p.bufAttack = 0; // a dodge cancels a pending attack
+  }
+  if (p.bufAbility > 0) {
+    p.bufAbility = castAbility(p, p.bufAbilityIdx, mx, mz, mag) ? 0 : p.bufAbility - dt;
+  }
+  if (p.bufAttack > 0) {
+    p.bufAttack = tryAttack(p, mx, mz, mag) ? 0 : p.bufAttack - dt;
   }
   if (input.healQueued) {
     input.healQueued = false;
@@ -1122,7 +1266,7 @@ function stepPlayer(dt: number, camYaw: number) {
   p.actionT += dt;
   let ctrl = 1; // movement authority this frame
   const arche = ARCHETYPES[store.archetype] ?? ARCHETYPES.vanguard;
-  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1.3 : 1);
+  const speedMul = arche.moveMult * (1 + (statsFor(store).mods.swift ?? 0)) * (p.hasteT > 0 ? 1 + SECOND_WIND.haste : 1);
   let speedCap = (input.sprint ? SPRINT : WALK) * speedMul * (p.swimming ? 0.6 : 1);
   if (p.action === "attack") {
     const swing = SWINGS[p.comboIdx - 1]!;
@@ -1194,6 +1338,9 @@ function stepPlayer(dt: number, camYaw: number) {
     ctrl = 0.6;
     if (p.actionT >= 0.3) p.action = "none";
   }
+
+  // Being hit costs a moment of control, so the knockback actually reads.
+  if (p.hurtT > 0) ctrl *= 0.25;
 
   // ---- horizontal velocity with acceleration / deceleration
   const moving = mag > 0.05;
@@ -1438,8 +1585,21 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
   const p = world.player;
   e.hitFlash = Math.max(0, e.hitFlash - dt);
   e.slowT = Math.max(0, e.slowT - dt);
-  const slow = e.slowT > 0 ? 0.45 : 1;
+  const slow = e.slowT > 0 ? GALE.slowFactor : 1;
   const phaseSpeed = def.boss && e.bossPhase === 2 ? 1.2 : 1;
+
+  if (e.kvx !== 0 || e.kvz !== 0) {
+    const ox = e.x;
+    const oz = e.z;
+    e.x += e.kvx * dt;
+    e.z += e.kvz * dt;
+    resolveCollisions(e, 0.6);
+    keepOnLand(e, ox, oz);
+    const f = Math.exp(-KNOCK_DECAY * dt);
+    e.kvx *= f;
+    e.kvz *= f;
+    if (Math.abs(e.kvx) + Math.abs(e.kvz) < 0.05) e.kvx = e.kvz = 0;
+  }
 
   if (e.phase === "dead") {
     e.zones = [];
@@ -1533,6 +1693,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
           world.cameraShake = Math.max(world.cameraShake, 0.3);
         }
         if (hit && playerAlive) damagePlayer(def.damage, e.x, e.z, e);
+        if ((e.phase as EnemyPhase) === "dead") return; // thorns killed it mid-swing
       }
       if (e.timer <= 0) {
         e.phase = "recover";
@@ -1555,6 +1716,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
       if (!e.struck && Math.hypot(p.x - e.x, p.z - e.z) < 2.0 && playerAlive) {
         e.struck = true;
         damagePlayer(Math.round(def.damage * 1.25), e.x - Math.sin(e.yaw) * 2, e.z - Math.cos(e.yaw) * 2, e);
+        if ((e.phase as EnemyPhase) === "dead") return; // thorns killed it mid-charge
       }
       if (Math.floor(world.time * 30) % 3 === 0) spark(e.x, e.y + 0.3, e.z, "#a98563", 0.5, false, 0.35);
       if (e.chargeLeft <= 0.01 || moved < step * 0.4) {
@@ -1601,6 +1763,7 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
         e.phase = "idle";
         e.yaw = e.homeYaw;
         e.hp = e.maxHp;
+        e.bossPhase = 1; // a full reset: the retry starts calm and roars again at half health
       } else {
         const step = def.speed * 0.9 * dt;
         const ox = e.x;
@@ -1628,6 +1791,41 @@ function stepEnemy(e: EnemyRuntime, dt: number) {
   }
 }
 
+/** Keep nearby enemies from collapsing onto one spot: push overlapping pairs apart. */
+function separateEnemies() {
+  const p = world.player;
+  const list = world.enemies;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    if (a.phase === "dead" || a.phase === "charge") continue;
+    if (Math.abs(a.x - p.x) > 45 || Math.abs(a.z - p.z) > 45) continue;
+    const ra = Math.min(1.6, enemyDef(a.type).scale * 0.32);
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j]!;
+      if (b.phase === "dead" || b.phase === "charge") continue;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const min = ra + Math.min(1.6, enemyDef(b.type).scale * 0.32);
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 0.01;
+      const push = (min - d) * 0.5;
+      const nx = d2 > 0 ? dx / d : 1;
+      const nz = d2 > 0 ? dz / d : 0;
+      const ax = a.x;
+      const az = a.z;
+      const bx = b.x;
+      const bz = b.z;
+      a.x -= nx * push;
+      a.z -= nz * push;
+      b.x += nx * push;
+      b.z += nz * push;
+      keepOnLand(a, ax, az);
+      keepOnLand(b, bx, bz);
+    }
+  }
+}
+
 function checkUnlocks() {
   const s = useGame.getState();
   const n = [0, 1, 2].filter((i) => abilityUnlocked(s.level, i)).length;
@@ -1644,7 +1842,10 @@ function checkUnlocks() {
 // ---------------------------------------------------------------- open world
 
 function keepOnLand(e: EnemyRuntime, ox: number, oz: number) {
-  if (heightAt(e.x, e.z) < SEA_LEVEL - 0.6) {
+  // Reject only steps that go *deeper*: an enemy already in deep water (e.g.
+  // knocked back into it) must still be able to walk out towards shore.
+  const h = heightAt(e.x, e.z);
+  if (h < SEA_LEVEL - 0.6 && h < heightAt(ox, oz)) {
     e.x = ox;
     e.z = oz;
   }
@@ -1720,6 +1921,7 @@ function stepClimb(p: PlayerRuntime, dt: number) {
   input.attackQueued = false;
   input.abilityQueued = null;
   input.dodgeQueued = false;
+  p.bufAttack = p.bufDodge = p.bufAbility = 0;
   // W / joystick up climbs, S climbs down, Space lets go.
   p.climbT = Math.max(0, Math.min(1, p.climbT + (input.moveZ * CLIMB_SPEED * dt) / len));
   // Hug the rock face: stay at the base's x/z until the lip, then step over.
@@ -1810,6 +2012,8 @@ function stepExploration(dt: number) {
       return;
     }
   }
+  // Lore waits until the fight is over — a dialogue box mid-charge blocks attacks.
+  if (inCombat() || s.dialogue) return;
   for (const l of LANDMARKS) {
     if (s.landmarks.includes(l.id)) continue;
     if (Math.hypot(l.x - p.x, l.z - p.z) < 9) {
@@ -1820,6 +2024,22 @@ function stepExploration(dt: number) {
   }
 }
 
+function collectDrop(d: DropRuntime) {
+  const store = useGame.getState();
+  d.taken = true;
+  if (d.itemId) store.addItem(d.itemId);
+  if (d.potion) {
+    useGame.setState({ potions: useGame.getState().potions + 1 });
+    store.toast("Picked up a Sunbloom Draught", "good");
+  }
+  if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
+  if (d.shards > 0) {
+    useGame.setState({ shards: useGame.getState().shards + d.shards });
+    store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
+  }
+  sfx.pickup();
+}
+
 function stepDrops(dt: number) {
   void dt;
   const p = world.player;
@@ -1827,20 +2047,13 @@ function stepDrops(dt: number) {
   for (const d of world.drops) {
     if (d.taken) continue;
     const dist = Math.hypot(d.x - p.x, d.z - p.z);
-    if (dist < 2.0 && !p.dead) {
-      d.taken = true;
-      if (d.itemId) store.addItem(d.itemId);
-      if (d.potion) {
-        useGame.setState({ potions: store.potions + 1 });
-        store.toast("Picked up a Sunbloom Draught", "good");
-      }
-      if (d.gold > 0) useGame.setState({ gold: useGame.getState().gold + d.gold });
-      if (d.shards > 0) {
-        useGame.setState({ shards: useGame.getState().shards + d.shards });
-        store.toast(`+${d.shards} Aether Shard${d.shards > 1 ? "s" : ""}`, "good");
-      }
-      sfx.pickup();
-    }
+    if (dist < 2.0 && !p.dead) collectDrop(d);
+  }
+  // Unclaimed loot fades after a while (gear lasts longer than coin); if the cap
+  // is still hit, the oldest *collected* entries go first, never fresh loot.
+  for (let i = world.drops.length - 1; i >= 0; i--) {
+    const d = world.drops[i]!;
+    if (!d.taken && world.time - d.born > (d.itemId ? DROP_LIFE_ITEM : DROP_LIFE_COIN)) world.drops.splice(i, 1);
   }
   if (world.drops.length > 60) world.drops.splice(0, world.drops.length - 60);
   for (let i = world.drops.length - 1; i >= 0; i--) {
@@ -1925,7 +2138,7 @@ function tryInteract() {
   if (!npc) {
     const p = world.player;
     const climb = climbAt(p.x, p.z);
-    if (climb && !p.swimming) {
+    if (climb && !p.swimming && !p.climbing) {
       startClimb(climb);
       return;
     }
@@ -1975,6 +2188,7 @@ export function stepWorld(dtRaw: number) {
   const store = useGame.getState();
   if (store.screen !== "playing") {
     if (input.interactQueued) input.interactQueued = false;
+    world.cameraShake = 0; // shake only decays while playing; don't jitter menus
     return;
   }
   const dt0 = Math.min(dtRaw, 0.05);
@@ -1990,9 +2204,24 @@ export function stepWorld(dtRaw: number) {
     input.interactQueued = false;
     tryInteract();
   }
+  if (input.lockQueued) {
+    input.lockQueued = false;
+    cycleLock();
+  }
+  const lock = lockedEnemy();
+  if (
+    lock &&
+    (lock.phase === "dead" ||
+      lock.phase === "return" ||
+      world.player.dead ||
+      Math.hypot(lock.x - world.player.x, lock.z - world.player.z) > LOCK_KEEP)
+  ) {
+    world.lockId = null;
+  }
 
   stepPlayer(dt, input.yaw);
   for (const e of world.enemies) stepEnemy(e, dt);
+  separateEnemies();
   stepProjectiles(dt);
   stepExploration(dt);
   world.dayTime = (world.dayTime + dt / DAY_LENGTH) % 1;
@@ -2021,7 +2250,7 @@ export function stepWorld(dtRaw: number) {
   const climb = !pp.climbing && !pp.swimming ? climbAt(pp.x, pp.z) : null;
   const secret = secretNear(pp.x, pp.z);
   const prompt = pp.climbing
-    ? "W climb · S descend · Space let go"
+    ? "Climbing — up to climb, down to descend, Jump to let go"
     : npc
     ? `Speak with ${npc.name}`
     : climb

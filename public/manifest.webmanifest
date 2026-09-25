@@ -1,0 +1,17 @@
+{
+  "name": "Aetherfall",
+  "short_name": "Aetherfall",
+  "description": "A third-person action RPG: explore Dawnreach, fight, loot and quest.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#17110d",
+  "theme_color": "#17110d",
+  "categories": ["games"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

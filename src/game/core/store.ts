@@ -124,9 +124,17 @@ export function newUid() {
   return `i${Date.now().toString(36)}${uidCounter}`;
 }
 
+/** Phones and tablets start on Low (no shadows, lower resolution) — smooth first, pretty second. */
+export function defaultQuality(): Quality {
+  if (typeof window === "undefined" || !window.matchMedia) return "medium";
+  const touch = window.matchMedia("(pointer: coarse)").matches;
+  const weak = (navigator.hardwareConcurrency ?? 8) <= 4;
+  return touch || weak ? "low" : "medium";
+}
+
 const INITIAL: GameState = {
   screen: "loading",
-  quality: "medium",
+  quality: defaultQuality(),
   muted: false,
   loadProgress: 0,
   hasSave: false,
@@ -163,6 +171,16 @@ const INITIAL: GameState = {
 
 function bagOf(s: GameState): Bag {
   return { inventory: s.inventory, equipped: s.equipped, gold: s.gold, shards: s.shards, level: s.level };
+}
+
+/**
+ * Gear changes keep the amount of *missing* health the same, so swapping a
+ * +HP item on and off mid-fight can never act as a free heal.
+ */
+function keepMissingHp(s: GameState, equipped: Equipped) {
+  const oldMax = statsFor(s).maxHp;
+  const newMax = statsFor({ ...s, equipped }).maxHp;
+  return Math.max(1, Math.min(newMax, newMax - (oldMax - s.hp)));
 }
 
 export const useGame = create<GameState & GameActions>((set, get) => {
@@ -206,9 +224,7 @@ export const useGame = create<GameState & GameActions>((set, get) => {
         get().toast(r.message, "bad");
         return;
       }
-      const entry = s.inventory.find((i) => i.uid === uid)!;
-      const gain = ITEMS[entry.itemId]?.health ?? 0;
-      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: clampHp({ equipped: r.bag.equipped }, gain) });
+      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: keepMissingHp(s, r.bag.equipped) });
       sfx.pickup();
       get().toast(r.message, "good");
     },
@@ -217,7 +233,7 @@ export const useGame = create<GameState & GameActions>((set, get) => {
       const s = get();
       const r = unequipItem(bagOf(s), slot);
       if (!r.ok) return;
-      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: clampHp({ equipped: r.bag.equipped }) });
+      set({ inventory: r.bag.inventory, equipped: r.bag.equipped, hp: keepMissingHp(s, r.bag.equipped) });
       sfx.ui();
     },
 

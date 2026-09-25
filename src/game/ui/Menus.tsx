@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QUESTS } from "../data/quests";
-import { setMuted as setAudioMuted, sfx } from "../core/audio";
+import { setMuted as setAudioMuted, sfx, unlockAudio } from "../core/audio";
 import { initWorld, respawnPlayer, saveNow } from "../core/sim";
+import { haptic, useSettings } from "../core/settings";
+import { AccountDialog, AccountLine, CloudSaveSync } from "./Account";
 import { clearSave, useGame, type Quality } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 
@@ -13,11 +15,36 @@ const QUALITIES: Array<{ id: Quality; label: string; note: string }> = [
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-lg rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-6 shadow-2xl backdrop-blur">
+    // Capped to the visible height and scrollable: on a landscape phone (~390px tall)
+    // the pause menu and controls list would otherwise be clipped off-screen.
+    <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 p-5 shadow-2xl backdrop-blur sm:p-6">
       {children}
     </div>
   );
 }
+
+/**
+ * On phones, take over the whole screen and hold landscape (Android/Chrome).
+ * iPhone Safari has no element fullscreen; there the home-screen install
+ * (manifest, display: fullscreen) gives the same result. Must run in a tap.
+ */
+function enterMobileFullscreen() {
+  if (!window.matchMedia("(pointer: coarse)").matches) return;
+  if (window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches) return;
+  const root = document.documentElement;
+  if (document.fullscreenElement || !root.requestFullscreen) return;
+  root
+    .requestFullscreen({ navigationUI: "hide" })
+    .then(() => {
+      const orientation = screen.orientation as ScreenOrientation & {
+        lock?: (o: string) => Promise<void>;
+      };
+      return orientation?.lock?.("landscape");
+    })
+    .catch(() => undefined);
+}
+
+const freshSeed = () => (Math.random() * 2 ** 32) >>> 0;
 
 export function LoadingScreen({ progress }: { progress: number }) {
   return (
@@ -52,20 +79,34 @@ export function WebglError() {
   );
 }
 
-export function TitleScreen({ save }: { save: SaveFile | null }) {
+export function TitleScreen({
+  save: bootSave,
+  onSaveChanged,
+}: {
+  save: SaveFile | null;
+  onSaveChanged: (save: SaveFile | null) => void;
+}) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
   const screen = useGame((s) => s.screen);
+  // The save read at page load goes stale once "Erase save" is used; only offer
+  // Continue while the store still says a save exists.
+  const hasSave = useGame((s) => s.hasSave);
+  const save = hasSave ? bootSave : null;
   const quality = useGame((s) => s.quality);
   const setQuality = useGame((s) => s.setQuality);
   const [showControls, setShowControls] = useState(false);
   if (screen !== "title") return null;
 
   const start = (useSave: boolean) => {
+    unlockAudio();
+    enterMobileFullscreen();
     sfx.ui();
     if (!useSave) {
       clearSave();
       useGame.getState().resetProgress();
     }
-    initWorld(useSave ? save : null);
+    initWorld(useSave ? save : null, freshSeed());
     useGame.setState({ screen: "playing" });
     saveNow();
   };
@@ -111,11 +152,15 @@ export function TitleScreen({ save }: { save: SaveFile | null }) {
 
         {showControls && <ControlsList />}
 
+        <AccountLine onOpen={() => setAccountOpen(true)} />
+        <CloudSaveSync onSaveChanged={onSaveChanged} />
+
         <div className="mt-5">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
           <QualityPicker quality={quality} setQuality={setQuality} />
         </div>
       </Panel>
+      {accountOpen && <AccountDialog onClose={closeAccount} />}
     </div>
   );
 }
@@ -143,7 +188,7 @@ function QualityPicker({
           }`}
         >
           <div className="text-sm text-[var(--parchment)]">{q.label}</div>
-          <div className="text-[10px] leading-snug text-[var(--parchment)]/55">{q.note}</div>
+          <div className="text-[11px] leading-snug text-[var(--parchment)]/55">{q.note}</div>
         </button>
       ))}
     </div>
@@ -151,23 +196,41 @@ function QualityPicker({
 }
 
 function ControlsList() {
-  const rows: Array<[string, string]> = [
-    ["Move", "W A S D / left joystick"],
-    ["Sprint", "Shift / push joystick fully"],
-    ["Look", "Move mouse / drag right half"],
-    ["Attack", "Left click / Attack button"],
-    ["Jump", "Space / Jump button"],
-    ["Talk & continue", "E / Talk button"],
-    ["Drink draught", "Q / Heal button"],
-    ["Satchel", "I / Bag button"],
-    ["Pause", "Escape"],
-    ["Mute", "M"],
-  ];
+  // Show the scheme for the device in hand; touch players never see key names.
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const rows: Array<[string, string]> = touch
+    ? [
+        ["Move", "Left thumb anywhere on the left half"],
+        ["Sprint", "Push the stick all the way"],
+        ["Look", "Drag on the right half"],
+        ["Attack", "Tap Attack — hold to keep swinging"],
+        ["Dodge", "Dodge (brief invulnerability)"],
+        ["Lock on", "Target — tap again for the next, then off"],
+        ["Abilities", "Buttons around Attack, from level 2"],
+        ["Talk / climb / open", "Button that appears in the bottom row"],
+        ["Heal", "Heal button"],
+        ["Bag · map · menu", "Bottom row"],
+      ]
+    : [
+        ["Move", "W A S D"],
+        ["Sprint", "Shift"],
+        ["Look", "Move mouse (click to lock)"],
+        ["Attack", "Left click — hold to keep swinging"],
+        ["Dodge", "F / right click"],
+        ["Lock on", "Tab or R — again for the next, then off"],
+        ["Abilities", "1 2 3"],
+        ["Jump", "Space"],
+        ["Talk & continue", "E"],
+        ["Drink draught", "Q"],
+        ["Satchel · build · codex · map", "I · B · K · N"],
+        ["Pause", "Escape"],
+        ["Mute", "M"],
+      ];
   return (
-    <div className="mt-4 grid gap-x-6 gap-y-1 rounded-lg border border-[var(--gilt)]/20 p-3 sm:grid-cols-2">
+    <div className="mt-4 grid gap-x-6 gap-y-1.5 rounded-lg border border-[var(--gilt)]/20 p-3 sm:grid-cols-2">
       {rows.map(([k, v]) => (
-        <div key={k} className="flex justify-between gap-3 text-[11px]">
-          <span className="text-[var(--parchment)]/60">{k}</span>
+        <div key={k} className="flex justify-between gap-3 text-xs">
+          <span className="text-[var(--parchment)]/70">{k}</span>
           <span className="text-right text-[var(--parchment)]">{v}</span>
         </div>
       ))}
@@ -176,8 +239,14 @@ function ControlsList() {
 }
 
 export function PauseMenu() {
+  const screen = useGame((g) => g.screen);
+  if (screen !== "paused") return null;
+  return <PauseMenuBody />;
+}
+
+/** Only mounted while paused, so the always-mounted wrapper stays cheap. */
+function PauseMenuBody() {
   const s = useGame();
-  if (s.screen !== "paused") return null;
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--ink)]/35 p-4">
       <Panel>
@@ -211,7 +280,7 @@ export function PauseMenu() {
             onClick={() => {
               clearSave();
               useGame.getState().resetProgress();
-              initWorld(null);
+              initWorld(null, freshSeed());
               useGame.setState({ screen: "title" });
             }}
           >
@@ -220,24 +289,121 @@ export function PauseMenu() {
         </div>
 
         <div className="mt-5">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Graphics</div>
           <QualityPicker quality={s.quality} setQuality={s.setQuality} />
         </div>
 
-        <label className="mt-4 flex items-center gap-2 text-xs text-[var(--parchment)]/80">
-          <input
-            type="checkbox"
-            checked={s.muted}
-            onChange={(e) => {
-              s.setMuted(e.target.checked);
-              setAudioMuted(e.target.checked);
+        <div className="mt-2 divide-y divide-[var(--gilt)]/10">
+          <Toggle
+            label="Sound"
+            on={!s.muted}
+            onChange={(on) => {
+              s.setMuted(!on);
+              setAudioMuted(!on);
             }}
           />
-          Mute sound
-        </label>
+        </div>
+
+        <ComfortSettings />
+
+        <AccountLine />
 
         <ControlsList />
       </Panel>
+    </div>
+  );
+}
+
+/** Big, thumb-sized on/off row (the whole row is the target). */
+function Toggle({
+  label,
+  note,
+  on,
+  onChange,
+}: {
+  label: string;
+  note?: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      className="flex min-h-11 w-full items-center justify-between gap-3 py-1.5 text-left"
+      onClick={() => {
+        sfx.ui();
+        onChange(!on);
+      }}
+    >
+      <span>
+        <span className="block text-sm text-[var(--parchment)]">{label}</span>
+        {note && <span className="block text-xs text-[var(--parchment)]/70">{note}</span>}
+      </span>
+      <span
+        className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
+          on ? "border-[var(--gilt)]/70 bg-[var(--gilt)]/45" : "border-[var(--parchment)]/25 bg-[var(--ink)]/60"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-[var(--parchment)] shadow transition-transform ${
+            on ? "translate-x-[1.35rem]" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
+/** Controls and comfort: stored per device, not in the save. */
+function ComfortSettings() {
+  const prefs = useSettings();
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  return (
+    <div className="mt-5">
+      <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Controls</div>
+      <label className="mt-2 block">
+        <span className="flex items-baseline justify-between text-sm text-[var(--parchment)]">
+          Look sensitivity
+          <span className="text-xs text-[var(--parchment)]/70">{prefs.lookSensitivity.toFixed(1)}×</span>
+        </span>
+        <input
+          type="range"
+          min={0.4}
+          max={2.2}
+          step={0.1}
+          value={prefs.lookSensitivity}
+          onChange={(e) => prefs.update({ lookSensitivity: Number(e.target.value) })}
+          className="mt-1 h-11 w-full accent-[var(--gilt)]"
+        />
+      </label>
+      <div className="divide-y divide-[var(--gilt)]/10">
+        <Toggle label="Invert camera up/down" on={prefs.invertY} onChange={(v) => prefs.update({ invertY: v })} />
+        <Toggle
+          label="Hold Attack to keep swinging"
+          on={prefs.holdToAttack}
+          onChange={(v) => prefs.update({ holdToAttack: v })}
+        />
+        {touch && (
+          <>
+            <Toggle
+              label="Floating joystick"
+              note="Appears wherever your left thumb lands"
+              on={prefs.floatingStick}
+              onChange={(v) => prefs.update({ floatingStick: v })}
+            />
+            <Toggle
+              label="Vibration"
+              note="On hits, dodges, damage and level-ups (not supported by iPhone browsers)"
+              on={prefs.haptics}
+              onChange={(v) => {
+                prefs.update({ haptics: v });
+                if (v) haptic(25);
+              }}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -273,7 +439,14 @@ export function DialogueBox() {
   const openDialogue = useGame((s) => s.openDialogue);
   if (!dialogue) return null;
   return (
-    <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex justify-center p-4">
+    <div
+      className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex justify-center p-4"
+      style={{
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(1rem, env(safe-area-inset-left))",
+        paddingRight: "max(1rem, env(safe-area-inset-right))",
+      }}
+    >
       <div className="w-full max-w-2xl rounded-xl border border-[var(--gilt)]/35 bg-[var(--panel)]/95 p-4 backdrop-blur">
         <div className="font-display text-sm tracking-[0.2em] text-[var(--gilt)]">
           {dialogue.name.toUpperCase()}
@@ -286,15 +459,51 @@ export function DialogueBox() {
           ))}
         </div>
         <button
-          className="mt-3 rounded-lg border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-4 py-2 text-xs text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
+          className="mt-3 min-h-11 rounded-lg border border-[var(--gilt)]/40 bg-[var(--gilt)]/15 px-5 py-2 text-sm text-[var(--parchment)] hover:bg-[var(--gilt)]/30"
           onClick={() => {
             sfx.ui();
             openDialogue(null);
           }}
         >
-          Close (E)
+          Close<span className="hidden [@media(pointer:fine)]:inline"> (E)</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phones held upright: the controls and HUD are designed for landscape, so ask
+ * the player to rotate and pause the fight underneath instead of letting
+ * enemies hit an unplayable layout.
+ */
+export function RotateHint() {
+  const [portrait, setPortrait] = useState(false);
+  const loading = useGame((g) => g.screen === "loading");
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: portrait) and (pointer: coarse)");
+    const update = () => {
+      setPortrait(mq.matches);
+      if (mq.matches && useGame.getState().screen === "playing") {
+        useGame.setState({ screen: "paused" });
+      }
+    };
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  if (!portrait || loading) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[var(--ink)] p-8 text-center">
+      <svg viewBox="0 0 64 64" className="h-16 w-16 animate-pulse text-[var(--gilt)]" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden>
+        <rect x="20" y="6" width="24" height="44" rx="4" />
+        <path d="M10 44a22 22 0 0 0 18 14M54 20A22 22 0 0 0 36 6" strokeLinecap="round" />
+        <path d="M24 55l4 3-3 4M40 3l-4 3 3 4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <h2 className="font-display text-xl tracking-[0.25em] text-[var(--gilt)]">ROTATE YOUR DEVICE</h2>
+      <p className="max-w-xs text-sm leading-relaxed text-[var(--parchment)]/80">
+        Aetherfall plays in landscape. Turn your phone sideways to continue your journey.
+      </p>
     </div>
   );
 }

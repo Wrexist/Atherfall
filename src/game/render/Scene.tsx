@@ -1,30 +1,64 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { BARROW_GATE, COTTAGES, MODULE, PROPS, cottageWalls, type PropInstance } from "../world/layout";
+import { BARROW_GATE, COTTAGES, MODULE, NPCS, PROPS, SPAWNS, cottageWalls, type PropInstance } from "../world/layout";
+import { ARCHETYPES } from "../data/archetypes";
+import { enemyDef } from "../data/enemies";
 import { useGLTF } from "@react-three/drei";
 import { heightAt } from "../world/terrain";
 import { useGame, type Quality } from "../core/store";
 import { ModelInstances, type InstanceTransform } from "./Instances";
 import { Terrain } from "./Terrain";
 import { EnemyViews, NpcViews, PlayerView } from "./Characters";
-import { DropViews, FloaterViews, ProjectileViews, RingViews, SparkViews, ZoneViews } from "./Effects";
+import {
+  DropViews,
+  FloaterViews,
+  LockRing,
+  ProjectileViews,
+  RingViews,
+  SparkViews,
+  ZoneViews,
+} from "./Effects";
 import { Systems } from "./Systems";
 import { WorldObjects } from "./WorldObjects";
+import { QuestMarker } from "./QuestMarker";
+import { RemotePlayers } from "./RemotePlayers";
 import { DayNight } from "./DayNight";
 
-const QUALITY: Record<Quality, { segments: number; shadows: boolean; shadowMap: number; far: number; detail: boolean }> = {
-  low: { segments: 90, shadows: false, shadowMap: 512, far: 95, detail: false },
-  medium: { segments: 140, shadows: true, shadowMap: 1024, far: 135, detail: true },
-  high: { segments: 190, shadows: true, shadowMap: 2048, far: 175, detail: true },
+/** Every model the scene can show, so all downloads start together. */
+export const MODEL_URLS = Array.from(
+  new Set<string>([
+    ...PROPS.map((p) => p.model),
+    ...COTTAGES.flatMap((c) => cottageWalls(c).map((w) => w.model)),
+    ...Object.values(ARCHETYPES).map((a) => a.model),
+    ...SPAWNS.map((sp) => enemyDef(sp.type).model),
+    ...NPCS.map((n) => n.model),
+    "/models/dng/gate.glb",
+    "/models/dng/chest.glb",
+  ]),
+);
+
+/**
+ * `shadowSpan` is the half-width of the sun's shadow box around the player. A
+ * tighter box gives sharper shadows from the same map and skips casters far
+ * away (their shadows would be lost in fog anyway).
+ */
+const QUALITY: Record<
+  Quality,
+  { segments: number; shadows: boolean; shadowMap: number; shadowSpan: number; far: number; detail: boolean }
+> = {
+  low: { segments: 90, shadows: false, shadowMap: 512, shadowSpan: 30, far: 95, detail: false },
+  medium: { segments: 140, shadows: true, shadowMap: 1024, shadowSpan: 32, far: 135, detail: true },
+  high: { segments: 190, shadows: true, shadowMap: 2048, shadowSpan: 48, far: 175, detail: true },
 };
 
 function groupProps(props: PropInstance[]) {
-  const map = new Map<string, InstanceTransform[]>();
+  const map = new Map<string, { items: InstanceTransform[]; allDetail: boolean }>();
   for (const p of props) {
-    const arr = map.get(p.model) ?? [];
-    arr.push({ x: p.x, z: p.z, yaw: p.yaw, scale: p.scale, yOffset: p.yOffset });
-    map.set(p.model, arr);
+    const g = map.get(p.model) ?? { items: [], allDetail: true };
+    g.items.push({ x: p.x, z: p.z, yaw: p.yaw, scale: p.scale, yOffset: p.yOffset });
+    if (!p.detail) g.allDetail = false;
+    map.set(p.model, g);
   }
   return Array.from(map.entries());
 }
@@ -135,17 +169,24 @@ export function Scene() {
         shadow-mapSize-height={q.shadowMap}
         shadow-bias={-0.0008}
         shadow-camera-near={1}
-        shadow-camera-far={190}
-        shadow-camera-left={-55}
-        shadow-camera-right={55}
-        shadow-camera-top={55}
-        shadow-camera-bottom={-55}
+        shadow-camera-far={170}
+        shadow-camera-left={-q.shadowSpan}
+        shadow-camera-right={q.shadowSpan}
+        shadow-camera-top={q.shadowSpan}
+        shadow-camera-bottom={-q.shadowSpan}
       />
 
-      <Terrain segments={q.segments} shadows={q.shadows} />
+      <Terrain segments={q.segments} shadows={q.shadows} lite={quality === "low"} />
       <Cottages shadows={q.shadows} />
-      {props.map(([url, items]) => (
-        <ModelInstances key={url} url={url} items={items} shadows={q.shadows} />
+      {props.map(([url, g]) => (
+        <ModelInstances
+          key={url}
+          url={url}
+          items={g.items}
+          shadows={q.shadows}
+          castShadow={!g.allDetail}
+          drawDistance={q.far}
+        />
       ))}
 
       <PlayerView />
@@ -157,8 +198,11 @@ export function Scene() {
       <ZoneViews />
       <FloaterViews />
       <ProjectileViews />
+      <LockRing />
       <BarrowGate />
       <WorldObjects />
+      <QuestMarker />
+      <RemotePlayers />
     </>
   );
 }

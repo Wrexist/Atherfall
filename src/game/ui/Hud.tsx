@@ -1,7 +1,11 @@
+import { useEffect, useState } from "react";
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ARCHETYPES } from "../data/archetypes";
 import { AbilityBar } from "./Cooldowns";
+import { Tips } from "./Tips";
+import { usePresence } from "../online/presence";
+import { useShallow } from "zustand/react/shallow";
 import { statsFor, useGame, xpForLevel } from "../core/store";
 
 function Bar({
@@ -23,8 +27,44 @@ function Bar({
   );
 }
 
+/** True on mouse/trackpad devices; phones never mount the desktop-only HUD pieces. */
+function useFinePointer() {
+  const [fine, setFine] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: fine)");
+    setFine(mq.matches);
+    const on = () => setFine(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return fine;
+}
+
 export function Hud() {
-  const s = useGame();
+  const fine = useFinePointer();
+  const online = usePresence((p) => (p.connected ? p.online : 0));
+  // Select only what the HUD shows, so unrelated store writes don't re-render it.
+  const s = useGame(
+    useShallow((g) => ({
+      archetype: g.archetype,
+      level: g.level,
+      hp: g.hp,
+      xp: g.xp,
+      equipped: g.equipped,
+      gold: g.gold,
+      shards: g.shards,
+      potions: g.potions,
+      region: g.region,
+      questIdx: g.questIdx,
+      questStep: g.questStep,
+      questKills: g.questKills,
+      questComplete: g.questComplete,
+      bossBar: g.bossBar,
+      interactPrompt: g.interactPrompt,
+      dialogue: g.dialogue,
+      toasts: g.toasts,
+    })),
+  );
   const stats = statsFor(s);
   const quest = QUESTS[s.questIdx]!;
   const step = quest.steps[s.questStep];
@@ -42,7 +82,7 @@ export function Hud() {
     >
     <div className="relative h-full w-full">
       {/* Vitals */}
-      <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm sm:w-72 sm:p-3">
+      <div className="absolute left-0 top-0 w-52 space-y-1.5 rounded-lg bg-[var(--panel)]/55 p-2.5 backdrop-blur-sm [@media(min-height:560px)]:w-72 [@media(min-height:560px)]:p-3">
         <div className="flex items-baseline justify-between font-display text-sm text-[var(--parchment)]">
           <span className="tracking-[0.18em]">{ARCHETYPES[s.archetype].name.toUpperCase()}</span>
           <span className="text-[var(--gilt)]">Lv {s.level}</span>
@@ -60,14 +100,19 @@ export function Hud() {
       </div>
 
       {/* Region, gold and quest tracker stacked in one column so they never overlap */}
-      <div className="absolute right-0 top-0 flex w-52 flex-col items-end gap-2 sm:w-64">
+      <div className="absolute right-0 top-0 flex w-52 flex-col items-end gap-2 [@media(min-height:560px)]:w-64">
         <div className="rounded-lg bg-[var(--panel)]/70 px-3 py-1.5 text-right backdrop-blur-sm">
-          <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow sm:text-base">
+          <div className="font-display text-sm tracking-[0.2em] text-[var(--parchment)] drop-shadow [@media(min-height:560px)]:text-base">
             {s.region ?? "Dawnreach"}
           </div>
           <div className="text-xs text-[var(--gilt)] drop-shadow">{s.gold} embers · {s.shards} shards</div>
+          {online > 1 && (
+            <div className="text-[11px] text-[#b7e8b1] drop-shadow" data-testid="online-count">
+              ● {online} online
+            </div>
+          )}
         </div>
-        <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm sm:p-3">
+        <div className="w-full rounded-lg border border-[var(--gilt)]/25 bg-[var(--panel)]/85 p-2.5 backdrop-blur-sm [@media(min-height:560px)]:p-3">
           <div className="font-display text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
             {quest.name}
           </div>
@@ -106,14 +151,20 @@ export function Hud() {
       {s.interactPrompt && !s.dialogue && (
         <div className="absolute bottom-40 left-1/2 -translate-x-1/2 rounded-full border border-[var(--gilt)]/30 bg-[var(--panel)]/85 px-4 py-1.5 text-xs text-[var(--parchment)] backdrop-blur-sm">
           {s.interactPrompt}
-          <span className="ml-2 hidden rounded bg-[var(--gilt)]/20 px-1.5 py-0.5 font-mono text-[10px] text-[var(--gilt)] sm:inline">
+          <span className="ml-2 hidden rounded bg-[var(--gilt)]/20 px-1.5 py-0.5 font-mono text-[10px] text-[var(--gilt)] [@media(pointer:fine)]:inline">
             E
           </span>
         </div>
       )}
 
-      {/* Toasts */}
-      <div className="absolute bottom-32 left-1/2 flex w-[min(24rem,80vw)] -translate-x-1/2 flex-col items-center gap-1.5">
+      {/* Tips + toasts. Desktop: above the ability bar. Touch: top centre, between the
+          vitals and quest panels, so they never sit under a thumb or the attack arc. */}
+      <div
+        className={`absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+          fine ? "bottom-32 w-[min(24rem,80vw)]" : `w-[min(22rem,calc(100%-29rem))] ${s.bossBar ? "top-12" : "top-0"}`
+        }`}
+      >
+        {!s.dialogue && <Tips />}
         {s.toasts.map((t) => (
           <div
             key={t.id}
@@ -133,9 +184,11 @@ export function Hud() {
       </div>
 
       {/* Ability bar (desktop) */}
-      <div className={`absolute bottom-0 left-1/2 hidden -translate-x-1/2 ${s.dialogue ? "" : "[@media(pointer:fine)]:block"}`}>
-        <AbilityBar />
-      </div>
+      {fine && !s.dialogue && (
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+          <AbilityBar />
+        </div>
+      )}
 
       {/* Loadout + key hints (mouse/keyboard devices only; touch uses on-screen buttons) */}
       <div className={`absolute bottom-0 left-0 hidden items-stretch gap-3 ${s.dialogue ? "" : "[@media(pointer:fine)]:flex"}`}>

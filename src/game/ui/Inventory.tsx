@@ -6,6 +6,7 @@ import { ITEMS, MODIFIERS, RARITY_COLOR, RARITY_LABEL, RARITY_ORDER, SLOTS, SLOT
 import { QUESTS } from "../data/quests";
 import { REGIONS } from "../world/terrain";
 import { VILLAGE_REGION, statsFor, useGame, type InvEntry, type JournalTab } from "../core/store";
+import { saveNow } from "../core/sim";
 import { FORGE, abilityUnlocked, compareToEquipped, forgePreview, itemStats, salvageValue, sellValue, xpForLevel } from "../core/rules";
 import { SlotIcon } from "./Cooldowns";
 import { WorldMap } from "./WorldMap";
@@ -84,7 +85,7 @@ function ItemTile({
       style={{ borderColor: RARITY_COLOR[def.rarity] }}
     >
       <span className="line-clamp-2 text-[11px] leading-tight text-[var(--parchment)]">{itemName(entry)}</span>
-      <span className="flex w-full justify-between text-[9px] uppercase tracking-wide" style={{ color: RARITY_COLOR[def.rarity] }}>
+      <span className="flex w-full justify-between text-[11px] uppercase tracking-wide" style={{ color: RARITY_COLOR[def.rarity] }}>
         <span>{SLOT_LABEL[def.slot]}</span>
         <span className={locked ? "text-[#f0a595]" : "text-[var(--parchment)]/50"}>Lv{def.level}</span>
       </span>
@@ -122,24 +123,24 @@ function Satchel() {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-[15rem_1fr]">
+    <div className="grid gap-4 sm:grid-cols-[15rem_1fr]">
       <div className="space-y-3">
         <div>
-          <h3 className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Worn</h3>
-          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-1">
+          <h3 className="mb-1.5 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Worn</h3>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-1">
             {SLOTS.map((slot) => {
               const e = s.equipped[slot];
               const def = e ? ITEMS[e.itemId] : null;
               return (
                 <div key={slot} data-testid={`worn-${slot}`} className="flex items-center justify-between gap-2 rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 px-2 py-1.5">
                   <div className="min-w-0">
-                    <div className="text-[9px] uppercase tracking-wider text-[var(--parchment)]/50">{SLOT_LABEL[slot]}</div>
+                    <div className="text-[11px] uppercase tracking-wider text-[var(--parchment)]/50">{SLOT_LABEL[slot]}</div>
                     <div className="truncate text-xs" style={{ color: def ? RARITY_COLOR[def.rarity] : undefined }}>
                       {e ? itemName(e) : <span className="text-[var(--parchment)]/35">Empty</span>}
                     </div>
                   </div>
                   {e && (
-                    <button className="shrink-0 text-[10px] text-[var(--parchment)]/60 underline" onClick={() => s.unequip(slot)}>
+                    <button className="shrink-0 text-[11px] text-[var(--parchment)]/60 underline" onClick={() => s.unequip(slot)}>
                       Remove
                     </button>
                   )}
@@ -149,7 +150,7 @@ function Satchel() {
           </div>
         </div>
         <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2">
-          <h3 className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Standing</h3>
+          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Standing</h3>
           <StatLine label="Attack" value={stats.attack} delta={cmp?.delta.attack} />
           <StatLine label="Defense" value={stats.defense} delta={cmp?.delta.defense} />
           <StatLine label="Max health" value={stats.maxHp} delta={cmp?.delta.maxHp} />
@@ -162,15 +163,15 @@ function Satchel() {
 
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Carried ({s.inventory.length})</h3>
-          <span className="text-[10px] text-[var(--parchment)]/50">Mark:</span>
+          <h3 className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Carried ({s.inventory.length})</h3>
+          <span className="text-[11px] text-[var(--parchment)]/50">Mark:</span>
           {RARITY_ORDER.slice(0, 3).map((r) => (
-            <button key={r} onClick={() => markRarity(r)} className="rounded border px-1.5 py-0.5 text-[10px]" style={{ borderColor: RARITY_COLOR[r], color: RARITY_COLOR[r] }}>
+            <button key={r} onClick={() => markRarity(r)} className="rounded border px-1.5 py-0.5 text-[11px]" style={{ borderColor: RARITY_COLOR[r], color: RARITY_COLOR[r] }}>
               all {RARITY_LABEL[r]}
             </button>
           ))}
           {marked.size > 0 && (
-            <button className="text-[10px] text-[var(--parchment)]/60 underline" onClick={() => setMarked(new Set())}>
+            <button className="text-[11px] text-[var(--parchment)]/60 underline" onClick={() => setMarked(new Set())}>
               clear
             </button>
           )}
@@ -211,7 +212,7 @@ function Satchel() {
                 <div className="font-display text-base" style={{ color: RARITY_COLOR[selDef.rarity] }}>
                   {itemName(sel)}
                 </div>
-                <div className="text-[10px] uppercase tracking-wider text-[var(--parchment)]/55">
+                <div className="text-[11px] uppercase tracking-wider text-[var(--parchment)]/55">
                   {RARITY_LABEL[selDef.rarity]} {SLOT_LABEL[selDef.slot]} · requires level {selDef.level}
                   {selDef.boss ? " · boss reward" : ""}
                 </div>
@@ -220,7 +221,7 @@ function Satchel() {
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <ItemStatsBlock entry={sel} />
               <div data-testid="compare" className="rounded bg-[var(--ink)]/40 p-2">
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--parchment)]/55">
+                <div className="mb-1 text-[11px] uppercase tracking-wider text-[var(--parchment)]/55">
                   {cmp.replaces ? `If it replaces ${itemName(cmp.replaces)}` : "Fills an empty slot"}
                 </div>
                 <StatLine label="Attack" value={cmp.after.attack} delta={cmp.delta.attack} />
@@ -271,7 +272,7 @@ function Forge() {
   const def = chosen ? ITEMS[chosen.itemId] : null;
 
   return (
-    <div className="grid gap-4 md:grid-cols-[1fr_18rem]">
+    <div className="grid gap-4 sm:grid-cols-[1fr_18rem]">
       <div className="min-w-0 space-y-2">
         <p className="text-xs text-[var(--parchment)]/70">
           Oda raises an item one step at a time, up to +{FORGE.maxPlus}. Each step adds {Math.round(FORGE.perPlus * 100)}% of the item's base stats
@@ -311,12 +312,15 @@ function Forge() {
           <button
             data-testid="forge-upgrade"
             disabled={!preview.canUpgrade || !inVillage}
-            onClick={() => s.forge(chosen.uid)}
+            onClick={() => {
+              s.forge(chosen.uid);
+              saveNow(); // a failed forge can't be undone by reloading
+            }}
             className="mt-3 w-full rounded-md border border-[var(--gilt)]/60 bg-[var(--gilt)]/20 px-3 py-2 text-sm font-semibold text-[var(--parchment)] disabled:opacity-40"
           >
             {!inVillage ? "Visit Oda in Emberhollow" : preview.canUpgrade ? `Upgrade for ${preview.cost.gold} embers + ${preview.cost.shards} shards` : preview.reason}
           </button>
-          <p className="mt-2 text-[10px] text-[var(--parchment)]/50">Shards come from salvaging gear in the satchel, and from bosses.</p>
+          <p className="mt-2 text-[11px] text-[var(--parchment)]/50">Shards come from salvaging gear in the satchel, and from bosses.</p>
         </div>
       )}
     </div>
@@ -339,9 +343,9 @@ function Build() {
           return (
             <div key={a.id} className={`rounded-md border p-2.5 ${active ? "border-[var(--gilt)] bg-[var(--gilt)]/10" : "border-[var(--parchment)]/15 bg-[var(--ink)]/40"}`}>
               <div className="font-display text-sm text-[var(--parchment)]">{a.name}</div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--gilt)]">{a.role}</div>
+              <div className="text-[11px] uppercase tracking-wider text-[var(--gilt)]">{a.role}</div>
               <p className="mt-1 text-xs text-[var(--parchment)]/70">{a.description}</p>
-              <p className="mt-1 text-[10px] text-[var(--parchment)]/55">
+              <p className="mt-1 text-[11px] text-[var(--parchment)]/55">
                 Abilities: {a.abilities.map((id) => ABILITIES[id].name).join(", ")}
               </p>
               <button
@@ -356,12 +360,12 @@ function Build() {
           );
         })}
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2.5">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">
+          <h3 className="text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">
             {arch.name} · Level {s.level}
           </h3>
-          <p className="mb-1 text-[10px] text-[var(--parchment)]/55">
+          <p className="mb-1 text-[11px] text-[var(--parchment)]/55">
             {s.xp} / {need} XP to level {s.level + 1}
           </p>
           <StatLine label="Attack" value={stats.attack} />
@@ -376,7 +380,7 @@ function Build() {
           ))}
         </div>
         <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2.5">
-          <h3 className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Ability path</h3>
+          <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Ability path</h3>
           {arch.abilities.map((id, i) => {
             const on = abilityUnlocked(s.level, i);
             return (
@@ -398,7 +402,7 @@ function Build() {
         </div>
       </div>
       <div className="rounded-md border border-[var(--gilt)]/20 bg-[var(--ink)]/40 p-2.5">
-        <h3 className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--gilt)]">Road ahead</h3>
+        <h3 className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[var(--gilt)]">Road ahead</h3>
         <ol className="space-y-0.5 text-xs text-[var(--parchment)]/80">
           <li>1. Emberhollow → Whisperpine Woods (Bramblekin, level 1–2)</li>
           <li>2. The Sunken Arch (Hollow Sentinels, Thornmaw — level 3–4)</li>
@@ -476,7 +480,7 @@ function Codex() {
                 <div style={{ color: got ? RARITY_COLOR[d.rarity] : undefined }} className={got ? "" : "text-[var(--parchment)]/30"}>
                   {got ? d.name : "Unknown"}
                 </div>
-                <div className="text-[9px] uppercase text-[var(--parchment)]/45">
+                <div className="text-[11px] uppercase text-[var(--parchment)]/45">
                   {SLOT_LABEL[d.slot as EquipSlot]} · Lv{d.level}
                   {d.boss ? " · boss" : ""}
                 </div>
@@ -497,33 +501,46 @@ export function InventoryPanel() {
   const toggle = useGame((s) => s.toggleInventory);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--ink)]/55 p-2 sm:p-6" onClick={() => toggle(false)}>
+    <div
+      className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--ink)]/55 p-2 sm:p-6"
+      // Keep tabs and buttons clear of the notch / Dynamic Island and home indicator.
+      style={{
+        paddingTop: "max(0.5rem, env(safe-area-inset-top))",
+        paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(0.5rem, env(safe-area-inset-left))",
+        paddingRight: "max(0.5rem, env(safe-area-inset-right))",
+      }}
+      onClick={() => toggle(false)}
+    >
       <div
         data-testid="journal"
         className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--gilt)]/30 bg-[var(--panel)]/95 shadow-2xl backdrop-blur"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--gilt)]/20 px-3 py-2">
-          <div className="flex gap-1 overflow-x-auto">
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--gilt)]/20 px-2 py-1 sm:px-3">
+          <div className="flex gap-1 overflow-x-auto overscroll-contain">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 data-testid={`tab-${t.id}`}
                 onClick={() => toggle(true, t.id)}
-                className={`whitespace-nowrap rounded-md px-3 py-1.5 font-display text-xs tracking-[0.15em] ${
-                  tab === t.id ? "bg-[var(--gilt)]/25 text-[var(--parchment)]" : "text-[var(--parchment)]/60 hover:text-[var(--parchment)]"
+                className={`min-h-11 whitespace-nowrap rounded-md px-3 font-display text-xs tracking-[0.15em] ${
+                  tab === t.id ? "bg-[var(--gilt)]/25 text-[var(--parchment)]" : "text-[var(--parchment)]/75 hover:text-[var(--parchment)]"
                 }`}
               >
                 {t.label.toUpperCase()}
-                {t.key && <span className="ml-1.5 hidden font-mono text-[9px] text-[var(--gilt)] [@media(pointer:fine)]:inline">{t.key}</span>}
+                {t.key && <span className="ml-1.5 hidden font-mono text-[11px] text-[var(--gilt)] [@media(pointer:fine)]:inline">{t.key}</span>}
               </button>
             ))}
           </div>
-          <button onClick={() => toggle(false)} className="rounded-md border border-[var(--parchment)]/25 px-2.5 py-1 text-xs text-[var(--parchment)]">
+          <button
+            onClick={() => toggle(false)}
+            className="min-h-11 shrink-0 rounded-md border border-[var(--parchment)]/25 px-4 text-sm text-[var(--parchment)]"
+          >
             Close
           </button>
         </div>
-        <div className="overflow-y-auto p-3 sm:p-4">
+        <div className="overflow-y-auto overscroll-contain p-3 sm:p-4">
           {tab === "satchel" && <Satchel />}
           {tab === "forge" && <Forge />}
           {tab === "build" && <Build />}

@@ -1,8 +1,8 @@
 import { useProgress } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { initAudio, setMuted as setAudioMuted } from "../core/audio";
+import { setMuted as setAudioMuted, suspendAudio, unlockAudio } from "../core/audio";
 import { applyLook, input, keys, resetInput } from "../core/input";
-import { loadSaveIntoStore } from "../core/sim";
+import { loadSaveIntoStore, saveNow } from "../core/sim";
 import { useGame } from "../core/store";
 import type { SaveFile } from "../core/persistence";
 import { GameCanvas } from "../render/GameCanvas";
@@ -13,10 +13,12 @@ import {
   DialogueBox,
   LoadingScreen,
   PauseMenu,
+  RotateHint,
   TitleScreen,
   WebglError,
 } from "./Menus";
 import { TouchControls } from "./TouchControls";
+import { useOnline } from "../online/useOnline";
 
 function webglAvailable() {
   try {
@@ -28,6 +30,7 @@ function webglAvailable() {
 }
 
 export function Game() {
+  useOnline();
   const screen = useGame((s) => s.screen);
   const { progress } = useProgress();
   const [webgl, setWebgl] = useState<boolean | null>(null);
@@ -65,6 +68,9 @@ export function Game() {
   // Keyboard
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
+      // Typing in a form (sign-in) must not move the hero or open menus.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.repeat) return;
       keys.add(e.code);
       const state = useGame.getState();
@@ -80,6 +86,10 @@ export function Game() {
         if (e.code === "KeyK") state.toggleInventory(undefined, "codex");
         if (e.code === "KeyN") state.toggleInventory(undefined, "map");
         if (e.code === "KeyF" || e.code === "ControlLeft") input.dodgeQueued = true;
+        if (e.code === "Tab" || e.code === "KeyR") {
+          e.preventDefault();
+          input.lockQueued = true;
+        }
         if (e.code === "Digit1") input.abilityQueued = 0;
         if (e.code === "Digit2") input.abilityQueued = 1;
         if (e.code === "Digit3") input.abilityQueued = 2;
@@ -115,17 +125,20 @@ export function Game() {
       if (e.pointerType !== "mouse") return;
       const state = useGame.getState();
       if (state.screen !== "playing" || state.inventoryOpen || state.dialogue) return;
-      initAudio();
       if (document.pointerLockElement !== el) {
         void el.requestPointerLock?.();
         dragging.current = true;
         return;
       }
-      if (e.button === 0) input.attackQueued = true;
+      if (e.button === 0) {
+        input.attackQueued = true;
+        input.attackHeld = true;
+      }
       if (e.button === 2) input.dodgeQueued = true;
     };
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
       dragging.current = false;
+      if (e.pointerType === "mouse" && e.button === 0) input.attackHeld = false;
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
@@ -143,6 +156,47 @@ export function Game() {
       el.removeEventListener("contextmenu", onContext);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointermove", onMove);
+    };
+  }, []);
+
+  // Asset cache for instant relaunch / offline play (see public/sw.js). Production
+  // only, and never inside an iframe such as the editor preview.
+  useEffect(() => {
+    if (!import.meta.env.PROD || !("serviceWorker" in navigator) || window.top !== window.self) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+
+  // Mobile browsers only allow audio after a user gesture, and suspend it again
+  // after interruptions — so every tap (touch, pen or mouse) re-unlocks it.
+  useEffect(() => {
+    const onGesture = () => unlockAudio();
+    window.addEventListener("pointerdown", onGesture, true);
+    window.addEventListener("keydown", onGesture, true);
+    return () => {
+      window.removeEventListener("pointerdown", onGesture, true);
+      window.removeEventListener("keydown", onGesture, true);
+    };
+  }, []);
+
+  // Backgrounding (home button, app switch, incoming call, tab switch): pause,
+  // save immediately — iOS may kill the page without warning — and stop audio.
+  useEffect(() => {
+    const persist = () => {
+      const s = useGame.getState().screen;
+      if (s === "playing" || s === "paused" || s === "dead") saveNow();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      resetInput();
+      if (useGame.getState().screen === "playing") useGame.setState({ screen: "paused" });
+      persist();
+      suspendAudio();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", persist);
     };
   }, []);
 
@@ -169,8 +223,9 @@ export function Game() {
       <InventoryPanel />
       <PauseMenu />
       <DeathScreen />
-      <TitleScreen save={save} />
+      <TitleScreen save={save} onSaveChanged={setSave} />
       {showLoading && <LoadingScreen progress={useGame.getState().loadProgress} />}
+      <RotateHint />
     </div>
   );
 }
